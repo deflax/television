@@ -1,7 +1,3 @@
 # Television
 
-Multi channel stream setup
-
-# stream-scheduler
-
-A Python REST API based on Flask for scheduling streaming channels
+Multi channel stream setup with Flask REST API for scheduling channels.
