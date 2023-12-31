@@ -30,6 +30,10 @@ jt = {
     "head": "https://stream.deflax.net/memfs/6e5b4949-910d-4ec9-8ed8-1a3d8bb5138e.m3u8"
 }
 
+obs = {
+    "head": "https://stream.deflax.net/memfs/9502315a-bb95-4e3e-8c24-8661d6dd2fe8.m3u8"
+}
+
 # Datarhei Core API integration
 SYNC_PERIOD = 30
 try:
@@ -106,7 +110,7 @@ manager.register_task(name="read_database", job=analyze_db).period(35).start()
 
 @app.route('/', methods=['GET'])
 def root_query():
-    playhead = iway
+    playhead = obs
     return jsonify(playhead)
 
 def create_app():
