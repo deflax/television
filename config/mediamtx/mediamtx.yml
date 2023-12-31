@@ -313,7 +313,7 @@ pathDefaults:
   # Delete segments after this timespan.
   # Set to 0s to disable automatic deletion.
   #recordDeleteAfter: 24h
-  recordDeleteAfter: 168h
+  recordDeleteAfter: 0s
 
 
   ###############################################
