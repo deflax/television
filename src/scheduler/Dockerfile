@@ -1,0 +1,16 @@
+FROM python:3-bookworm
+
+WORKDIR /python-docker
+
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
+
+COPY requirements-pydantic-pin.txt requirements-pydantic-pin.txt
+RUN pip3 install -r requirements-pydantic-pin.txt
+RUN pip3 install https://github.com/datarhei/core-client-python/archive/refs/tags/1.1.0.tar.gz
+
+COPY . .
+
+EXPOSE 8080
+
+CMD [ "waitress-serve", "--port=8080", "--call", "app:create_app"]
