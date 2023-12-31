@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source certbot.env
+source variables.env
 
 CB=`docker ps | grep certbot | cut -d ' ' -f 1`
 

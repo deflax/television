@@ -15,8 +15,8 @@ database = {}
 # Environment
 api_hostname = os.environ.get('CORE_API_HOSTNAME')
 api_port = os.environ.get('CORE_API_PORT')
-api_username = os.environ.get('CORE_API_USERNAME')
-api_password=os.environ.get('CORE_API_PASSWORD')
+api_username = os.environ.get('CORE_API_AUTH_USERNAME')
+api_password=os.environ.get('CORE_API_AUTH_PASSWORD')
 
 iway = {
     "head": "https://stream.deflax.net/memfs/ac2172fa-d8d5-4487-8bc6-5347dcf7c0dc.m3u8"
@@ -110,7 +110,7 @@ manager.register_task(name="read_database", job=analyze_db).period(35).start()
 
 @app.route('/', methods=['GET'])
 def root_query():
-    playhead = obs
+    playhead = iway
     return jsonify(playhead)
 
 def create_app():
