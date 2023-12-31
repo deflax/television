@@ -41,10 +41,8 @@ services:
 
   restreamer:
     image: datarhei/restreamer:2.7.0
-    environment:
-      - CORE_LOG_LEVEL=warn
-      - CORE_API_AUTH_USERNAME=admin
-      - CORE_API_AUTH_PASSWORD=pass
+    env_file:
+       - "variables.env"
     ports:
       - "6000:6000/udp"
     volumes:
@@ -61,11 +59,8 @@ services:
       - "restreamer"
     build: ./src/scheduler
     image: stream-scheduler:latest
-    environment:
-      - LOG_LEVEL=info
-      - CORE_API_HOSTNAME=stream.example.com
-      - CORE_API_USERNAME=admin
-      - CORE_API_PASSWORD=pass
+    env_file:
+       - "variables.env"
     restart: unless-stopped
     networks:
       - net

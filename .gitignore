@@ -163,7 +163,6 @@ cython_debug/
 # television
 data/
 logs/
-docker-compose.yml
-certbot.env
+variables.env
 haproxy.cfg
 *.json
