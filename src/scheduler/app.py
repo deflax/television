@@ -9,7 +9,7 @@ from core_client import Client
 app = Flask(__name__)
 manager = ScheduleManager()
 logger = logging.getLogger('waitress')
-logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO').upper())
+logger.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
 database = {}
 
 # Environment
