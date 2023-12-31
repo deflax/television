@@ -1,0 +1,84 @@
+global
+    maxconn 4096
+    user root
+    group root
+    daemon
+
+    tune.ssl.default-dh-param       2048
+    ssl-default-bind-options no-sslv3 no-tls-tickets
+    ssl-default-bind-ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA
+
+defaults
+    #log stdout format raw local0 debug
+    log stdout format raw local0 notice
+    mode http
+    balance roundrobin
+    maxconn 1024
+
+    #This breaks HTTP2
+    #option abortonclose
+    option httpclose
+    option forwardfor
+
+    retries 3
+    option redispatch
+
+    timeout client  30s
+    timeout connect 30s
+    timeout server  30s
+
+    #option httpchk HEAD /haproxy?monitor HTTP/1.0
+    #timeout check 5s
+    #stats enable
+    #stats uri     /haproxy?stats
+    #stats realm   Haproxy\ Statistics
+    #stats auth    admin:yourpasswordhere
+    #stats refresh 5s
+
+# PUBLIC
+frontend http
+    bind :80
+    option http-server-close
+    redirect scheme https if ! { path_beg -i /.well-known/acme-challenge }
+    default_backend certbot
+
+backend certbot
+    server c1 certbot:80
+
+frontend https
+    bind :443 ssl crt /certificates alpn http/1.1
+
+    http-request set-header X-Forwarded-Protocol https
+    http-request set-header X-Forwarded-Proto https
+    http-request set-header X-Forwarded-Ssl on
+    http-request set-header X-Url-Scheme https
+    http-request set-header Host %[ssl_fc_sni]
+
+    # CORS
+    http-response set-header Access-Control-Allow-Origin "*"
+    http-response set-header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization, JSNLog-RequestId, activityId, applicationId, applicationUserId, channelId, senderId, sessionId"
+    http-response set-header Access-Control-Max-Age 3628800
+    http-response set-header Access-Control-Allow-Methods "GET"
+
+    # Router
+    # ACL to match the sni hosts
+    acl is_stream ssl_fc_sni -i stream.example.com
+    acl is_tv ssl_fc_sni -i tv.example.com
+    acl is_vod ssl_fc_sni -i vod.example.com
+
+    # Define the ACL conditions and corresponding actions
+    use_backend backend_restreamer if is_stream
+    use_backend backend_scheduler if is_tv
+    use_backend backend_archive if is_vod
+
+backend backend_restreamer
+    balance leastconn
+    server restreamer1 restreamer:8080 check inter 5s rise 4 fall 2
+
+backend backend_scheduler
+    balance leastconn
+    server scheduler1 scheduler:8080 check inter 5s rise 4 fall 2
+
+backend backend_archive
+    balance leastconn
+    server archive1 archive:80 check inter 5s rise 4 fall 2

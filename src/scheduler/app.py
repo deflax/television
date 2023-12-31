@@ -106,7 +106,7 @@ manager.register_task(name="read_database", job=analyze_db).period(35).start()
 
 @app.route('/', methods=['GET'])
 def root_query():
-    playhead = jt 
+    playhead = iway
     return jsonify(playhead)
 
 def create_app():
