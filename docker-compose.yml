@@ -76,8 +76,8 @@ services:
     ports:
       - 8554:8554
     volumes:
-      - "./config/mediamtx/mediamtx.yml:/mediamtx.yml"
-      - "./data/recordings:/recordings"
+      - "./config/recorder/mediamtx.yml:/mediamtx.yml"
+      - "./data/archive/recordings"
     restart: unless-stopped
     networks:
       - net
@@ -91,7 +91,7 @@ services:
     image: stream-archive:latest
     volumes:
       - "./config/archive/nginx.conf:/etc/nginx/nginx.conf"
-      - "./data/recordings:/recordings:ro"
+      - "./data/archive:/recordings:ro"
     restart: unless-stopped
     networks:
       - net
