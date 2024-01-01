@@ -324,7 +324,7 @@ pathDefaults:
   publishUser: recorder
   # Password required to publish.
   # SHA256-hashed values can be inserted with the "sha256:" prefix.
-  publishPass: recmeup123
+  publishPass: changeme
   # IPs or networks (x.x.x.x/24) allowed to publish.
   publishIPs: []
 
