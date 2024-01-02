@@ -110,7 +110,7 @@ manager.register_task(name="read_database", job=analyze_db).period(35).start()
 
 @app.route('/', methods=['GET'])
 def root_query():
-    playhead = iway
+    playhead = jt
     return jsonify(playhead)
 
 def create_app():
