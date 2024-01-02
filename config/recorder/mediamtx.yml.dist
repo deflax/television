@@ -299,7 +299,7 @@ pathDefaults:
   # Path of recording segments.
   # Extension is added automatically.
   # Available variables are %path (path name), %Y %m %d %H %M %S %f %s (time in strftime format)
-  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordPath: ./records/%path/%Y-%m-%d_%H-%M-%S-%f
   # Format of recorded segments.
   # Available formats are "fmp4" (fragmented MP4) and "mpegts" (MPEG-TS).
   recordFormat: fmp4
@@ -312,8 +312,7 @@ pathDefaults:
   recordSegmentDuration: 12h
   # Delete segments after this timespan.
   # Set to 0s to disable automatic deletion.
-  # recordDeleteAfter: 24h
-  recordDeleteAfter: 168h
+  recordDeleteAfter: 24h
 
 
   ###############################################
@@ -556,7 +555,9 @@ pathDefaults:
 paths:
   live:
     record: yes
-    recordPath: ./recordings/live/%Y-%m-%d_%H-%M-%S-%f
+    recordDeleteAfter: 0s
+    recordPath: ./records/%path/%Y-%m-%d_%H-%M-%S-%f
+    runOnRecordSegmentComplete: echo $MTX_SEGMENT_PATH
 
   # Settings under path "all_others" are applied to all paths that
   # do not match another entry.
