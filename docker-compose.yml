@@ -113,8 +113,6 @@ services:
       - "./config/archive/gallery.config.yml:/data/config/gallery.config.yml"
       - "./data/archive:/data"
       - "./data/recorder/vod:/data/vod:ro"
-    ports:
-      - "3000:3000"
     #user: "${CURRENT_USER}"
     entrypoint: ['node', '/app/gallery.js']
     command: ['run', 'server']
