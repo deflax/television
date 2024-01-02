@@ -161,9 +161,17 @@ cython_debug/
 
 
 # television
+#data folder
 data/
 logs/
+
+#data json
+*.json
+
+# env vars
 variables.env
+
+# configs
 haproxy.cfg
 mediamtx.yml
 nginx.conf
