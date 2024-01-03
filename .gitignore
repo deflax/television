@@ -172,6 +172,4 @@ logs/
 variables.env
 
 # configs
-haproxy.cfg
 mediamtx.yml
-nginx.conf
