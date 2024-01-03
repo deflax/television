@@ -299,7 +299,7 @@ pathDefaults:
   # Path of recording segments.
   # Extension is added automatically.
   # Available variables are %path (path name), %Y %m %d %H %M %S %f %s (time in strftime format)
-  recordPath: ./records/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
   # Format of recorded segments.
   # Available formats are "fmp4" (fragmented MP4) and "mpegts" (MPEG-TS).
   recordFormat: fmp4
@@ -556,8 +556,8 @@ paths:
   live:
     record: yes
     recordDeleteAfter: 0s
-    recordPath: ./records/%path/%Y-%m-%d_%H-%M-%S-%f
-    runOnRecordSegmentComplete: echo $MTX_SEGMENT_PATH
+    recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    runOnRecordSegmentComplete: mv $MTX_SEGMENT_PATH ./recordings/vod
 
   # Settings under path "all_others" are applied to all paths that
   # do not match another entry.
