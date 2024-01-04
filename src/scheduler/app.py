@@ -34,10 +34,6 @@ obs = {
     "head": "https://stream.deflax.net/memfs/9502315a-bb95-4e3e-8c24-8661d6dd2fe8.m3u8"
 }
 
-epg = {
-    "name": "IwayHigh",
-    ""
-    }
 
 # Datarhei Core API integration
 SYNC_PERIOD = 30
@@ -66,6 +62,7 @@ def core_api_sync():
         except Exception as err:
             logger.error('client.v3_process_get error')
             logger.error(err)
+            logger.error(get_process)
             continue
         if meta is None:
             # Skip processes without metadata
