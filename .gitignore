@@ -165,9 +165,6 @@ cython_debug/
 data/
 logs/
 
-#data json
-*.json
-
 # env vars
 variables.env
 
