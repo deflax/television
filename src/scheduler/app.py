@@ -41,7 +41,7 @@ try:
     logger.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
     client.login()
 except Exception as err:
-    logger.error('client login error'
+    logger.error('client login error')
     logger.error(err)
 
 def core_api_sync():
