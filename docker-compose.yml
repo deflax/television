@@ -48,8 +48,8 @@ services:
     ports:
       - "6000:6000/udp"
     volumes:
-      - "./config/restreamer:/core/config"
-      - "./data/restreamer:/core/data"
+      - "./data/restreamer/config:/core/config"
+      - "./data/restreamer/data:/core/data"
     restart: unless-stopped
     networks:
       - net
@@ -87,8 +87,8 @@ services:
       - meta.role=recorder
 
   archive-api:
-    # custom build via
-    #build: packages/api-server
+    depends_on:
+      - "recorder"
     image: xemle/home-gallery-api-server
     environment:
       # TensorflowJS backends
