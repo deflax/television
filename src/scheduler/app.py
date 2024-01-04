@@ -41,20 +41,27 @@ try:
     logger.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
     client.login()
 except Exception as err:
+    logger.error('client login error'
     logger.error(err)
 
 def core_api_sync():
     new_ids = []
     try:
-       process_list = client.v3_process_get_list()
+        process_list = client.v3_process_get_list()
     except Exception as err:
-        logger.error('process_get_list error')
+        logger.error('client.v3_process_get_list error')
+        logger.error(err)
         return True
     for process in process_list:
-        get_process = client.v3_process_get(id=process.id)
-        stream_id = get_process.reference
-        meta = get_process.metadata
-        state = get_process.state
+        try:
+            get_process = client.v3_process_get(id=process.id)
+            stream_id = get_process.reference
+            meta = get_process.metadata
+            state = get_process.state
+        except Exception as err:
+            logger.error('client.v3_process_get error')
+            logger.error(err)
+            continue
         if meta is None:
             # Skip processes without metadata
             continue
