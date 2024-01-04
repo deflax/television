@@ -4,8 +4,8 @@ source variables.env
 
 CB=`docker ps | grep certbot | cut -d ' ' -f 1`
 
-echo $BASE_URL
-echo $EMAIL
+#echo $BASE_URL
+#echo $EMAIL
 
 docker exec $CB certbot certonly --non-interactive --standalone --http-01-address 0.0.0.0 --email $EMAIL --agree-tos --keep --preferred-challenges http --cert-name stream.$BASE_URL \
 	-d tv.$BASE_URL -d stream.$BASE_URL -d vod.$BASE_URL
