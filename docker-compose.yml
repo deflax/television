@@ -98,6 +98,11 @@ services:
       #- BACKEND=cpu
       - BACKEND=wasm
       #- BACKEND=node
+    restart: unless-stopped
+    networks:
+      - net
+    labels:
+      - meta.role=archive-api
 
   archive:
     depends_on:
