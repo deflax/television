@@ -63,6 +63,8 @@ services:
     image: stream-scheduler:latest
     env_file:
        - "variables.env"
+    volumes:
+      - "./config/scheduler:/config"
     restart: unless-stopped
     networks:
       - net
