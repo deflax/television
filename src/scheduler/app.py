@@ -34,6 +34,9 @@ obs = {
     "head": "https://stream.deflax.net/memfs/9502315a-bb95-4e3e-8c24-8661d6dd2fe8.m3u8"
 }
 
+ines = {
+    "head": "https://stream.deflax.net/memfs/eddfeadd-1c72-4c5c-aabb-a99a1daa2231.m3u8"
+}
 
 # Datarhei Core API integration
 SYNC_PERIOD = 30
@@ -119,7 +122,7 @@ manager.register_task(name="read_database", job=analyze_db).period(35).start()
 
 @app.route('/', methods=['GET'])
 def root_query():
-    playhead = jt
+    playhead = ines
     return jsonify(playhead)
 
 def create_app():
