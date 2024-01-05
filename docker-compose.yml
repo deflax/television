@@ -75,6 +75,8 @@ services:
     image: bluenviron/mediamtx:latest-ffmpeg
     environment:
       - MTX_PROTOCOLS=tcp
+    ports:
+      - "127.0.0.1:8554:8554"
     volumes:
       - "./config/recorder/mediamtx.yml:/mediamtx.yml"
       - "./data/recorder:/recordings"
