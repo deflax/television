@@ -167,6 +167,3 @@ logs/
 
 # env vars
 variables.env
-
-# configs
-mediamtx.yml
