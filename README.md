@@ -16,3 +16,4 @@ Multi channel stream setup with Flask REST API for scheduling channels.
 - Service Name: Recorder
 - Protocol: rtsp://
 - Address: recorder.local:8554/live
+2. Visit prepared recordings at `https://vod.example.com/`
