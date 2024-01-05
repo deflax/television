@@ -167,7 +167,7 @@ logger:
   # Currently console and file loggers are available
   - type: console
     # Log level could be one of trace, debug, info, warn, error, fatal, silent
-    level: warn
+    level: info
     # format: json
   # File logger format is in newline delimited JSON. See http://ndjson.org
   - type: file
