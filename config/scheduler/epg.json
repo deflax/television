@@ -1,23 +1,25 @@
-{
-	"name": "IwayHigh",
-	"start_at": "1400",
-	"prio": 5
-},
-{
-	"name": "Jungletrain",
-	"start_at": "2200",
-	"prio": 5
-},
-{
-	"name": "Anima",
-	"start_at": "0600",
-	"prio": 5
-},
-{
-	"name": "Rodopsko Odealo",
-	"prio": 1
-},
-{
-	"name": "Ines OBS",
-	"prio": 2
-}
+[
+  {
+    "name": "IwayHigh",
+    "start_at": "1400",
+    "prio": 5
+  },
+  {
+    "name": "Jungletrain",
+    "start_at": "2200",
+    "prio": 5
+  },
+  {
+    "name": "Anima",
+    "start_at": "0600",
+    "prio": 5
+  },
+  {
+    "name": "Rodopsko Odealo",
+    "prio": 1
+  },
+  {
+    "name": "Ines OBS",
+    "prio": 2
+  }
+]
