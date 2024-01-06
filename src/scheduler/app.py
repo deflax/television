@@ -121,6 +121,7 @@ def core_api_sync():
                 else:
                     logger.info('{} ({}) has been registered to the database'.format(stream_id, stream_name))
                     epg_result = find_event_entry(epg, stream_name)
+                    logger.info(epg_result)
                     stream_prio = epg_result['prio']
                     try:
                         stream_start_time = epg_result['start_at']
