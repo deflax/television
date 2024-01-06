@@ -143,7 +143,7 @@ except Exception as err:
 
 
 # Schedule tick
-scheduler.add_job(func=tick, trigger="interval", seconds=3)
+scheduler.add_job(func=tick, trigger="interval", minutes=180)
     
 # Schedule datarhei core api sync
 #core_api_sync()
@@ -161,7 +161,6 @@ head = fallback
 @app.route('/', methods=['GET'])
 def root_query():
     global head
-    logger_api.info('api ping')
     return jsonify(head)
 
 def create_app():
