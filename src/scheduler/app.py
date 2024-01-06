@@ -15,9 +15,13 @@ logger.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
 database = {}
 prio = 0
 head = {}
-with open('/config/epg.json', 'r') as json_file:
-    # Load the epg.json config file
-    epg_json = json.load(json_file)
+
+epg_json = open('/config/epg.json', 'r')
+epg = json.load(epg_json)
+
+for i in epg:
+    logger.info(i)
+epg_json.close()
 
 # Environment
 api_hostname = os.environ.get('CORE_API_HOSTNAME')
@@ -77,6 +81,7 @@ except Exception as err:
     
 def core_api_sync():
     global database
+    global epg
     global prio
     new_ids = []
     try:
@@ -115,7 +120,7 @@ def core_api_sync():
                     continue
                 else:
                     logger.info('{} ({}) has been registered to the database'.format(stream_id, stream_name))
-                    epg_result = find_event_entry(epg_json, stream_name)
+                    epg_result = find_event_entry(epg, stream_name)
                     stream_prio = epg_result['prio']
                     try:
                         stream_start_time = epg_result['start_at']
