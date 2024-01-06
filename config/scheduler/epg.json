@@ -1,25 +1,25 @@
 [
   {
     "name": "IwayHigh",
-    "start_at": "1400",
-    "prio": 5
+    "start_at": "14:00",
+    "prio": 0
   },
   {
     "name": "Jungletrain",
-    "start_at": "2200",
-    "prio": 5
+    "start_at": "22:00",
+    "prio": 0
   },
   {
     "name": "Anima",
-    "start_at": "0600",
-    "prio": 5
-  },
-  {
-    "name": "Rodopsko Odealo",
-    "prio": 1
+    "start_at": "06:00",
+    "prio": 0
   },
   {
     "name": "Ines OBS",
+    "prio": 1
+  },
+  {
+    "name": "Rodopsko Odealo",
     "prio": 2
   }
 ]
