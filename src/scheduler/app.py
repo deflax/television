@@ -48,9 +48,9 @@ def tick():
     
 def stream_exec(stream_name, stream_prio, stream_hls_url):
     global head
-    logger_job.info('Hello {}, your priority is'. format(stream_name, stream_prio))
-    logger_job.info('HLS: ' + stream_hls_url)
+    logger_job.info('Hello {}, your priority is: {}'. format(stream_name, stream_prio))
     head = { "head": stream_hls_url }
+    logger_job.info('head position is: ' + str(head))
    
 def core_api_sync():
     global database
@@ -101,7 +101,7 @@ def core_api_sync():
                         stream_start_hour = epg_result['start_at']
                         logger_job.info("Stream start hour is set to " + stream_start_hour)                       
                         scheduler.add_job(func=stream_exec, trigger='cron', hour=stream_start_hour, jitter=60, id=stream_id, args=(stream_name, stream_prio, stream_hls_url))
-                    except KeyError:
+                    except TypeError:
                         logger_job.info("Stream should start now")
                         scheduler.add_job(func=stream_exec, id=stream_id, args=(stream_name, stream_prio, stream_hls_url))
                     database.update(payload)
@@ -157,6 +157,7 @@ scheduler.start()
 
 fallback = { "head": "https://stream.deflax.net/memfs/938a36f8-02ff-4452-a7e5-3b6a9a07cdfa.m3u8" }
 head = fallback
+logger_api.info('head position is: ' + str(head))
 
 @app.route('/', methods=['GET'])
 def root_query():
