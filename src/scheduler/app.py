@@ -15,6 +15,9 @@ logger.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
 database = {}
 prio = 0
 head = {}
+with open('/config/epg.json', 'r') as json_file:
+    # Load the epg.json config file
+    epg_json = json.load(json_file)
 
 # Environment
 api_hostname = os.environ.get('CORE_API_HOSTNAME')
@@ -52,11 +55,6 @@ def find_event_entry(events, target_name):
         if "name" in entry and entry["name"] == target_name:
             return {"start_at": entry.get("start_at"), "prio": entry.get("prio")}
     return None
-
-# Load the epg.json config file
-with open('/config/epg.json', 'r') as json_file:
-    # Load the JSON data from the file
-    epg_json = json.load(json_file)
     
 def stream_exec(stream_name, stream_prio, stream_hls_url):
     global head
@@ -162,6 +160,8 @@ schedule.every(SYNC_PERIOD).minutes.do(core_api_sync)
 # Schedule show db/tasks
 schedule.every().minute.do(show_database)
 schedule.every().minute.do(show_scheduled_tasks)
+
+schedule.run_all()
 
 @app.route('/', methods=['GET'])
 def root_query():
