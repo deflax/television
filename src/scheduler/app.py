@@ -153,21 +153,21 @@ def core_api_sync():
 # Debug Functions
 def show_database():
     global database
-    logger.info('show database:')
-    logger.info(database)
+    logger.info('Scheduler DB: ' + database)
     
 def show_scheduled_tasks():
-    logger.info('show tasks:')
-    logger.info(schedule.get_jobs())
+    logger.info('Scheduler tasks:' + schedule.get_jobs())
 
 # Schedule datarhei core api sync
-schedule.every(SYNC_PERIOD).minutes.do(core_api_sync)
+core_api_sync()
+schedule.every(SYNC_PERIOD).seconds.do(core_api_sync)
 
 # Schedule show db/tasks
 schedule.every().minute.do(show_database)
 schedule.every().minute.do(show_scheduled_tasks)
 
-schedule.run_all()
+fallback = { "head": "https://stream.deflax.net/memfs/938a36f8-02ff-4452-a7e5-3b6a9a07cdfa.m3u8" }
+head = fallback
 
 @app.route('/', methods=['GET'])
 def root_query():
