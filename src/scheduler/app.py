@@ -15,7 +15,7 @@ logger_api = logging.getLogger('waitress')
 logger_api.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
 
 logger_job = logging.getLogger('apscheduler')
-logger_job.setLevel(logging.DEBUG)
+logger_job.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
 
 # Variables
 CORE_SYNC_PERIOD = 30
