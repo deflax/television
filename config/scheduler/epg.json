@@ -6,17 +6,17 @@
   },
   {
     "name": "Anima",
-    "start_at": "6",
+    "start_at": "4",
     "prio": 0
   },
   {
     "name": "IwayHigh",
-    "start_at": "14",
+    "start_at": "12",
     "prio": 0
   },
   {
     "name": "Jungletrain",
-    "start_at": "22",
+    "start_at": "20",
     "prio": 0
   },
   {
