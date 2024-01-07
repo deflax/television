@@ -177,12 +177,6 @@ def core_api_sync():
         database.pop(orphan_key)
         scheduler.remove_job(orphan_key)
 
-def show_database():
-    logger_job.info('Scheduler DB: ' + str(database))
-    
-def show_scheduled_tasks():
-    logger_job.info('Scheduler tasks:' + str(scheduler.get_jobs()))
-
 # Login
 # TODO fix logger_api
 try:
@@ -194,12 +188,7 @@ except Exception as err:
     logger_api.error(err)
     
 # Schedule datarhei core api sync
-#scheduler.add_job(func=core_api_sync, id="core_api_init")
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
-
-# Schedule show db/tasks
-scheduler.add_job(func=show_database, trigger="interval", minutes=3, id="show_database")
-scheduler.add_job(func=show_scheduled_tasks, trigger="interval", minutes=3, id="show_scheduled_tasks")
 
 scheduler.start()
 
