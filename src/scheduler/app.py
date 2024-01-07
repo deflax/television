@@ -73,23 +73,20 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
     database.pop(stream_id)
     scheduler.remove_job(stream_id)
 
+# Helper function to find match a stream name with epg.json
 def find_event_entry(events, target_name):
     for entry in events:
         if "name" in entry and entry["name"] == target_name:
             return {"start_at": entry.get("start_at"), "prio": entry.get("prio")}
     return None
 
-# Tasks
-def tick():
-    print('Tick! The time is: %s' % datetime.now())
-    
+# Tasks   
 def stream_exec(stream_name, stream_prio, stream_hls_url):
     global head
     logger_job.info('Hello {}, your priority is: {}'. format(stream_name, stream_prio))
     head = { "head": stream_hls_url }
     logger_job.info('head position is: ' + str(head))
    
-# Main function for synchronizing with Datarhei Core API
 def core_api_sync():
     global database
     global epg
@@ -134,12 +131,10 @@ def core_api_sync():
         scheduler.remove_job(orphan_key)
 
 def show_database():
-    global database
     logger_job.info('Scheduler DB: ' + str(database))
     
 def show_scheduled_tasks():
     logger_job.info('Scheduler tasks:' + str(scheduler.get_jobs()))
-    logger_job.info('Scheduler tasks:' + str(scheduler.print_jobs()))
 
 # Login
 try:
@@ -149,24 +144,15 @@ try:
 except Exception as err:
     logger_job.error('client login error')
     logger_job.error(err)
-
-
-# Schedule tick
-scheduler.add_job(func=tick, trigger="interval", minutes=180)
     
 # Schedule datarhei core api sync
-#core_api_sync()
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
 
 # Schedule show db/tasks
-scheduler.add_job(func=show_database, trigger="interval", seconds=60, id="show_database")
-scheduler.add_job(func=show_scheduled_tasks, trigger="interval", seconds=60, id="show_scheduled_tasks")
+scheduler.add_job(func=show_database, trigger="interval", minutes=60, id="show_database")
+scheduler.add_job(func=show_scheduled_tasks, trigger="interval", minutes=60, id="show_scheduled_tasks")
 
 scheduler.start()
-
-fallback = { "head": "https://stream.deflax.net/memfs/938a36f8-02ff-4452-a7e5-3b6a9a07cdfa.m3u8" }
-head = fallback
-logger_api.info('head position is: ' + str(head))
 
 @app.route('/', methods=['GET'])
 def root_query():
