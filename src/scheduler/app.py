@@ -190,8 +190,8 @@ core_api_sync()
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
 
 # Schedule show db/tasks
-scheduler.add_job(func=show_database, trigger="interval", minutes=60, id="show_database")
-scheduler.add_job(func=show_scheduled_tasks, trigger="interval", minutes=60, id="show_scheduled_tasks")
+scheduler.add_job(func=show_database, trigger="interval", minutes=3, id="show_database")
+scheduler.add_job(func=show_scheduled_tasks, trigger="interval", minutes=3, id="show_scheduled_tasks")
 
 scheduler.start()
 
