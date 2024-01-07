@@ -49,20 +49,22 @@ def process_running_channel(client, database, scheduler, stream_id, stream_name,
         # Skip learned channels
         return
     else:
-        logger_job.info(f'{stream_id} ({stream_name}) has been registered to the database')
         epg_result = find_event_entry(epg, stream_name)
-        logger_job.info(epg_result)
+        stream_start = epg_result.get('start_at')
         stream_prio = epg_result.get('prio', 0)
-        try:
-            stream_start_hour = epg_result['start_at']
-            logger_job.info(f"Stream start hour is set to {stream_start_hour}")
-            scheduler.add_job(
-                func=stream_exec, trigger='cron', hour=stream_start_hour, jitter=60,
-                id=stream_id, args=(stream_name, stream_prio, stream_hls_url)
-            )
-        except TypeError:
+        if stream_start == "never":
+            # Skip channels that are set to never start automatically
+            return
+        logger_job.info(f'{stream_id} ({stream_name}) has been registered to the database')      
+        if stream_start == "now":
             logger_job.info("Stream should start now")
             scheduler.add_job(func=stream_exec, id=stream_id, args=(stream_name, stream_prio, stream_hls_url))
+        else:
+            logger_job.info(f"Stream start hour is set to {stream_start}")
+            scheduler.add_job(
+                func=stream_exec, trigger='cron', hour=stream_start, jitter=60,
+                id=stream_id, args=(stream_name, stream_prio, stream_hls_url)
+            )            
         database.update({stream_id: {'name': stream_name, 'meta': stream_description, 'src': stream_hls_url}})
 
 # Helper function to remove channel from the database
