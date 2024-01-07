@@ -124,8 +124,6 @@ def core_api_sync():
         stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
         stream_hls_url = f'https://{api_hostname}/{stream_storage_type}/{stream_id}.m3u8'
 
-        payload = {stream_id: {'name': stream_name, 'meta': stream_description, 'src': stream_hls_url}}
-
         if state.exec == "running":
             process_running_channel(client, database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
         else:
