@@ -72,7 +72,10 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
     if stream_id in database:
         logger_job.info(f'{stream_id} ({stream_name}) has been removed from the database. Reason: {state.exec}')
         database.pop(stream_id)
-        scheduler.remove_job(stream_id)
+        try:
+            scheduler.remove_job(stream_id)
+        except scheduler.jobstores.base.JobLookupError as je:
+            logger_job.error(je)
 
 # Helper function to find match a stream name with epg.json
 def find_event_entry(events, target_name):
