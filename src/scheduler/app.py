@@ -61,8 +61,12 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             scheduler.add_job(
                 func=stream_exec, trigger='cron', hour=stream_start, jitter=60,
                 id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
-            )            
+            )
         database.update({stream_id: {'name': stream_name, 'start_at': stream_start, 'meta': stream_description, 'src': stream_hls_url}})
+        # Bootstrap the playhead if its still empty.
+        if head == {}:
+            fallback = fallback_search(database)
+            scheduler.add_job(func=stream_exec, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
 
 # Helper function to remove channel from the database
 def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
