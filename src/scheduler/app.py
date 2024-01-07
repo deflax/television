@@ -1,39 +1,39 @@
 import os
 import logging
 import json
-import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
+import time
 
 app = Flask(__name__)
 scheduler = BackgroundScheduler()
 
 # Log handlers
 logger_api = logging.getLogger('waitress')
-logger_api.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
-
 logger_job = logging.getLogger('apscheduler')
-logger_job.setLevel(os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper())
+log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
+logger_api.setLevel(log_level)
+logger_job.setLevel(log_level)
 
 # Variables
-CORE_SYNC_PERIOD = 30
-api_hostname = os.environ.get('CORE_API_HOSTNAME')
-api_port = os.environ.get('CORE_API_PORT')
-api_username = os.environ.get('CORE_API_AUTH_USERNAME')
-api_password=os.environ.get('CORE_API_AUTH_PASSWORD')
+CORE_SYNC_PERIOD = int(os.environ.get('CORE_SYNC_PERIOD', 30))
+api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
+api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
+api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
 
 # Init
 database = {}
 prio = 0
 head = {}
-epg_json = open('/config/epg.json', 'r')
-epg = json.load(epg_json)
-logger_api.info(epg)
-for i in epg:
-    logger_api.info(i)
+
+with open('/config/epg.json', 'r') as epg_json:
+    epg = json.load(epg_json)
 epg_json.close()
+
+print(epg)
+logger_api.info(epg)
 
 # Helper functions
 def find_event_entry(events, target_name):
