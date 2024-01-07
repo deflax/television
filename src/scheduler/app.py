@@ -44,7 +44,7 @@ def get_core_process_details(client, process_id):
         return None
     
 # Helper function to process a running channel
-def process_running_channel(client, database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
+def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
     if stream_id in database:
         # Skip learned channels
         return
@@ -68,7 +68,7 @@ def process_running_channel(client, database, scheduler, stream_id, stream_name,
         database.update({stream_id: {'name': stream_name, 'meta': stream_description, 'src': stream_hls_url}})
 
 # Helper function to remove channel from the database
-def remove_channel_from_database(stream_id, stream_name, state, database, scheduler):
+def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
     logger_job.info(f'{stream_id} ({stream_name}) has been removed from the database. Reason: {state.exec}')
     database.pop(stream_id)
     scheduler.remove_job(stream_id)
@@ -106,18 +106,15 @@ def core_api_sync():
             get_process = get_core_process_details(client, process.id)
             if not get_process:
                 continue
-
             stream_id = get_process.reference
             meta = get_process.metadata
             state = get_process.state
         except Exception as err:
-            logger_job.error(f'Error processing process {process.id}: {err}')
+            logger_job.error(f'Error processing {process.id}: {err}')
             continue
-
         if meta is None or meta['restreamer-ui'].get('meta') is None:
             # Skip processes without metadata or meta key
             continue
-
         new_ids.append(stream_id)
         stream_name = meta['restreamer-ui']['meta']['name']
         stream_description = meta['restreamer-ui']['meta']['description']
@@ -125,9 +122,9 @@ def core_api_sync():
         stream_hls_url = f'https://{api_hostname}/{stream_storage_type}/{stream_id}.m3u8'
 
         if state.exec == "running":
-            process_running_channel(client, database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
+            process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
         else:
-            remove_channel_from_database(stream_id, stream_name, state, database, scheduler)
+            remove_channel_from_database(database, scheduler, stream_id, stream_name, state)
 
     # Cleanup orphaned references
     orphan_keys = [key for key in database if key not in new_ids]
