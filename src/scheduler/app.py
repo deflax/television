@@ -72,29 +72,35 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
         logger_job.info(f'{stream_id} ({stream_name}) will be removed from the database. Reason: {state.exec}')
                 # Handle the situation where we remove an stream that is currently playing
         if head['id'] == stream_id:
-            logger_job.warning(f'{stream_id} was currently running. Searching for a fallback job.')
-            current_hour = datetime.now().hour
-            hour_set = []               
-            for key, value in database.items():
-                if value['start_at'] == "now" or value['start_at'] == "never":
-                    continue
-                else:
-                    hour_set.append(value['start_at'])
-            closest_hour = min(hour_set, key=lambda item: abs(int(item) - current_hour))
-            for key, value in database.items():
-                if value['start_at'] == str(closest_hour):
-                    fallback_stream_id = key
-                    fallback_stream_name = value['name']
-                    fallback_hls_url = value['src']
-                    break
+            logger_job.warning(f'{stream_id} was currently running.')
+            fallback = fallback_search(database)
             prio = 0
             logger_job.info(f'Source priority is reset to 0')
-            scheduler.add_job(func=stream_exec, id="fallback", args=(fallback_stream_id, fallback_stream_name, 0, fallback_hls_url))
+            scheduler.add_job(func=stream_exec, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
         database.pop(stream_id)
         try:
             scheduler.remove_job(stream_id)
         except Exception as joberror:
             logger_job.error(joberror)            
+
+# Helper function to search for a fallback stream
+def fallback_search(database):
+    logger_job.info('Searching for a fallback job.')
+    current_hour = datetime.now().hour
+    hour_set = []               
+    for key, value in database.items():
+        if value['start_at'] == "now" or value['start_at'] == "never":
+            continue
+        else:
+            hour_set.append(value['start_at'])
+        closest_hour = min(hour_set, key=lambda item: abs(int(item) - current_hour))
+        for key, value in database.items():
+            if value['start_at'] == str(closest_hour):
+                fallback = { "stream_id": key,
+                             "stream_name": value['name'],
+                             "stream_hls_url": value['src']
+                           }
+                return fallback
 
 # Helper function to find match a stream name with epg.json
 def find_event_entry(epg, stream_name):
@@ -174,6 +180,7 @@ def show_scheduled_tasks():
     logger_job.info('Scheduler tasks:' + str(scheduler.get_jobs()))
 
 # Login
+# TODO fix logger_api
 try:
     client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
     logger_api.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
@@ -183,7 +190,7 @@ except Exception as err:
     logger_api.error(err)
     
 # Schedule datarhei core api sync
-scheduler.add_job(func=core_api_sync, id="core_api_init")
+#scheduler.add_job(func=core_api_sync, id="core_api_init")
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
 
 # Schedule show db/tasks
