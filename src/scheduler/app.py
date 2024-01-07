@@ -149,6 +149,7 @@ try:
 except Exception as err:
     logger_api.error('client login error')
     logger_api.error(err)
+core_api_sync()
     
 # Schedule datarhei core api sync
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
