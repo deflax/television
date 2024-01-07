@@ -69,9 +69,10 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
 
 # Helper function to remove channel from the database
 def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
-    logger_job.info(f'{stream_id} ({stream_name}) has been removed from the database. Reason: {state.exec}')
-    database.pop(stream_id)
-    scheduler.remove_job(stream_id)
+    if stream_id in database:
+        logger_job.info(f'{stream_id} ({stream_name}) has been removed from the database. Reason: {state.exec}')
+        database.pop(stream_id)
+        scheduler.remove_job(stream_id)
 
 # Helper function to find match a stream name with epg.json
 def find_event_entry(events, target_name):
@@ -122,6 +123,7 @@ def core_api_sync():
             process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
         else:
             remove_channel_from_database(database, scheduler, stream_id, stream_name, state)
+            new_ids.remove(stream_id)
 
     # Cleanup orphaned references
     orphan_keys = [key for key in database if key not in new_ids]
@@ -139,11 +141,11 @@ def show_scheduled_tasks():
 # Login
 try:
     client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
-    logger_job.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
+    logger_api.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
     client.login()
 except Exception as err:
-    logger_job.error('client login error')
-    logger_job.error(err)
+    logger_api.error('client login error')
+    logger_api.error(err)
     
 # Schedule datarhei core api sync
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
