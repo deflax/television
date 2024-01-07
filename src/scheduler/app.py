@@ -96,6 +96,7 @@ def stream_exec(stream_name, stream_prio, stream_hls_url):
     logger_job.info(f'Hello {stream_name}!')
     if stream_prio > prio:
         logger_job.info(f'Source priority is now set to: {stream_prio}')
+        prio = stream_prio
         update_head(stream_hls_url)
     elif stream_prio == prio:
         update_head(stream_hls_url)
