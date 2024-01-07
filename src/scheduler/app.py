@@ -18,7 +18,7 @@ logger_api.setLevel(log_level)
 logger_job.setLevel(log_level)
 
 # Variables
-CORE_SYNC_PERIOD = int(os.environ.get('CORE_SYNC_PERIOD', 30))
+CORE_SYNC_PERIOD = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
@@ -52,12 +52,12 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
         if stream_start == "never":
             # Skip channels that are set to never start automatically
             return
-        logger_job.info(f'{stream_id} ({stream_name}) has been registered to the database')      
+        logger_job.warning(f'{stream_id} ({stream_name}) has been registered to the database')      
         if stream_start == "now":
-            logger_job.info("Stream should start now")
+            logger_job.warning("Stream should start now")
             scheduler.add_job(func=stream_exec, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
         else:
-            logger_job.info(f"Stream start hour is set to {stream_start}")
+            logger_job.warning(f"Stream start hour is set to {stream_start}")
             scheduler.add_job(
                 func=stream_exec, trigger='cron', hour=stream_start, jitter=60,
                 id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
@@ -73,23 +73,23 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
     global prio
     global head
     if stream_id in database:
-        logger_job.info(f'{stream_id} ({stream_name}) will be removed from the database. Reason: {state.exec}')
-                # Handle the situation where we remove an stream that is currently playing
-        if head['id'] == stream_id:
-            logger_job.warning(f'{stream_id} was currently running.')
-            fallback = fallback_search(database)
-            prio = 0
-            logger_job.info(f'Source priority is reset to 0')
-            scheduler.add_job(func=stream_exec, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
+        logger_job.warning(f'{stream_id} ({stream_name}) will be removed from the database. Reason: {state.exec}')
         database.pop(stream_id)
         try:
             scheduler.remove_job(stream_id)
         except Exception as joberror:
-            logger_job.error(joberror)            
+            logger_job.error(joberror)
+        # Handle the situation where we remove an stream that is currently playing
+        if head['id'] == stream_id:
+            logger_job.warning(f'{stream_id} was currently running.')
+            fallback = fallback_search(database)
+            prio = 0
+            logger_job.warning(f'Source priority is reset to 0')
+            scheduler.add_job(func=stream_exec, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))          
 
 # Helper function to search for a fallback stream
 def fallback_search(database):
-    logger_job.info('Searching for a fallback job.')
+    logger_job.warning('Searching for a fallback job.')
     current_hour = datetime.now().hour
     hour_set = []               
     for key, value in database.items():
@@ -119,15 +119,15 @@ def update_head(stream_id, stream_prio, stream_hls_url):
     head = { "id": stream_id,
              "prio": stream_prio,
              "head": stream_hls_url }
-    logger_job.info(f'Head position is: {str(head)}')
+    logger_job.warning(f'Head position is: {str(head)}')
 
 # Tasks   
 def stream_exec(stream_id, stream_name, stream_prio, stream_hls_url):
     global prio
-    logger_job.info(f'Hello {stream_name}!')
+    logger_job.warning(f'Hello {stream_name}!')
     if stream_prio > prio:
         prio = stream_prio
-        logger_job.info(f'Source priority is now set to: {prio}')
+        logger_job.warning(f'Source priority is now set to: {prio}')
         update_head(stream_id, stream_prio, stream_hls_url)
     elif stream_prio == prio:
         update_head(stream_id, stream_prio, stream_hls_url)
@@ -173,7 +173,7 @@ def core_api_sync():
     # Cleanup orphaned references
     orphan_keys = [key for key in database if key not in new_ids]
     for orphan_key in orphan_keys:
-        logger_job.info(f'Key {orphan_key} is an orphan. Removing.')
+        logger_job.warning(f'Key {orphan_key} is an orphan. Removing.')
         database.pop(orphan_key)
         scheduler.remove_job(orphan_key)
 
