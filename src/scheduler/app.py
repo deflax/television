@@ -32,9 +32,6 @@ with open('/config/epg.json', 'r') as epg_json:
     epg = json.load(epg_json)
 epg_json.close()
 
-print(epg)
-logger_api.info(epg)
-
 # Helper function to get process details
 def get_core_process_details(client, process_id):
     try:
@@ -184,9 +181,9 @@ try:
 except Exception as err:
     logger_api.error('Client login error')
     logger_api.error(err)
-core_api_sync()
     
 # Schedule datarhei core api sync
+scheduler.add_job(func=core_api_sync, id="core_api_init")
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
 
 # Schedule show db/tasks
