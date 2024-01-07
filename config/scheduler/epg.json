@@ -1,5 +1,15 @@
 [
   {
+    "name": "Loop",
+    "start_at": "never",
+    "prio": 0
+  },
+  {
+    "name": "Anima",
+    "start_at": "6",
+    "prio": 0
+  },
+  {
     "name": "IwayHigh",
     "start_at": "14",
     "prio": 0
@@ -10,16 +20,13 @@
     "prio": 0
   },
   {
-    "name": "Anima",
-    "start_at": "6",
-    "prio": 0
-  },
-  {
     "name": "Ines OBS",
+    "start_at": "now",
     "prio": 1
   },
   {
     "name": "Rodopsko Odealo",
+    "start_at": "now",
     "prio": 2
   }
 ]
