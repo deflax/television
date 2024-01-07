@@ -84,13 +84,24 @@ def find_event_entry(events, target_name):
             return {"start_at": entry.get("start_at"), "prio": entry.get("prio")}
     return None
 
+# Helper function to update the head
+def update_head(stream_hls_url):
+    head = { "head": stream_hls_url }
+    logger_job.info(f'Head position is: {str(head)}')
+
 # Tasks   
 def stream_exec(stream_name, stream_prio, stream_hls_url):
     global head
-    logger_job.info('Hello {}, your priority is: {}'. format(stream_name, stream_prio))
-    head = { "head": stream_hls_url }
-    logger_job.info('head position is: ' + str(head))
-   
+    global prio
+    logger_job.info(f'Hello {stream_name}!')
+    if stream_prio > prio:
+        logger_job.info(f'Source priority is now set to: {stream_prio}')
+        update_head(stream_hls_url)
+    elif stream_prio == prio:
+        update_head(stream_hls_url)
+    elif stream_prio < prio:
+        logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping head update!') 
+
 def core_api_sync():
     global database
     global epg
