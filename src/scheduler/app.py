@@ -83,9 +83,9 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
                     continue
                 else:
                     hour_set.append(value['start_at'])
-            closest_hour = min(hour_set, key=lambda item: abs(item - current_hour))
+            closest_hour = min(hour_set, key=lambda item: abs(int(item) - current_hour))
             for key, value in database.items():
-                if value['start_at'] == closest_hour:
+                if value['start_at'] == str(closest_hour):
                     fallback_stream_id = key
                     fallback_stream_name = value['name']
                     fallback_hls_url = value['src']
