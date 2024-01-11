@@ -1,11 +1,12 @@
 import os
 import logging
 import json
+import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
-import time
+from ffmpeg import FFmpeg
 
 app = Flask(__name__)
 scheduler = BackgroundScheduler()
@@ -26,6 +27,7 @@ api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
 # Init
 database = {}
 prio = 0
+recorder = False
 head = {}
 
 with open('/config/epg.json', 'r') as epg_json:
@@ -134,6 +136,19 @@ def stream_exec(stream_id, stream_name, stream_prio, stream_hls_url):
     elif stream_prio < prio:
         logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping head update!') 
 
+def recorder(stream_hls_url):
+    global recorder
+    output_file = "test.mp4"
+
+    ffmpeg = (
+        FFmpeg()
+        .option("y")
+        .input(stream_hls_url)
+        .output("output.mp4", vcodec="copy")
+    )
+
+    ffmpeg.execute()
+
 def core_api_sync():
     global database
     global epg
@@ -181,7 +196,7 @@ def core_api_sync():
 # TODO fix logger_api
 try:
     client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
-    logger_api.info('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
+    logger_api.warning('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
     client.login()
 except Exception as err:
     logger_api.error('Client login error')
