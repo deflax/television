@@ -1,7 +1,8 @@
 import os
+import time
 import logging
 import json
-import time
+import requests
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -154,17 +155,23 @@ def exec_recorder(stream_id, stream_hls_url):
     output_file = current_datetime + ".mp4"
     if rechead != "":
         logger_job.error('Recorder is already started. Refusing to start another rec job.')
-        return False
     else:
+        # Check if the stream_hls_url returns 200
+        req_counter = 0
+        while True:
+            req_counter += 1
+            if requests.get(stream_hls_url).status_code == 200:
+                logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
+                break    
         logger_job.warning(f'Starting recording job for {output_file}')
         rechead = stream_id
-    ffmpeg = (
-        FFmpeg()
-        .option("y")
-        .input(stream_hls_url)
-        .output(output_file, vcodec="copy")
-    )
-    ffmpeg.execute()
+        ffmpeg = (
+            FFmpeg()
+            .option("y")
+            .input(stream_hls_url)
+            .output(output_file, vcodec="copy")
+        )
+        ffmpeg.execute()
 
 def core_api_sync():
     global database
