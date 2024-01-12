@@ -24,6 +24,7 @@ CORE_SYNC_PERIOD = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
+rec_path = "/recordings"
 
 # Init
 database = {}
@@ -43,7 +44,7 @@ def get_core_process_details(client, process_id):
         logger_job.error(f'Error getting process details for {process_id}: {err}')
         return None
     
-# Helper function to process a running channel
+# Process a running channel
 def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
     global recording
     if stream_id in database:
@@ -74,7 +75,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             fallback = fallback_search(database)
             scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
 
-# Helper function to remove channel from the database
+# Remove channel from the database
 def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
     global prio
     global playhead
@@ -94,7 +95,7 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
             logger_job.warning(f'Source priority is reset to 0')
             scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))          
 
-# Helper function to search for a fallback stream
+# Search for a fallback stream
 def fallback_search(database):
     logger_job.warning('Searching for a fallback job.')
     current_hour = datetime.now().hour
@@ -114,14 +115,14 @@ def fallback_search(database):
                            }
                 return fallback
 
-# Helper function to find match a stream name with epg.json
+# Find a matching stream name within epg.json
 def find_event_entry(epg, stream_name):
     for entry in epg:
         if "name" in entry and entry["name"] == stream_name:
             return {"start_at": entry.get("start_at"), "prio": entry.get("prio")}
     return None
 
-# Helper function to update the playhead
+# Update the playhead
 def update_playhead(stream_id, stream_prio, stream_hls_url):
     global playhead
     playhead = { "id": stream_id,
@@ -173,6 +174,7 @@ def exec_recorder(stream_id, stream_hls_url):
         logger_job.warning(f'Recording {output_file} finished.')
         rechead = ""
 
+# Datarhei CORE API sync
 def core_api_sync():
     global database
     global epg
@@ -216,7 +218,7 @@ def core_api_sync():
         database.pop(orphan_key)
         scheduler.remove_job(orphan_key)
 
-# Login
+# Datarhei CORE API login
 try:
     client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
     logger_api.warning('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
@@ -225,11 +227,13 @@ except Exception as err:
     logger_api.error('Client login error')
     logger_api.error(err)
     
-# Schedule datarhei core api sync
+# Schedule sync jobs
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
 
+# Start the scheduler
 scheduler.start()
 
+# Flask API
 @app.route('/', methods=['GET'])
 def root_query():
     global playhead
