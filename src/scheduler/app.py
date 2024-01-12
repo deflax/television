@@ -92,7 +92,7 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
             scheduler.remove_job(rec_id)
             rechead = ""
         # Handle the situation where we remove an stream that is currently playing
-        if stream_id == playhead['id']
+        if stream_id == playhead['id']:
             logger_job.warning(f'{stream_id} was playing.')
             fallback = fallback_search(database)
             prio = 0
