@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
-from ffmpeg import FFmpeg
+from ffmpeg import FFmpeg, Progress
 
 app = Flask(__name__)
 scheduler = BackgroundScheduler()
@@ -171,6 +171,11 @@ def exec_recorder(stream_id, stream_hls_url):
             .input(stream_hls_url)
             .output(output, vcodec="copy")
         )
+        
+        @ffmpeg.on("progress")
+        def on_progress(progress: Progress):
+            print(progress)
+        
         ffmpeg.execute()
         logger_job.warning(f'Recording {output_file} finished. Moving file to {rec_path}/vod')
         os.rename(f'{rec_path}/live/{output_file}', f'{rec_path}/vod/{output_file}')
