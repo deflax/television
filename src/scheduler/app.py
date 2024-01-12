@@ -86,12 +86,6 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
             scheduler.remove_job(stream_id)
         except Exception as joberror:
             logger_job.error(joberror)
-        # If the removed stream is currently recording we should stop the rec process and reset the rechead
-        if stream_id == rechead:
-            logger_job.warning(f'{stream_id} recording stopped.')
-            rec_id = f'rec_{stream_id}'
-            scheduler.remove_job(rec_id)
-            rechead = ""
         # Handle the situation where we remove an stream that is currently playing
         if stream_id == playhead['id']:
             logger_job.warning(f'{stream_id} was playing.')
@@ -146,7 +140,7 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
     elif stream_prio == prio:
         update_playhead(stream_id, stream_prio, stream_hls_url)
     elif stream_prio < prio:
-        logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping playhead update!') 
+        logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping playhead update.') 
 
 # Execute recorder
 def exec_recorder(stream_id, stream_hls_url):
@@ -154,7 +148,7 @@ def exec_recorder(stream_id, stream_hls_url):
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
     output_file = current_datetime + ".mp4"
     if rechead != "":
-        logger_job.error('Recorder is already started. Refusing to start another rec job.')
+        logger_job.error('Recorder is already started. Refusing to start another job.')
     else:
         # Check if the stream_hls_url returns 200
         req_counter = 0
@@ -164,10 +158,10 @@ def exec_recorder(stream_id, stream_hls_url):
             if requests.get(stream_hls_url).status_code == 200:
                 logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
                 break
-            if req_counter == 20:
+            if req_counter == 30:
                 logger_job.error(f'Recording cancelled after {req_counter} attempts.')
                 return False
-        logger_job.warning(f'Starting recording job for {output_file}')
+        logger_job.warning(f'Recording {output_file} started.')
         rechead = stream_id
         ffmpeg = (
             FFmpeg()
@@ -176,6 +170,8 @@ def exec_recorder(stream_id, stream_hls_url):
             .output(output_file, vcodec="copy")
         )
         ffmpeg.execute()
+        logger_job.warning(f'Recording {output_file} finished.')
+        rechead = ""
 
 def core_api_sync():
     global database
@@ -221,7 +217,6 @@ def core_api_sync():
         scheduler.remove_job(orphan_key)
 
 # Login
-# TODO fix logger_api
 try:
     client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
     logger_api.warning('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
