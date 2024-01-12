@@ -93,7 +93,7 @@ services:
 
   archive-api:
     depends_on:
-      - "recorder"
+      - "scheduler"
     image: xemle/home-gallery-api-server
     environment:
       # TensorflowJS backends
@@ -111,7 +111,7 @@ services:
 
   archive:
     depends_on:
-      - "recorder"
+      - "scheduler"
     image: xemle/home-gallery:1.14.6
     environment:
       - GALLERY_API_SERVER=http://archive-api:3000
