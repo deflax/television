@@ -159,6 +159,7 @@ def exec_recorder(stream_id, stream_hls_url):
         # Check if the stream_hls_url returns 200
         req_counter = 0
         while True:
+            time.sleep(5)
             req_counter += 1
             if requests.get(stream_hls_url).status_code == 200:
                 logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
