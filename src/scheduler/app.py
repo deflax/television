@@ -162,7 +162,10 @@ def exec_recorder(stream_id, stream_hls_url):
             req_counter += 1
             if requests.get(stream_hls_url).status_code == 200:
                 logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
-                break    
+                break
+            if req_counter == 20:
+                logger_job.error(f'Recording cancelled after {req_counter} attempts.')
+                return False
         logger_job.warning(f'Starting recording job for {output_file}')
         rechead = stream_id
         ffmpeg = (
