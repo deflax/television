@@ -164,14 +164,16 @@ def exec_recorder(stream_id, stream_hls_url):
                 return False
         logger_job.warning(f'Recording {output_file} started.')
         rechead = stream_id
+        output = f'{rec_path}/live/{output_file}'
         ffmpeg = (
             FFmpeg()
             .option("y")
             .input(stream_hls_url)
-            .output(output_file, vcodec="copy")
+            .output(output, vcodec="copy")
         )
         ffmpeg.execute()
-        logger_job.warning(f'Recording {output_file} finished.')
+        logger_job.warning(f'Recording {output_file} finished. Moving file to {rec_path}/vod')
+        os.rename(f'{rec_path}/live/{output_file}', f'{rec_path}/vod/{output_file}')
         rechead = ""
 
 # Datarhei CORE API sync
