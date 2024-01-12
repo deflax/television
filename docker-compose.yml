@@ -65,6 +65,7 @@ services:
        - "variables.env"
     volumes:
       - "./config/scheduler:/config"
+      - "./data/recorder:/recordings"
     restart: unless-stopped
     networks:
       - net
@@ -81,7 +82,7 @@ services:
       - "127.0.0.1:8554:8554"
     volumes:
       - "./config/recorder/mediamtx.yml:/mediamtx.yml"
-      - "./data/recorder:/recordings"
+      #- "./data/recorder:/recordings"
     # Set local fqdn to use internally in the restreamer
     hostname: recorder.local
     restart: unless-stopped
@@ -132,4 +133,3 @@ services:
       - net
     labels:
       - meta.role=archive
-
