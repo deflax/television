@@ -169,8 +169,9 @@ def exec_recorder(stream_id, stream_hls_url):
             FFmpeg()
             .option("y")
             .input(stream_hls_url)
-            .output(output, vcodec="copy")
-        )
+            .output(output,
+                    {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
+            ))
         
         @ffmpeg.on("progress")
         def on_progress(progress: Progress):
