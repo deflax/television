@@ -25,6 +25,7 @@ api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
 rec_path = "/recordings"
+enable_delay = 12
 
 # Init
 database = {}
@@ -134,6 +135,8 @@ def update_playhead(stream_id, stream_prio, stream_hls_url):
 def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
     global prio
     logger_job.warning(f'Hello {stream_name}!')
+    logger_job.warning(f'Waiting {enable_delay} seconds before we initiate the playhead update...')
+    time.sleep(enable_delay)
     if stream_prio > prio:
         prio = stream_prio
         logger_job.warning(f'Source priority is now set to: {prio}')
@@ -158,8 +161,8 @@ def exec_recorder(stream_id, stream_hls_url):
             req_counter += 1
             if requests.get(stream_hls_url).status_code == 200:
                 logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
-                # TODO: Wait at least 12 seconds so we wont have broken video. This could be done better...
-                time.sleep(12)
+                logger_job.warning(f'Waiting {enable_delay} seconds before we initiate the recording...')
+                time.sleep(enable_delay)
                 break
             if req_counter == 30:
                 logger_job.error(f'Recording cancelled after {req_counter} attempts.')
