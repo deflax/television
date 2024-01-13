@@ -60,7 +60,21 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             return
         logger_job.warning(f'{stream_id} ({stream_name}) has been registered to the database')      
         if stream_start == "now":
-            logger_job.warning("Stream should start now")
+            logger_job.warning("Stream should start now. Preparing")
+            # Check if the stream_hls_url returns 200
+            req_counter = 0
+            while True:
+                # Wait 6 seconds initially
+                time.sleep(6)
+                req_counter += 1
+                if requests.get(stream_hls_url).status_code == 200:
+                    logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
+                    logger_job.warning(f'Waiting extra {enable_delay} seconds before we initiate the stream...')
+                    time.sleep(enable_delay)
+                    break
+                if req_counter == 30:
+                    logger_job.error(f'Stream {stream_name} cancelled after {req_counter} attempts.')
+                    return
             scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
             rec_id = f'rec_{stream_id}'
             scheduler.add_job(func=exec_recorder, id=rec_id, args=(stream_id, stream_hls_url))
@@ -134,9 +148,7 @@ def update_playhead(stream_id, stream_prio, stream_hls_url):
 # Execute stream   
 def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
     global prio
-    logger_job.warning(f'Hello {stream_name}!')
-    logger_job.warning(f'Waiting {enable_delay} seconds before we initiate the playhead update...')
-    time.sleep(enable_delay)
+    logger_job.warning(f'Hello {stream_name}! :]')
     if stream_prio > prio:
         prio = stream_prio
         logger_job.warning(f'Source priority is now set to: {prio}')
@@ -154,19 +166,6 @@ def exec_recorder(stream_id, stream_hls_url):
     if rechead != "":
         logger_job.error('Recorder is already started. Refusing to start another job.')
     else:
-        # Check if the stream_hls_url returns 200
-        req_counter = 0
-        while True:
-            time.sleep(5)
-            req_counter += 1
-            if requests.get(stream_hls_url).status_code == 200:
-                logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
-                logger_job.warning(f'Waiting {enable_delay} seconds before we initiate the recording...')
-                time.sleep(enable_delay)
-                break
-            if req_counter == 30:
-                logger_job.error(f'Recording cancelled after {req_counter} attempts.')
-                return False
         logger_job.warning(f'Recording {output_file} started.')
         rechead = stream_id
         output = f'{rec_path}/live/{output_file}'
