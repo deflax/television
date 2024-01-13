@@ -158,6 +158,8 @@ def exec_recorder(stream_id, stream_hls_url):
             req_counter += 1
             if requests.get(stream_hls_url).status_code == 200:
                 logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
+                # TODO: Wait at least 12 seconds so we wont have broken video. This could be done better...
+                time.sleep(12)
                 break
             if req_counter == 30:
                 logger_job.error(f'Recording cancelled after {req_counter} attempts.')
