@@ -72,25 +72,6 @@ services:
     labels:
       - meta.role=scheduler
 
-  recorder:
-    depends_on:
-      - "restreamer"
-    image: bluenviron/mediamtx:latest-ffmpeg
-    environment:
-      - MTX_PROTOCOLS=tcp
-    ports:
-      - "127.0.0.1:8554:8554"
-    volumes:
-      - "./config/recorder/mediamtx.yml:/mediamtx.yml"
-      #- "./data/recorder:/recordings"
-    # Set local fqdn to use internally in the restreamer
-    hostname: recorder.local
-    restart: unless-stopped
-    networks:
-      - net
-    labels:
-      - meta.role=recorder
-
   archive-api:
     depends_on:
       - "scheduler"
