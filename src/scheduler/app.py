@@ -238,6 +238,7 @@ try:
 except Exception as err:
     logger_api.error('Client login error')
     logger_api.error(err)
+    sys.exit(1)
     
 # Schedule sync jobs
 scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
