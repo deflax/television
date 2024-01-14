@@ -107,9 +107,9 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
         if stream_id == playhead['id']:
             logger_job.warning(f'{stream_id} was playing.')
             fallback = fallback_search(database)
-            prio = 0
+            fallback_prio = 0
             logger_job.warning(f'Source priority is reset to 0')
-            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))          
+            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], fallback_prio, fallback['stream_hls_url']))          
 
 # Search for a fallback stream
 def fallback_search(database):
@@ -139,11 +139,12 @@ def find_event_entry(epg, stream_name):
     return None
 
 # Update the playhead
-def update_playhead(stream_id, stream_prio, stream_hls_url):
+def update_playhead(stream_id, stream_name, stream_prio, stream_hls_url):
     global playhead
     playhead = { "id": stream_id,
-             "prio": stream_prio,
-             "head": stream_hls_url }
+                 "name": stream_name,
+                 "prio": stream_prio,
+                 "head": stream_hls_url }
     logger_job.warning(f'Playhead position is: {str(playhead)}')
 
 # Execute stream   
@@ -153,9 +154,9 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
     if stream_prio > prio:
         prio = stream_prio
         logger_job.warning(f'Source priority is now set to: {prio}')
-        update_playhead(stream_id, stream_prio, stream_hls_url)
+        update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
     elif stream_prio == prio:
-        update_playhead(stream_id, stream_prio, stream_hls_url)
+        update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
     elif stream_prio < prio:
         logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping playhead update.') 
 
