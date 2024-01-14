@@ -208,10 +208,13 @@ def core_api_sync():
             state = get_process.state
         except Exception as err:
             logger_job.error(f'Error processing {process.id}: {err}')
+            logger_job.error(process)
             continue
+        
         if meta is None or meta['restreamer-ui'].get('meta') is None:
             # Skip processes without metadata or meta key
             continue
+        
         new_ids.append(stream_id)
         stream_name = meta['restreamer-ui']['meta']['name']
         stream_description = meta['restreamer-ui']['meta']['description']
