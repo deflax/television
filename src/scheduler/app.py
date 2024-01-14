@@ -107,9 +107,9 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
         if stream_id == playhead['id']:
             logger_job.warning(f'{stream_id} was playing.')
             fallback = fallback_search(database)
-            fallback_prio = 0
+            prio = 0
             logger_job.warning(f'Source priority is reset to 0')
-            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], fallback_prio, fallback['stream_hls_url']))          
+            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], prio, fallback['stream_hls_url']))          
 
 # Search for a fallback stream
 def fallback_search(database):
