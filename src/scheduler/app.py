@@ -26,7 +26,7 @@ api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
 rec_path = "/recordings"
-enable_delay = 12
+enable_delay = 24
 
 # Init
 database = {}
@@ -65,7 +65,6 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             # Check if the stream_hls_url returns 200
             req_counter = 0
             while True:
-                # Wait 6 seconds initially
                 time.sleep(6)
                 req_counter += 1
                 if requests.get(stream_hls_url).status_code == 200:
