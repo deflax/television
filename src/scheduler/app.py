@@ -251,10 +251,21 @@ scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERI
 scheduler.start()
 
 # Flask API
+
 @app.route('/', methods=['GET'])
-def root_query():
+def root_route():
+    about_json = { 'about': 'deflax tv api' }
+    return jsonify(about_json)
+
+@app.route('/playhead', methods=['GET'])
+def playhead_route():
     global playhead
     return jsonify(playhead)
+
+@app.route('/database', methods=['GET'])
+def database_route():
+    global database
+    return jsonify(database)
 
 def create_app():
    return app
