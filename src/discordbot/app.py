@@ -16,12 +16,15 @@ client = discord.Client(intents=intents)
 async def on_ready():
     print(f'Logged in as {client.user}')
 
+async def hello(message):
+    await message.channel.send('Hello!')
+
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
     if message.content.startswith('!hello'):
-        await message.channel.send('Hello!')
+        await hello(message)
 
 client.run(bot_token)
