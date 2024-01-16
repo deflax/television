@@ -43,6 +43,8 @@ async def epg(ctx):
             response.raise_for_status()
             content = response.json
             await ctx.channel.send('epg:')
+            await ctx.channel.send(type(content))
+            await ctx.channel.send(f'`{content}`')
 
             if content != {}:
                 for item in content:
