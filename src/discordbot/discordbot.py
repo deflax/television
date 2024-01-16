@@ -66,7 +66,7 @@ async def time(ctx):
 @bot.command(name='start')
 async def start_task(ctx):
     # Schedule a task to run every 5 seconds
-    scheduler.add_job(func=my_task, id='my_task_id')
+    await scheduler.add_job(func=my_task, id='my_task_id')
     #scheduler.add_job(func=tick, id='tick_id', args=(ctx))
     #channel = bot.get_channel(channel_id)
     #if channel:
@@ -78,7 +78,6 @@ async def show_task(ctx):
     global counter
     await ctx.channel.send(str(counter))
 
-@tasks.loop(seconds=10)
 async def my_task():
     global counter
     counter += 1
