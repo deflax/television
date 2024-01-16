@@ -62,8 +62,8 @@ async def epg(ctx):
         print(e)
 
 @bot.command(name='time')
-async def time():
-    await bot.channel.send('The time is: `%s`' % datetime.now())
+async def time(ctx):
+    await ctx.channel.send('The time is: `%s`' % datetime.now())
 
 @bot.command(name='start')
 async def start_task(ctx):
