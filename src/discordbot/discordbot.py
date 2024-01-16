@@ -25,6 +25,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Scheduler
 scheduler = AsyncIOScheduler()
 
+counter = 0
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name} ({bot.user.id})')
@@ -59,20 +61,25 @@ async def epg(ctx):
     except Exception as e:
         print(e)
 
-@bot.command(name='start_task')
+@bot.comment(name='time')
+async def time():
+    await bot.channel.send('The time is: `%s`' % datetime.now())
+
+@bot.command(name='start')
 async def start_task(ctx):
     # Schedule a task to run every 5 seconds
     scheduler.add_job(func=my_task, id='my_task_id')
     #scheduler.add_job(func=tick, id='tick_id', args=(ctx))
 
+@bot.command(name='show')
+async def show_task(ctx):
+    global counter
+    ctx.channel.send(str(counter))
+
 @tasks.loop(seconds=10)
 async def my_task():
-    # Your asynchronous task goes here
-    print()
-    await bot.channel.send('Running my_task')
-    
-async def tick():
-    await bot.channel.send('Tick! The time is: %s' % datetime.now())
+    global counter
+    counter += 1
 
 # Run the bot with your token
 bot.run(bot_token)
