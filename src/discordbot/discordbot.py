@@ -61,7 +61,7 @@ async def epg(ctx):
     except Exception as e:
         print(e)
 
-@bot.comment(name='time')
+@bot.command(name='time')
 async def time():
     await bot.channel.send('The time is: `%s`' % datetime.now())
 
