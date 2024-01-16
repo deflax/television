@@ -44,16 +44,13 @@ async def epg(ctx):
             content = response.text
             await ctx.channel.send('epg:')
             
-            if content != {}:
-                for item in content:
-                    if item['start_at'] == 'now' or item['start_at'] == 'never':
-                        await ctx.channel.send('x')
-                        continue
-                    else:
-                        await ctx.channel.send('y')
-                        await ctx.channel.send(item['start_at'])
-            else:
-                await ctx.channel.send('Empty database!')
+            for item in content:
+                if item['start_at'] == 'now' or item['start_at'] == 'never':
+                    await ctx.channel.send('x')
+                    continue
+                else:
+                    await ctx.channel.send('y')
+                    await ctx.channel.send(item['start_at'])
     except Exception as e:
         print(e)
 
