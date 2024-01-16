@@ -42,7 +42,7 @@ async def epg(ctx):
             response = requests.get(db_url)
             response.raise_for_status()
             content = response.text
-            await ctx.channel.send('epg:')
+            await ctx.channel.send(type(content))
             
             for item in content:
                 if item['start_at'] == 'now' or item['start_at'] == 'never':
