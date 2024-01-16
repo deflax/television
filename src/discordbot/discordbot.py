@@ -41,26 +41,33 @@ async def epg(ctx):
         if requests.get(db_url).status_code == 200:
             response = requests.get(db_url)
             response.raise_for_status()
-
             content = response.text
-            await ctx.channel.send(content)
+            
+            if content != {}:
+                for item in content:
+                    if item['start_at'] == 'now' or item['start_at'] == 'never':
+                        continue
+                    else:
+                        await ctx.channel.send(item['start_at'])
+            else:
+                await ctx.channel.send('Empty database!')
     except Exception as e:
         print(e)
 
 @bot.command(name='start_task')
 async def start_task(ctx):
     # Schedule a task to run every 5 seconds
-    scheduler.add_job(func=my_task, seconds=5, id='my_task_id', args=(ctx))
-    #scheduler.add_job(func=tick, seconds=5, id='tick_id', args=(ctx))
-
-async def my_task(ctx):
-    # Your asynchronous task goes here
-    print()
-    await ctx.channel.send('Running my_task')
+    scheduler.add_job(func=my_task, id='my_task_id')
+    #scheduler.add_job(func=tick, id='tick_id', args=(ctx))
 
 @tasks.loop(seconds=10)
-async def tick(ctx):
-    await ctx.channel.send('Tick! The time is: %s' % datetime.now())
+async def my_task():
+    # Your asynchronous task goes here
+    print()
+    await bot.channel.send('Running my_task')
+    
+async def tick():
+    await bot.channel.send('Tick! The time is: %s' % datetime.now())
 
 # Run the bot with your token
 bot.run(bot_token)
