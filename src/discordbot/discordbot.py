@@ -83,4 +83,4 @@ async def my_task():
     counter += 1
 
 # Run the bot with your token
-bot.run(bot_token)
+asyncio.run(bot.run(bot_token))
