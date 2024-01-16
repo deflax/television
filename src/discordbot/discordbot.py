@@ -12,9 +12,6 @@ scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 
 # Discord API Intents
 intents = discord.Intents.default()
-intents.messages = True
-intents.guilds = True
-intents.reactions = True
 
 # Discord client
 bot = commands.Bot(command_prefix="!", intents=intents)
