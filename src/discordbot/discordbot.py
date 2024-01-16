@@ -53,12 +53,12 @@ async def start_task(ctx):
     scheduler.add_job(func=my_task, seconds=5, id='my_task_id', args=(ctx))
     #scheduler.add_job(func=tick, seconds=5, id='tick_id', args=(ctx))
 
-@tasks.loop(seconds=10)
 async def my_task(ctx):
     # Your asynchronous task goes here
     print()
     await ctx.channel.send('Running my_task')
 
+@tasks.loop(seconds=10)
 async def tick(ctx):
     await ctx.channel.send('Tick! The time is: %s' % datetime.now())
 
