@@ -1,7 +1,8 @@
 import asyncio
 import os
-import discord
 import requests
+import discord
+from discord.ext import commands, tasks
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -9,25 +10,29 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 
+# Discord API Intents
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.reactions = True
+
+# Discord client
+bot = commands.Bot(command_prefix="!", intents=intents)
+
 # Scheduler
 scheduler = AsyncIOScheduler()
 
-# Intents
-intents = discord.Intents.default()
-intents.message_content = True
-
-# Client
-client = discord.Client(intents=intents)
-
-# Define an event when the bot is ready
-@client.event
+@bot.event
 async def on_ready():
-    print(f'Logged in as {client.user}')
+    print(f'Logged in as {bot.user.name} ({bot.user.id})')
+    scheduler.start()
+      
+@bot.command(name='hello')
+async def hello(ctx):
+    await ctx.channel.send('Hello!')
 
-async def hello(message):
-    await message.channel.send('Hello!')
-
-async def epg(message):
+@bot.command(name='epg')    
+async def epg(ctx):
     try:
         db_url = f'https://{scheduler_hostname}/database'
         if requests.get(db_url).status_code == 200:
@@ -35,34 +40,23 @@ async def epg(message):
             response.raise_for_status()
 
             content = response.text
-            await message.channel.send(content)
+            await ctx.channel.send(content)
     except Exception as e:
         print(e)
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
+@bot.command(name='start_task')
+async def start_task(ctx):
+    # Schedule a task to run every 5 seconds
+    scheduler.add_job(my_task, 'interval', seconds=5, id='my_task_id')
+    #scheduler.add_job(tick, 'interval', seconds=5, id='tick_id')
 
-    if message.content.startswith('!hello'):
-        await hello(message)
-        
-    if message.content.startswith('!epg'):
-        await epg(message)
+@tasks.loop(seconds=10)
+async def my_task():
+    # Your asynchronous task goes here
+    print("Running my_task")
 
-client.run(bot_token)
-
-def tick():
+async def tick():
     print('Tick! The time is: %s' % datetime.now())
 
-scheduler.add_job(tick, 'interval', seconds=3)
-scheduler.start()
-
-print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
-
-# Execution will block here until Ctrl+C (Ctrl+Break on Windows) is pressed.
-try:
-    asyncio.get_event_loop().run_forever()
-except (KeyboardInterrupt, SystemExit):
-    pass
-
+# Run the bot with your token
+bot.run(bot_token)
