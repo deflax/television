@@ -41,7 +41,7 @@ async def epg(ctx):
         if requests.get(db_url).status_code == 200:
             response = requests.get(db_url)
             response.raise_for_status()
-            content = response.json
+            content = response.json()
             await ctx.channel.send('epg:')
             await ctx.channel.send(type(content))
             await ctx.channel.send(f'`{content}`')
