@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands, tasks
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers import IntervalTrigger
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
