@@ -45,17 +45,15 @@ async def epg(ctx):
             response.raise_for_status()
             content = response.json()
             await ctx.channel.send('epg:')
-            await ctx.channel.send(type(content))
-            await ctx.channel.send(f'`{content}`')
-
+            
             if content != {}:
-                for item in content:
-                    if item['start_at'] == 'now' or item['start_at'] == 'never':
+                for key, value in content.items():
+                    if value['start_at'] == 'now' or value['start_at'] == 'never':
                         await ctx.channel.send('x')
                         continue
                     else:
                         await ctx.channel.send('x')
-                        await ctx.channel.send(item['start_at'])
+                        await ctx.channel.send(value['start_at'])
             else:
                 await ctx.channel.send('Empty database!')
     except Exception as e:
@@ -70,6 +68,10 @@ async def start_task(ctx):
     # Schedule a task to run every 5 seconds
     scheduler.add_job(func=my_task, id='my_task_id')
     #scheduler.add_job(func=tick, id='tick_id', args=(ctx))
+    #channel = bot.get_channel(channel_id)
+    #if channel:
+    #    # Send the message to the specified channel
+    #    await channel.send(message)
 
 @bot.command(name='show')
 async def show_task(ctx):
