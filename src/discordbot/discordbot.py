@@ -50,16 +50,17 @@ async def epg(ctx):
 @bot.command(name='start_task')
 async def start_task(ctx):
     # Schedule a task to run every 5 seconds
-    scheduler.add_job(my_task, 'interval', seconds=5, id='my_task_id')
-    #scheduler.add_job(tick, 'interval', seconds=5, id='tick_id')
+    scheduler.add_job(func=my_task, seconds=5, id='my_task_id', args=(ctx))
+    #scheduler.add_job(func=tick, seconds=5, id='tick_id', args=(ctx))
 
 @tasks.loop(seconds=10)
-async def my_task():
+async def my_task(ctx):
     # Your asynchronous task goes here
-    print("Running my_task")
+    print()
+    await ctx.channel.send('Running my_task')
 
-async def tick():
-    print('Tick! The time is: %s' % datetime.now())
+async def tick(ctx):
+    await ctx.channel.send('Tick! The time is: %s' % datetime.now())
 
 # Run the bot with your token
 bot.run(bot_token)
