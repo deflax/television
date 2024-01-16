@@ -74,7 +74,7 @@ async def start_task(ctx):
 @bot.command(name='show')
 async def show_task(ctx):
     global counter
-    ctx.channel.send(str(counter))
+    await ctx.channel.send(str(counter))
 
 @tasks.loop(seconds=10)
 async def my_task():
