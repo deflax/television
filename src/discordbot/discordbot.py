@@ -107,13 +107,13 @@ async def update_database():
             scheduler.remove_job('announce_live_channel')
             logger_discord.info(f'Live stream is offline.')
             if live_channel_id != 0:
-                live_channel = bot.get_channel(live_channel_id)
+                live_channel = bot.get_channel(int(live_channel_id))
                 await live_channel.send('Live stream is offline.')
 
 async def announce_live_channel(stream_name):
     logger_discord.info(f'{stream_name} is live!')
     if live_channel_id != 0:
-        live_channel = bot.get_channel(live_channel_id)
+        live_channel = bot.get_channel(int(live_channel_id))
         await live_channel.send(f'{stream_name} is live!')
 
 # Run the bot with your token
