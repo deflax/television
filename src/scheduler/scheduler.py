@@ -22,7 +22,7 @@ logger_api.setLevel(log_level)
 logger_job.setLevel(log_level)
 
 # Variables
-CORE_SYNC_PERIOD = int(os.environ.get('CORE_SYNC_PERIOD', 15))
+core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
@@ -282,7 +282,7 @@ except Exception as err:
     #sys.exit(1)
     
 # Schedule sync jobs
-scheduler.add_job(func=core_api_sync, trigger='interval', seconds=CORE_SYNC_PERIOD, id='core_api_sync')
+scheduler.add_job(func=core_api_sync, trigger='interval', seconds=core_sync_period, id='core_api_sync')
 scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
 
 # Start the scheduler
