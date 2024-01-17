@@ -97,8 +97,8 @@ async def update_database():
         if scheduler.get_job('announce_live_channel') is not None:
             scheduler.remove_job('announce_live_channel')
             #live_channel = bot.get_channel(announce_channel_id)
-            logger_discord.info(f'{stream_name} finished')
-            #await live_channel.send(f'{stream_name} finished')
+            logger_discord.info(f'Live stream is offline.')
+            #await live_channel.send('Live stream is offline.')
 
 async def announce_live_channel(stream_name):
     if announce_channel_id == 'disabled':
