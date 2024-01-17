@@ -87,6 +87,8 @@ async def update_database():
                     # Job doesn't exist, so add it
                     logger_discord.info(f'{stream_name} live stream detected!')
                     scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
+                    # Manually execute the job once immediately
+                    scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
                     # Exit since we found one
                     return
                 else:
