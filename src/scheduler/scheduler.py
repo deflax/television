@@ -208,7 +208,7 @@ def core_api_sync():
             meta = get_process.metadata
             state = get_process.state
         except Exception as err:
-            logger_job.error(process)
+            logger_job.debug(process)
             continue
         
         if meta is None or meta['restreamer-ui'].get('meta') is None:
