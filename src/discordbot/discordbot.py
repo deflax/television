@@ -42,12 +42,12 @@ async def on_ready():
     scheduler.add_job(func=query_database, trigger='interval', seconds=5, id='query_database') 
     scheduler.start()
       
-@bot.command(name='hello')
+@bot.command(name='hello', help='Say hello to the bot')
 async def hello(ctx):
     author_name = ctx.author.name
     await ctx.channel.send(f'```hi, {author_name} >^.^<```')
 
-@bot.command(name='epg')    
+@bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
     global database
     if database != {}:
@@ -66,18 +66,13 @@ async def epg(ctx):
     else:
         await ctx.channel.send('```Empty.```')
  
-@bot.command(name='time')
+@bot.command(name='time', help='Show current time')
 async def time(ctx):
     await ctx.channel.send(f'```The time is: {datetime.now()} UTC```')
     
-@bot.command(name='now')
+@bot.command(name='now', help='Displays whats playing right now')
 async def now(ctx):
     await ctx.channel.send(query_playhead())
-    
-@bot.command(name='usage')
-async def help(ctx):
-    usage = "```- !usage - usage\n- !time - show current time\n- !epg list scheduled streams\n- !now - display whats playing now\n- !hello says hi :)```"
-    await ctx.channel.send(usage)
 
 # Helper functions
 async def query_playhead():
