@@ -45,7 +45,7 @@ async def on_ready():
 @bot.command(name='hello')
 async def hello(ctx):
     author_name = ctx.author.name
-    await ctx.channel.send(f'hi, {author_name}! >^.^<')
+    await ctx.channel.send(f'```hi, {author_name} >^.^<```')
 
 @bot.command(name='epg')    
 async def epg(ctx):
@@ -64,11 +64,11 @@ async def epg(ctx):
         epg_list = live_list + scheduled_list
         await ctx.channel.send(f'```{epg_list}```')
     else:
-        await ctx.channel.send('Empty database!')
+        await ctx.channel.send('`Empty database!`')
  
 @bot.command(name='time')
 async def time(ctx):
-    await ctx.channel.send(f'The time is: {datetime.now()} UTC')
+    await ctx.channel.send(f'```The time is: {datetime.now()} UTC```')
 
 # Helper functions
 async def update_database():
