@@ -5,7 +5,6 @@ import discord
 from discord.ext import commands, tasks
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.base import JobLookupError
 import logging
 
 # Read env variables
@@ -93,8 +92,10 @@ async def update_database():
                     # Job doesn't exist, so add it
                     logger_discord.info(f'{stream_name} live stream detected!')
                     scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
+                    
                     # Manually execute the job once immediately
                     scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
+                    
                     # Exit since we found one
                     return
                 else:
@@ -106,8 +107,8 @@ async def update_database():
             scheduler.remove_job('announce_live_channel')
             logger_discord.info(f'Live stream is offline.')
             if live_channel_id != 0:
-                update_channel = bot.get_channel(live_channel_id)
-                await update_channel.send('Live stream is offline.')
+                live_channel = bot.get_channel(live_channel_id)
+                await live_channel.send('Live stream is offline.')
 
 async def announce_live_channel(stream_name):
     logger_discord.info(f'{stream_name} is live!')
