@@ -86,7 +86,7 @@ async def query_playhead():
         logger_discord.error('Cannot connect to the playhead!')
     head_name = playhead['name']
     head_prio = playhead['prio']
-    return f'Now playing {head_name} with prio {head_prio}'
+    return f'```Now playing {head_name}. Priority={head_prio}```'
 
 async def query_database():
     global database
