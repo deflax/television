@@ -76,8 +76,9 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
                     logger_job.error(f'Stream {stream_name} cancelled after {req_counter} attempts.')
                     return
             scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
-            rec_id = f'rec_{stream_id}'
-            scheduler.add_job(func=exec_recorder, id=rec_id, args=(stream_id, stream_hls_url))
+            if stream_prio == 2:
+                rec_id = f'rec_{stream_id}'
+                scheduler.add_job(func=exec_recorder, id=rec_id, args=(stream_id, stream_hls_url))
         else:
             logger_job.warning(f"Stream start hour is set to {stream_start}")
             scheduler.add_job(

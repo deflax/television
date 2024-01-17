@@ -46,8 +46,10 @@ async def epg(ctx):
     await ctx.channel.send('epg:')
     if database != {}:
         for key, value in database.items():
-            if value['start_at'] != 'now' and value['start_at'] != 'never':
-                await ctx.channel.send(f'{value['name']} starts at {value['start_at']}h UTC')
+            item_name = value['name']
+            item_start = value['start_at']
+            if item_start != 'now' and item_start != 'never':
+                await ctx.channel.send(f'{item_name} starts at {item_start}h UTC')
     else:
         await ctx.channel.send('Empty database!')
  
@@ -66,15 +68,18 @@ async def update_database():
         if database != {}:
             for key, value in database.items():
                 if value['start_at'] == 'now':
-                    scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel') 
-                    
+                    scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel')
+                    return
+                scheduler.remove_job('announce_live_channel')
+                live_channel = bot.get_channel(announce_channel_id)
+                await live_channel.send(f'{announce_channel_id} removed')         
 
 async def announce_live_channel():
     if announce_channel_id == 'disabled':
         return
     else:
         live_channel = bot.get_channel(announce_channel_id)
-        await live_channel.send(f'{announce_channel_id}')
+        await live_channel.send(f'{announce_channel_id} ')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
