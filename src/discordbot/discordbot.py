@@ -12,6 +12,7 @@ bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
 live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 5)
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
+vod_hostname = os.environ.get('VOD_HOSTNAME', 'vod.example.com')
 
 # Discord API Intents
 intents = discord.Intents.all()
@@ -34,6 +35,7 @@ log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
 logger_discord.setLevel(log_level)
 
 database = {}
+rechead = {}
 
 # Bot functions
 @bot.event
@@ -90,6 +92,7 @@ async def query_playhead():
 
 async def query_database():
     global database
+    global rechead
     db_url = f'https://{scheduler_hostname}/database'
     if requests.get(db_url).status_code == 200:
         response = requests.get(db_url)
@@ -103,7 +106,7 @@ async def query_database():
     if database != {}:
         for key, value in database.items():
             stream_name = value['name']
-            stream_start_at = value['start_at']       
+            stream_start_at = value['start_at'] 
             if stream_start_at == 'now':
                 # Check if the job already exists
                 if scheduler.get_job('announce_live_channel') is None:
@@ -114,6 +117,13 @@ async def query_database():
                     # Manually execute the job once immediately
                     scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
                     
+                    # Set global rechead
+                    rec_url = f'https://{scheduler_hostname}/rechead'
+                    if requests.get(rec_url).status_code == 200:
+                        response = requests.get(rec_url)
+                        response.raise_for_status()
+                        rechead = response.json()
+                    
                     # Exit since we found one
                     return
                 else:
@@ -123,10 +133,18 @@ async def query_database():
         # Cleanup the announce job
         if scheduler.get_job('announce_live_channel') is not None:
             scheduler.remove_job('announce_live_channel')
-            logger_discord.info(f'Live stream is offline.')
+            
+            if rechead != {}:
+                vod_filename = rechead['file']
+                rechead = {}
+                vod_url = f'https://{vod_hostname}/storage/{vod_filename}'
+                offline_msg = f'Live stream is offline. VOD: {vod_url}'
+            else:
+                offline_msg = f'Live stream is offline.'
+            logger_discord.info(offline_msg)
             if live_channel_id != 0:
                 live_channel = bot.get_channel(int(live_channel_id))
-                await live_channel.send('Live stream is offline.')
+                await live_channel.send(offline_msg)
 
 async def announce_live_channel(stream_name):
     logger_discord.info(f'{stream_name} is live!')
