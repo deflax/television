@@ -6,6 +6,7 @@ import json
 import requests
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
+from flask.helpers import send_file
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 from ffmpeg import FFmpeg, Progress
@@ -163,18 +164,20 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
 # Execute recorder
 def exec_recorder(stream_id, stream_hls_url):
     global rechead
-    current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S-%f")
     video_file = current_datetime + ".mp4"
     thumb_file = current_datetime + ".png"
     if rechead != {}:
         logger_job.error('Recorder is already started. Refusing to start another job.')
     else:
-        logger_job.warning(f'Recording {output_file} started.')
+        logger_job.warning(f'Recording {video_file} started.')
         rechead = { 'id': stream_id,
                     'video': video_file,
                     'thumb': thumb_file }
         video_output = f'{rec_path}/live/{video_file}'
         thumb_output = f'{rec_path}/live/{thumb_file}'
+        
+        # Record a mp4 file
         ffmpeg = (
             FFmpeg()
             .option("y")
@@ -182,23 +185,23 @@ def exec_recorder(stream_id, stream_hls_url):
             .output(video_output,
                     {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
             ))
-        
         @ffmpeg.on("progress")
         def on_progress(progress: Progress):
             print(progress)
         ffmpeg.execute()
 
-        ffmpeg = (
+        # Generate thumbnail image from the recorded mp4 file
+        ffmpeg_thumb = (
             FFmpeg()
             .input(video_output)
             .output(thumb_output, 
                     {"vf": "thumbnail", "frames:v": "1"})
         )
-        ffmpeg.execute()
+        ffmpeg_thumb.execute()
         
         logger_job.warning(f'Recording {video_file} finished.')
         os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
-        os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}}')
+        os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
         
         rechead = {}
 
@@ -284,6 +287,14 @@ def rechead_route():
 def database_route():
     global database
     return jsonify(database)
+
+@app.route("/video/<file_name>", methods=['GET'])
+def video_route(file_name):
+    return send_file(f"./{rec_path}/video/{file_name}",mimetype='video/mp4')
+
+@app.route("/thumb/<file_name>", methods=['GET'])
+def thumb_route(file_name):
+    return send_file(f"./{rec_path}/thumb/{file_name}",mimetype='image/png')
 
 def create_app():
    return app

@@ -12,7 +12,6 @@ bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
 live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 5)
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
-vod_hostname = os.environ.get('VOD_HOSTNAME', 'vod.example.com')
 
 # Discord API Intents
 intents = discord.Intents.all()
@@ -20,7 +19,7 @@ intents.members = True
 intents.guilds = True
 intents.messages = True
 intents.reactions = True
-#intents.presences = True
+intents.presences = True
 intents.message_content = True
 
 # Discord client
@@ -135,10 +134,12 @@ async def query_database():
             scheduler.remove_job('announce_live_channel')
             
             if rechead != {}:
-                vod_filename = rechead['file']
+                video_filename = rechead['video']
+                thumb_filename = rechead['thumb']
                 rechead = {}
-                vod_url = f'https://{vod_hostname}/storage/{vod_filename}'
-                offline_msg = f'Live stream is now offline. [Download VoD recording]({vod_url})'
+                vod_url = f'https://{scheduler_hostname}/video/{video_filename}'
+                thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
+                offline_msg = f'Live stream is now offline. [Download VoD recording]({vod_url}) {thumb_url}'
             else:
                 offline_msg = f'Live stream is now offline.'
             logger_discord.info(offline_msg)
