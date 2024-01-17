@@ -74,9 +74,9 @@ async def time(ctx):
 async def now(ctx):
     await ctx.channel.send(query_playhead())
     
-@bot.command(name='help')
+@bot.command(name='usage')
 async def help(ctx):
-    usage = "```- !help - usage\n- !time - show current time\n- !epg list scheduled streams\n- !now - display whats playing now\n- !hello says hi :)```"
+    usage = "```- !usage - usage\n- !time - show current time\n- !epg list scheduled streams\n- !now - display whats playing now\n- !hello says hi :)```"
     await ctx.channel.send(usage)
 
 # Helper functions
