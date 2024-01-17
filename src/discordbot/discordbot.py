@@ -72,7 +72,8 @@ async def time(ctx):
     
 @bot.command(name='now', help='Displays whats playing right now')
 async def now(ctx):
-    await ctx.channel.send(query_playhead())
+    head = await query_playhead()
+    await ctx.channel.send(head)
 
 # Helper functions
 async def query_playhead():
@@ -84,7 +85,7 @@ async def query_playhead():
     else:
         logger_discord.error('Cannot connect to the playhead!')
     head_name = playhead['name']
-    prio_name = playhead['prio']
+    head_prio = playhead['prio']
     return f'Now playing {head_name} with prio {head_prio}'
 
 async def query_database():
