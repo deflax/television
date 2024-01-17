@@ -208,7 +208,6 @@ def core_api_sync():
             meta = get_process.metadata
             state = get_process.state
         except Exception as err:
-            logger_job.error(f'Error processing {process.id}: {err}')
             logger_job.error(process)
             continue
         
