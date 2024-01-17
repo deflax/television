@@ -30,10 +30,8 @@ scheduler = AsyncIOScheduler()
 
 # Set up the logger
 logger_discord = logging.getLogger('discord')
-logger_job = logging.getLogger('apscheduler')
 log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
 logger_discord.setLevel(log_level)
-logger_job.setLevel(log_level)
 
 database = {}
 
@@ -76,27 +74,31 @@ async def update_database():
         database = response.json()
         if database != {}:
             for key, value in database.items():
-                logger_discord.info('test')
-                if value['start_at'] == 'now':
-                    scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel')
+                name = value['name']
+                start_at = value['start_at']                
+                if start_at == 'now':
+                    logger_discord.info(f'{name} live stream detected!')
+                    scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel', args=(name))
                     return
                 try:
                         job = scheduler.get_job('announce_live_channel')
                         if job:
                             scheduler.remove_job('announce_live_channel')
                             live_channel = bot.get_channel(announce_channel_id)
-                            await live_channel.send(f'{announce_channel_id} removed')
+                            logger_discord.info(f'{name} finished')
+                            await live_channel.send(f'{name} finished')
                         else:
                             return
                 except JobLookupError:
                     return
 
-async def announce_live_channel():
+async def announce_live_channel(name):
     if announce_channel_id == 'disabled':
         return
     else:
         live_channel = bot.get_channel(announce_channel_id)
-        await live_channel.send(f'{announce_channel_id} ')
+        logger_discord.info(f'{name} is live!')
+        await live_channel.send(f'{name} is live!')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
