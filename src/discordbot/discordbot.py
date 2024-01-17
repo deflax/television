@@ -50,7 +50,6 @@ async def hello(ctx):
 @bot.command(name='epg')    
 async def epg(ctx):
     global database
-    await ctx.channel.send('epg:')
     if database != {}:
         scheduled_list = ""
         live_list = ""
@@ -65,7 +64,7 @@ async def epg(ctx):
         if live_list != "":
             await ctx.channel.send(f'```{live_list}```')
     else:
-        await ctx.channel.send('```Empty database!```')
+        await ctx.channel.send('```Empty.```')
  
 @bot.command(name='time')
 async def time(ctx):
