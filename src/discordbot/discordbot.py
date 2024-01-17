@@ -75,12 +75,10 @@ async def update_database():
         if database != {}:
             for key, value in database.items():
                 name = value['name']
-                start_at = value['start_at']      
-                logger_discord.info(name)
-                logger_discord.info(start_at)          
+                start_at = value['start_at']       
                 if start_at == 'now':
                     logger_discord.info(f'{name} live stream detected!')
-                    scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel', args=(name))
+                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(name))
                     return
                 
             try:
