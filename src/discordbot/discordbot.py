@@ -58,7 +58,7 @@ async def epg(ctx):
             item_name = value['name']
             item_start = value['start_at']
             if item_start != 'now' and item_start != 'never':
-                scheduled += f'- {item_name} starts at {item_start}:00 UTC\n'
+                scheduled_list += f'- {item_name} starts at {item_start}:00 UTC\n'
             else:
                 live_list += f'- {item_name} is LIVE\n'
         epg_list = live_list + scheduled_list
