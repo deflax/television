@@ -72,7 +72,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
                     logger_job.warning(f'Waiting extra {enable_delay} seconds before we initiate the stream...')
                     time.sleep(enable_delay)
                     break
-                if req_counter == 30:
+                if req_counter == 15:
                     logger_job.error(f'Stream {stream_name} cancelled after {req_counter} attempts.')
                     return
             scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
