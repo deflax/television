@@ -61,10 +61,11 @@ async def epg(ctx):
                 scheduled_list += f'- {item_name} starts at {item_start}:00 UTC\n'
             else:
                 live_list += f'- {item_name} is LIVE\n'
-        epg_list = live_list + scheduled_list
-        await ctx.channel.send(f'```{epg_list}```')
+        await ctx.channel.send(f'```{scheduled_list}```')
+        if live_list != "":
+            await ctx.channel.send(f'```{live_list}```')
     else:
-        await ctx.channel.send('`Empty database!`')
+        await ctx.channel.send('```Empty database!```')
  
 @bot.command(name='time')
 async def time(ctx):
