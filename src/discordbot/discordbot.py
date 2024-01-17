@@ -57,7 +57,7 @@ async def epg(ctx):
             item_name = value['name']
             item_start = value['start_at']
             if item_start != 'now' and item_start != 'never':
-                epg_list += f'{item_name} starts at {item_start}h UTC\n')
+                epg_list += f'{item_name} starts at {item_start}h UTC\n'
         await ctx.channel.send(f'``` {epg_list} ```')
     else:
         await ctx.channel.send('Empty database!')
