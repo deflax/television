@@ -74,11 +74,11 @@ async def update_database():
         database = response.json()
         if database != {}:
             for key, value in database.items():
-                name = value['name']
-                start_at = value['start_at']       
-                if start_at == 'now':
-                    logger_discord.info(f'{name} live stream detected!')
-                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(name))
+                stream_name = value['name']
+                stream_start_at = value['start_at']       
+                if stream_start_at == 'now':
+                    logger_discord.info(f'{stream_name} live stream detected!')
+                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name))
                     return
                 
             try:
@@ -86,20 +86,20 @@ async def update_database():
                 if job:
                     scheduler.remove_job('announce_live_channel')
                     live_channel = bot.get_channel(announce_channel_id)
-                    logger_discord.info(f'{name} finished')
-                    await live_channel.send(f'{name} finished')
+                    logger_discord.info(f'{stream_name} finished')
+                    await live_channel.send(f'{stream_name} finished')
                 else:
                     return
             except JobLookupError:
                 return
 
-async def announce_live_channel(name):
+async def announce_live_channel(stream_name):
     if announce_channel_id == 'disabled':
         return
     else:
         live_channel = bot.get_channel(announce_channel_id)
-        logger_discord.info(f'{name} is live!')
-        await live_channel.send(f'{name} is live!')
+        logger_discord.info(f'{stream_name} is live!')
+        await live_channel.send(f'{stream_name} is live!')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
