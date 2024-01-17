@@ -10,7 +10,7 @@ import logging
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
-announce_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 'disabled')
+live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 
 # Discord API Intents
@@ -104,17 +104,16 @@ async def update_database():
         # Cleanup the announce job
         if scheduler.get_job('announce_live_channel') is not None:
             scheduler.remove_job('announce_live_channel')
-            #live_channel = bot.get_channel(announce_channel_id)
             logger_discord.info(f'Live stream is offline.')
-            #await live_channel.send('Live stream is offline.')
+            if live_channel_id != 0:
+                update_channel = bot.get_channel(live_channel_id)
+                await update_channel.send('Live stream is offline.')
 
 async def announce_live_channel(stream_name):
-    if announce_channel_id == 'disabled':
-        return
-    else:
-        #live_channel = bot.get_channel(announce_channel_id)
-        logger_discord.info(f'{stream_name} is live!')
-        #await live_channel.send(f'{stream_name} is live!')
+    logger_discord.info(f'{stream_name} is live!')
+    if live_channel_id != 0:
+        live_channel = bot.get_channel(live_channel_id)
+        await live_channel.send(f'{stream_name} is live!')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
