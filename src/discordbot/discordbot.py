@@ -78,7 +78,7 @@ async def update_database():
                 stream_start_at = value['start_at']       
                 if stream_start_at == 'now':
                     logger_discord.info(f'{stream_name} live stream detected!')
-                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name))
+                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
                     return
                 
             try:
