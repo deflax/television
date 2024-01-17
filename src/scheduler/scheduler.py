@@ -30,9 +30,9 @@ enable_delay = 24
 
 # Init
 database = {}
-prio = 0
 playhead = {}
-rechead = ""
+rechead = {}
+prio = 0
 
 with open('/config/epg.json', 'r') as epg_json:
     epg = json.load(epg_json)
@@ -165,11 +165,12 @@ def exec_recorder(stream_id, stream_hls_url):
     global rechead
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
     output_file = current_datetime + ".mp4"
-    if rechead != "":
+    if rechead != {}:
         logger_job.error('Recorder is already started. Refusing to start another job.')
     else:
         logger_job.warning(f'Recording {output_file} started.')
-        rechead = stream_id
+        rechead = { 'id': stream_id,
+                    'file': output_file }
         output = f'{rec_path}/live/{output_file}'
         ffmpeg = (
             FFmpeg()
@@ -186,7 +187,7 @@ def exec_recorder(stream_id, stream_hls_url):
         ffmpeg.execute()
         logger_job.warning(f'Recording {output_file} finished. Moving file to {rec_path}/vod')
         os.rename(f'{rec_path}/live/{output_file}', f'{rec_path}/vod/{output_file}')
-        rechead = ""
+        rechead = {}
 
 # Datarhei CORE API sync
 def core_api_sync():
@@ -260,6 +261,11 @@ def root_route():
 def playhead_route():
     global playhead
     return jsonify(playhead)
+
+@app.route('/rechead', methods=['GET'])
+def rechead_route():
+    global rechead
+    return jsonify(rechead)
 
 @app.route('/database', methods=['GET'])
 def database_route():
