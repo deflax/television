@@ -6,6 +6,7 @@ from discord.ext import commands, tasks
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.base import JobLookupError
+import logging
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
@@ -26,6 +27,13 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Scheduler
 scheduler = AsyncIOScheduler()
+
+# Set up the logger
+logger_discord = logging.getLogger('discord')
+logger_job = logging.getLogger('apscheduler')
+log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
+logger_discord.setLevel(log_level)
+logger_job.setLevel(log_level)
 
 database = {}
 
@@ -68,6 +76,7 @@ async def update_database():
         database = response.json()
         if database != {}:
             for key, value in database.items():
+                logger_job.info('test')
                 if value['start_at'] == 'now':
                     scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel')
                     return
