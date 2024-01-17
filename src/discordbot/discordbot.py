@@ -82,17 +82,18 @@ async def update_database():
                     logger_discord.info(f'{name} live stream detected!')
                     scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel', args=(name))
                     return
-                try:
-                        job = scheduler.get_job('announce_live_channel')
-                        if job:
-                            scheduler.remove_job('announce_live_channel')
-                            live_channel = bot.get_channel(announce_channel_id)
-                            logger_discord.info(f'{name} finished')
-                            await live_channel.send(f'{name} finished')
-                        else:
-                            return
-                except JobLookupError:
+                
+            try:
+                job = scheduler.get_job('announce_live_channel')
+                if job:
+                    scheduler.remove_job('announce_live_channel')
+                    live_channel = bot.get_channel(announce_channel_id)
+                    logger_discord.info(f'{name} finished')
+                    await live_channel.send(f'{name} finished')
+                else:
                     return
+            except JobLookupError:
+                return
 
 async def announce_live_channel(name):
     if announce_channel_id == 'disabled':
