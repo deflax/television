@@ -99,9 +99,9 @@ async def announce_live_channel(stream_name):
     if announce_channel_id == 'disabled':
         return
     else:
-        live_channel = bot.get_channel(announce_channel_id)
+        #live_channel = bot.get_channel(announce_channel_id)
         logger_discord.info(f'{stream_name} is live!')
-        await live_channel.send(f'{stream_name} is live!')
+        #await live_channel.send(f'{stream_name} is live!')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
