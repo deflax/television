@@ -164,29 +164,42 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
 def exec_recorder(stream_id, stream_hls_url):
     global rechead
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
-    output_file = current_datetime + ".mp4"
+    video_file = current_datetime + ".mp4"
+    thumb_file = current_datetime + ".png"
     if rechead != {}:
         logger_job.error('Recorder is already started. Refusing to start another job.')
     else:
         logger_job.warning(f'Recording {output_file} started.')
         rechead = { 'id': stream_id,
-                    'file': output_file }
-        output = f'{rec_path}/live/{output_file}'
+                    'video': video_file,
+                    'thumb': thumb_file }
+        video_output = f'{rec_path}/live/{video_file}'
+        thumb_output = f'{rec_path}/live/{thumb_file}'
         ffmpeg = (
             FFmpeg()
             .option("y")
             .input(stream_hls_url)
-            .output(output,
+            .output(video_output,
                     {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
             ))
         
         @ffmpeg.on("progress")
         def on_progress(progress: Progress):
             print(progress)
-        
         ffmpeg.execute()
-        logger_job.warning(f'Recording {output_file} finished. Moving file to {rec_path}/vod')
-        os.rename(f'{rec_path}/live/{output_file}', f'{rec_path}/vod/{output_file}')
+
+        ffmpeg = (
+            FFmpeg()
+            .input(video_output)
+            .output(thumb_output, 
+                    {"vf": "thumbnail", "frames:v": "1"})
+        )
+        ffmpeg.execute()
+        
+        logger_job.warning(f'Recording {video_file} finished.')
+        os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
+        os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}}')
+        
         rechead = {}
 
 # Datarhei CORE API sync

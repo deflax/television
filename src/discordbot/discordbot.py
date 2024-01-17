@@ -47,7 +47,7 @@ async def on_ready():
 @bot.command(name='hello', help='Say hello to the bot')
 async def hello(ctx):
     author_name = ctx.author.name
-    await ctx.channel.send(f'```hi, {author_name} >^.^<```')
+    await ctx.channel.send(f'hi, `{author_name}` :blush:')
 
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
@@ -70,7 +70,7 @@ async def epg(ctx):
  
 @bot.command(name='time', help='Show current time')
 async def time(ctx):
-    await ctx.channel.send(f'```The time is: {datetime.now()} UTC```')
+    await ctx.channel.send(f'The time is: `{datetime.now()} UTC`')
     
 @bot.command(name='now', help='Displays whats playing right now')
 async def now(ctx):
@@ -88,7 +88,7 @@ async def query_playhead():
         logger_discord.error('Cannot connect to the playhead!')
     head_name = playhead['name']
     head_prio = playhead['prio']
-    return f'```Now playing {head_name}. priority={head_prio}```'
+    return f'Now playing {head_name}'
 
 async def query_database():
     global database
@@ -138,9 +138,9 @@ async def query_database():
                 vod_filename = rechead['file']
                 rechead = {}
                 vod_url = f'https://{vod_hostname}/storage/{vod_filename}'
-                offline_msg = f'Live stream is offline. VOD: {vod_url}'
+                offline_msg = f'Live stream is now offline. [Download VoD recording]({vod_url})'
             else:
-                offline_msg = f'Live stream is offline.'
+                offline_msg = f'Live stream is now offline.'
             logger_discord.info(offline_msg)
             if live_channel_id != 0:
                 live_channel = bot.get_channel(int(live_channel_id))
