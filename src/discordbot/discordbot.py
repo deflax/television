@@ -72,28 +72,33 @@ async def update_database():
         response = requests.get(db_url)
         response.raise_for_status()
         database = response.json()
-        if database != {}:
-            for key, value in database.items():
-                stream_name = value['name']
-                stream_start_at = value['start_at']       
-                if stream_start_at == 'now':
-                    try:
-                        job = scheduler.get_job('announce_live_channel')
-                        if not job:
-                            logger_discord.info(f'{stream_name} live stream detected!')
-                            scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
-                            return
-                    except JobLookupError:
-                        pass
-            try:
-                job = scheduler.get_job('announce_live_channel')
-                if job:
-                    scheduler.remove_job('announce_live_channel')
-                    live_channel = bot.get_channel(announce_channel_id)
-                    logger_discord.info(f'{stream_name} finished')
-                    await live_channel.send(f'{stream_name} finished')
-            except JobLookupError:
-                pass
+    else:
+        logger_discord.error('Cannot connect to the database!')
+        return
+        
+    # Search for live streams
+    if database != {}:
+        for key, value in database.items():
+            stream_name = value['name']
+            stream_start_at = value['start_at']       
+            if stream_start_at == 'now':
+                # Check if the job already exists
+                if scheduler.get_job('announce_live_channel') is None:
+                    # Job doesn't exist, so add it
+                    logger_discord.info(f'{stream_name} live stream detected!')
+                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
+                    # Exit the loop since we found one
+                    return
+                else:
+                    # Exit the loop since we already have a announcement job
+                    return
+
+            # Cleanup the announce job
+            if scheduler.get_job('announce_live_channel') is not None:
+                scheduler.remove_job('announce_live_channel')
+                #live_channel = bot.get_channel(announce_channel_id)
+                logger_discord.info(f'{stream_name} finished')
+                #await live_channel.send(f'{stream_name} finished')
 
 async def announce_live_channel(stream_name):
     if announce_channel_id == 'disabled':
