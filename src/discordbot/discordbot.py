@@ -56,7 +56,7 @@ async def epg(ctx):
  
 @bot.command(name='time')
 async def time(ctx):
-    await ctx.channel.send('The time is: `%s`' % datetime.now())
+    await ctx.channel.send(f'The time is: {datetime.now()} UTC')
 
 # Helper functions
 async def update_database():
