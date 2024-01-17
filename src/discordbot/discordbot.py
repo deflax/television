@@ -39,7 +39,7 @@ database = {}
 @bot.event
 async def on_ready():
     # Schedule a database update to run every 5 seconds
-    scheduler.add_job(func=update_database, trigger='interval', seconds=5, id='update_database') 
+    scheduler.add_job(func=query_database, trigger='interval', seconds=5, id='query_database') 
     scheduler.start()
       
 @bot.command(name='hello')
@@ -69,9 +69,30 @@ async def epg(ctx):
 @bot.command(name='time')
 async def time(ctx):
     await ctx.channel.send(f'```The time is: {datetime.now()} UTC```')
+    
+@bot.command(name='now')
+async def now(ctx):
+    await ctx.channel.send(query_playhead())
+    
+@bot.command(name='help')
+async def help(ctx):
+    usage = "```- !help - usage\n- !time - show current time\n- !epg list scheduled streams\n- !now - display whats playing now\n- !hello says hi :)```"
+    await ctx.channel.send(usage)
 
 # Helper functions
-async def update_database():
+async def query_playhead():
+    head_url = f'https://{scheduler_hostname}/playhead'
+    if requests.get(head_url).status_code == 200:
+        response = requests.get(head_url)
+        response.raise_for_status()
+        playhead = response.json()
+    else:
+        logger_discord.error('Cannot connect to the playhead!')
+    head_name = playhead['name']
+    prio_name = playhead['prio']
+    return f'Now playing {head_name} with prio {head_prio}'
+
+async def query_database():
     global database
     db_url = f'https://{scheduler_hostname}/database'
     if requests.get(db_url).status_code == 200:
