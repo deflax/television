@@ -18,7 +18,7 @@ intents.members = True
 intents.guilds = True
 intents.messages = True
 intents.reactions = True
-intents.presences = True
+#intents.presences = True
 intents.message_content = True
 
 # Discord client
