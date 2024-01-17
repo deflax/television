@@ -76,7 +76,7 @@ async def update_database():
         database = response.json()
         if database != {}:
             for key, value in database.items():
-                logger_job.info('test')
+                logger_discord.info('test')
                 if value['start_at'] == 'now':
                     scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel')
                     return
