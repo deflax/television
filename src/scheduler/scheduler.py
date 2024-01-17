@@ -189,20 +189,40 @@ def exec_recorder(stream_id, stream_hls_url):
         def on_progress(progress: Progress):
             print(progress)
         ffmpeg.execute()
-
+        logger_job.warning(f'Recording {video_file} finished.')
+        
+        # Show Metadata
+        ffmpeg_metadata = (
+            FFmpeg(executable="ffprobe")
+            .input("input.mp4",
+                   print_format="json",
+                   show_streams=None,)
+        )
+        media = json.loads(ffmpeg_metadata.execute())
+        logger_job.warning(f"# Video")
+        logger_job.warning(f"- Codec: {media['streams'][0]['codec_name']}")
+        logger_job.warning(f"- Resolution: {media['streams'][0]['width']} X {media['streams'][0]['height']}")
+        logger_job.warning(f"- Duration: {media['streams'][0]['duration']}")
+        logger_job.warning(f"# Audio")
+        logger_job.warning(f"- Codec: {media['streams'][1]['codec_name']}")
+        logger_job.warning(f"- Sample Rate: {media['streams'][1]['sample_rate']}")
+        logger_job.warning(f"- Duration: {media['streams'][1]['duration']}")
+        
+        thumb_skip_time = float(media['streams'][0]['duration']) // 2
+        thumb_width = media['streams'][0]['width'] 
+    
         # Generate thumbnail image from the recorded mp4 file
         ffmpeg_thumb = (
             FFmpeg()
-            .input(video_output)
-            .output(thumb_output, 
-                    {"vf": "thumbnail", "frames:v": "1"})
+            .input(video_output, thumb_skip_time)
+            .filter('scale', thumb_width, -1)
+            .output(thumb_output, vframes=1)
         )
-        ffmpeg_thumb.execute()
+        ffmpeg_thumb.execute()  
         
-        logger_job.warning(f'Recording {video_file} finished.')
+        # When ready, move the recorded from the live dir to the archives and reset the rec head
         os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
         os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
-        
         rechead = {}
 
 # Datarhei CORE API sync
