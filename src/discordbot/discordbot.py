@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands, tasks
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.base import JobLookupError
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
@@ -70,9 +71,16 @@ async def update_database():
                 if value['start_at'] == 'now':
                     scheduler.add_job(func=announce_live_channel, seconds=60, id='announce_live_channel')
                     return
-                scheduler.remove_job('announce_live_channel')
-                live_channel = bot.get_channel(announce_channel_id)
-                await live_channel.send(f'{announce_channel_id} removed')         
+                try:
+                        job = scheduler.get_job('announce_live_channel')
+                        if job:
+                            scheduler.remove_job('announce_live_channel')
+                            live_channel = bot.get_channel(announce_channel_id)
+                            await live_channel.send(f'{announce_channel_id} removed')
+                        else:
+                            return
+                except JobLookupError:
+                    return
 
 async def announce_live_channel():
     if announce_channel_id == 'disabled':
