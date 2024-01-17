@@ -90,7 +90,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
         # Bootstrap the playhead if its still empty.
         if playhead == {}:
             fallback = fallback_search(database)
-            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
+            scheduler.add_job(func=exec_stream, id='fallback', args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
 
 # Remove channel from the database
 def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
@@ -110,7 +110,7 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
             fallback = fallback_search(database)
             prio = 0
             logger_job.warning(f'Source priority is reset to 0')
-            scheduler.add_job(func=exec_stream, id="fallback", args=(fallback['stream_id'], fallback['stream_name'], prio, fallback['stream_hls_url']))          
+            scheduler.add_job(func=exec_stream, id='fallback', args=(fallback['stream_id'], fallback['stream_name'], prio, fallback['stream_hls_url']))          
 
 # Search for a fallback stream
 def fallback_search(database):
@@ -262,7 +262,8 @@ except Exception as err:
     #sys.exit(1)
     
 # Schedule sync jobs
-scheduler.add_job(func=core_api_sync, trigger="interval", seconds=CORE_SYNC_PERIOD, id="core_api_sync")
+scheduler.add_job(func=core_api_sync, trigger='interval', seconds=CORE_SYNC_PERIOD, id='core_api_sync')
+scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
 
 # Start the scheduler
 scheduler.start()
