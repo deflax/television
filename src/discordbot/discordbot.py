@@ -10,6 +10,7 @@ import logging
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
+live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 5)
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 
 # Discord API Intents
@@ -91,7 +92,7 @@ async def update_database():
                 if scheduler.get_job('announce_live_channel') is None:
                     # Job doesn't exist, so add it
                     logger_discord.info(f'{stream_name} live stream detected!')
-                    scheduler.add_job(func=announce_live_channel, trigger='interval', seconds=60, id='announce_live_channel', args=(stream_name,))
+                    scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name,))
                     
                     # Manually execute the job once immediately
                     scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
