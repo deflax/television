@@ -52,12 +52,16 @@ async def epg(ctx):
     global database
     await ctx.channel.send('epg:')
     if database != {}:
-        epg_list = ""
+        scheduled_list = ""
+        live_list = ""
         for key, value in database.items():
             item_name = value['name']
             item_start = value['start_at']
             if item_start != 'now' and item_start != 'never':
-                epg_list += f'- {item_name} starts at {item_start}:00 UTC\n'
+                scheduled += f'- {item_name} starts at {item_start}:00 UTC\n'
+            else:
+                live_list += f'- {item_name} is LIVE\n'
+        epg_list = live_list + scheduled_list
         await ctx.channel.send(f'```{epg_list}```')
     else:
         await ctx.channel.send('Empty database!')
