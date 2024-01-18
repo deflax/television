@@ -143,22 +143,23 @@ async def query_database():
                 thumb_filename = rechead['thumb']
                 # Reset the rechead
                 rechead = {}
+                await live_channel.send('Live stream is now offline.')
                                
                 # Creating an embed
-                video_url = f'https://{scheduler_hostname}/video/{video_filename}'
-                thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
-                video_filename_no_extension = video_filename.split('.')[0]
-                watch_url = f'https://{scheduler_hostname}/watch/{video_filename_no_extension}'
                 img_url = f'https://{scheduler_hostname}/img'
+                thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
+                video_download_url = f'https://{scheduler_hostname}/video/{video_filename}'
+                video_filename_no_extension = video_filename.split('.')[0]
+                video_watch_url = f'https://{scheduler_hostname}/video/watch/{video_filename_no_extension}'
                 embed = discord.Embed(title=f'{rec_stream_name}',
                                       url=f'{watch_url}',
                                       colour=0x00b0f4,
                                       timestamp=datetime.now())               
                 embed.add_field(name="Download",
-                                value=f"[{video_filename}]({video_url})",
+                                value=f"[{video_filename}]({video_download_url})",
                                 inline=True)
                 embed.add_field(name="Watch",
-                                value=f'[plyr.js]({watch_url})',
+                                value=f'[plyr.js]({video_watch_url})',
                                 inline=True)
                 embed.set_image(url=thumb_url)
                 embed.set_thumbnail(url=f'{img_url}/logo-96.png')
@@ -166,7 +167,7 @@ async def query_database():
                                  icon_url=f'{img_url}/logo-96.png')
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
-                logger_discord.info(f'{rec_stream_name} is now offline. VOD: {video_filename}')
+                logger_discord.info(f'{rec_stream_name} is now offline. VOD: {video_filename_no_extension}')
         else:
             logger_discord.info('Live stream is now offline.')
 
