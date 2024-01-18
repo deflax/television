@@ -215,8 +215,7 @@ def exec_recorder(stream_id, stream_hls_url):
         ffmpeg_thumb = (
             FFmpeg()
             .input(video_output, ss=thumb_skip_time)
-            .filter('scale', thumb_width, -1)
-            .output(thumb_output, vframes=1)
+            .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
         )
         ffmpeg_thumb.execute()  
         
