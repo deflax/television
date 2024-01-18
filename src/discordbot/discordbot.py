@@ -138,12 +138,12 @@ async def query_database():
         if live_channel_id != 0:
             live_channel = bot.get_channel(int(live_channel_id))
             if rechead != {}:
-                await live_channel.send('Live stream is now offline.')
                 rec_stream_name = rechead['name']
                 video_filename = rechead['video']
                 thumb_filename = rechead['thumb']
+                # Reset the rechead
                 rechead = {}
-               
+                               
                 # Creating an embed
                 video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
@@ -165,6 +165,7 @@ async def query_database():
                                  icon_url=f'{img_url}/logo-96.png')
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
+                logger_discord.info(f'{rec_stream_name} is now offline. VOD: {video_filename}')
         else:
             logger_discord.info('Live stream is now offline.')
 
