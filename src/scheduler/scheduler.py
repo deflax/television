@@ -292,9 +292,10 @@ scheduler.start()
 # Flask API
 @app.route('/', methods=['GET'])
 def root_route():
-    about_json = { 'about': 'deflax tv api' }
+    about_json = { 'about': 'DeflaxTV API' }
     return jsonify(about_json)
 
+# JSON data
 @app.route('/playhead', methods=['GET'])
 def playhead_route():
     global playhead
@@ -310,12 +311,13 @@ def database_route():
     global database
     return jsonify(database)
 
-@app.route("/video/<file_name>", methods=['GET'])
-def video_route(file_name):
-    reqfile = f'{rec_path}/vod/{file_name}'
+# Images
+@app.route("/img/<file_name>", methods=['GET'])
+def img_route(file_name):
+    reqfile = f'./img/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
-    return send_file(reqfile, mimetype='video/mp4')
+    return send_file(reqfile, mimetype='image/png')
 
 @app.route("/thumb/<file_name>", methods=['GET'])
 def thumb_route(file_name):
@@ -324,15 +326,23 @@ def thumb_route(file_name):
         abort(404)
     return send_file(reqfile, mimetype='image/png')
 
-@app.route("/img/<file_name>", methods=['GET'])
-def img_route(file_name):
-    reqfile = f'./img/{file_name}'
+# Video
+@app.route("/video/<file_name>", methods=['GET'])
+def video_route(file_name):
+    reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
-    return send_file(reqfile, mimetype='image/png')
+    return send_file(reqfile, mimetype='video/mp4')
 
-@app.route('/watch/<file_name_no_extension>')
-def watch_route(file_name_no_extension):
+@app.route("/video/download/<file_name>", methods=['GET'])
+def video_download_route(file_name):
+    reqfile = f'{rec_path}/vod/{file_name}'
+    if not os.path.exists(reqfile):
+        abort(404)
+    return send_file(reqfile, as_attachment=True, download_name=file_name)
+
+@app.route('/video/watch/<file_name_no_extension>', methods=['GET'])
+def video_watch_route(file_name_no_extension):
     file_name = file_name_no_extension + '.mp4'
     reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
