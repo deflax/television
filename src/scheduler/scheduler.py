@@ -79,7 +79,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
             if stream_prio == 2:
                 rec_id = f'rec_{stream_id}'
-                scheduler.add_job(func=exec_recorder, id=rec_id, args=(stream_id, stream_hls_url))
+                scheduler.add_job(func=exec_recorder, id=rec_id, args=(stream_id, stream_name, stream_hls_url))
         else:
             logger_job.warning(f"Stream start hour is set to {stream_start}")
             scheduler.add_job(
@@ -162,7 +162,7 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
         logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping playhead update.') 
 
 # Execute recorder
-def exec_recorder(stream_id, stream_hls_url):
+def exec_recorder(stream_id, stream_name, stream_hls_url):
     global rechead
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S-%f")
     video_file = current_datetime + ".mp4"
@@ -172,6 +172,7 @@ def exec_recorder(stream_id, stream_hls_url):
     else:
         logger_job.warning(f'Recording {video_file} started.')
         rechead = { 'id': stream_id,
+                    'name': stream_name,
                     'video': video_file,
                     'thumb': thumb_file }
         video_output = f'{rec_path}/live/{video_file}'

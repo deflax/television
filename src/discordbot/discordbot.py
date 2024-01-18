@@ -145,14 +145,19 @@ async def query_database():
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
                 
                 # Creating an embed
-                embed = discord.Embed(
-                    title='Download Example',
-                    description='Click the link below to download the MP4 file.',
-                    color=discord.Color.green()
-                )
-                embed.set_thumbnail(url=thumb_url)
-                embed.add_field(name='Download MP4', value=f'[Download Video]({video_url})', inline=False)
-    
+                embed = discord.Embed(title="Video",
+                      colour=0x00b0f4,
+                      timestamp=datetime.now())               
+                embed.add_field(name="Download",
+                                value=f"[mp4]({video_url})",
+                                inline=True)
+                embed.add_field(name="Watch",
+                                value="[plyr.js](https://deflax.net)",
+                                inline=True)
+                embed.set_image(url=thumb_url)
+                embed.set_thumbnail(url="https://deflax.net/img/logo-96.png")
+                embed.set_footer(text="DeflaxTV", 
+                                 icon_url="https://deflax.net/img/logo-96.png")
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
         else:
