@@ -317,5 +317,9 @@ def video_route(file_name):
 def thumb_route(file_name):
     return send_file(f"{rec_path}/thumb/{file_name}",mimetype='image/png')
 
+@app.route("/img/<file_name>", methods=['GET'])
+def img_route(file_name):
+    return send_file(f"./img/{file_name}",mimetype='image/png')
+
 def create_app():
    return app
