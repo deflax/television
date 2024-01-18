@@ -5,19 +5,39 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        #player-container {
+            width: 100%;
+            max-width: 800px;
+        }
+    </style>
     <title>DeflaxTV VoD Player</title>
 </head>
 <body>
 
-<video id="player" playsinline controls>
-    <source src="{{ video_url }}" type="video/mp4">
-</video>
+<div id="player-container">
+    <video id="player" playsinline controls>
+        <source src="{{ video_url }}" type="video/mp4">
+    </video>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const player = new Plyr('#player');
     });
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
