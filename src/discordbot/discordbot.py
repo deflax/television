@@ -138,26 +138,31 @@ async def query_database():
         if live_channel_id != 0:
             live_channel = bot.get_channel(int(live_channel_id))
             if rechead != {}:
+                await live_channel.send('Live stream is now offline.')
+                rec_stream_name = rechead['name']
                 video_filename = rechead['video']
                 thumb_filename = rechead['thumb']
                 rechead = {}
+               
+                # Creating an embed
                 video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
-                
-                # Creating an embed
-                embed = discord.Embed(title="Video",
-                      colour=0x00b0f4,
-                      timestamp=datetime.now())               
+                watch_url = f'https://{scheduler_hostname}/watch/{video_filename}'
+                asset_url = f'https://{scheduler_hostname}/asset'
+                embed = discord.Embed(title=f'{rec_stream_name}',
+                                      url=f'{watch_url}',
+                                      colour=0x00b0f4,
+                                      timestamp=datetime.now())               
                 embed.add_field(name="Download",
-                                value=f"[mp4]({video_url})",
+                                value=f"[{video_filename}]({video_url})",
                                 inline=True)
                 embed.add_field(name="Watch",
-                                value="[plyr.js](https://deflax.net)",
+                                value=f'[plyr.js]({watch_url})',
                                 inline=True)
                 embed.set_image(url=thumb_url)
-                embed.set_thumbnail(url="https://deflax.net/img/logo-96.png")
+                embed.set_thumbnail(url=f'{asset_url}/logo-96.png')
                 embed.set_footer(text="DeflaxTV", 
-                                 icon_url="https://deflax.net/img/logo-96.png")
+                                 icon_url=f'{asset_url}/logo-96.png')
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
         else:
