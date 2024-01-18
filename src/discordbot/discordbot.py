@@ -143,7 +143,6 @@ async def query_database():
                 rechead = {}
                 video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
-                offline_msg = f'Live stream is now offline. [Download VoD recording]({vod_url}) {thumb_url}'
                 
                 # Creating an embed
                 embed = discord.Embed(
@@ -152,7 +151,7 @@ async def query_database():
                     color=discord.Color.green()
                 )
                 embed.set_thumbnail(url=thumb_url)
-                embed.add_field(name='Download MP4', value='[Download Video](video_url)', inline=False)
+                embed.add_field(name='Download MP4', value=f'[Download Video]({video_url})', inline=False)
                 embed.set_author(name='DeflaxTV', icon_url=bot.user.avatar_url)
     
                 # Sending the embed to the channel
