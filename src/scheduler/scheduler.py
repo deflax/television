@@ -22,6 +22,7 @@ logger_api.setLevel(log_level)
 logger_job.setLevel(log_level)
 
 # Variables
+scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
@@ -311,7 +312,7 @@ def database_route():
 
 @app.route("/video/<file_name>", methods=['GET'])
 def video_route(file_name):
-    reqfile = f'{rec_path}/thumb/{file_name}'
+    reqfile = f'{rec_path}/video/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
     return send_file(reqfile, mimetype='video/mp4')
@@ -329,6 +330,14 @@ def img_route(file_name):
     if not os.path.exists(reqfile):
         abort(404)
     return send_file(reqfile, mimetype='image/png')
+
+@app.route('/watch/<file_name>')
+def watch_route(file_name):
+    reqfile = f'{rec_path}/video/{file_name}'
+    if not os.path.exists(reqfile):
+        abort(404)
+    video_url=f'https://{scheduler_hostname}/video/{file_name}'
+    return render_template('watch.html', video_url=video_url)
 
 def create_app():
    return app
