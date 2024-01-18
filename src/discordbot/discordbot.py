@@ -148,7 +148,7 @@ async def query_database():
                 video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
                 watch_url = f'https://{scheduler_hostname}/watch/{video_filename}'
-                asset_url = f'https://{scheduler_hostname}/asset'
+                img_url = f'https://{scheduler_hostname}/img'
                 embed = discord.Embed(title=f'{rec_stream_name}',
                                       url=f'{watch_url}',
                                       colour=0x00b0f4,
@@ -160,9 +160,9 @@ async def query_database():
                                 value=f'[plyr.js]({watch_url})',
                                 inline=True)
                 embed.set_image(url=thumb_url)
-                embed.set_thumbnail(url=f'{asset_url}/logo-96.png')
+                embed.set_thumbnail(url=f'{img_url}/logo-96.png')
                 embed.set_footer(text="DeflaxTV", 
-                                 icon_url=f'{asset_url}/logo-96.png')
+                                 icon_url=f'{img_url}/logo-96.png')
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
         else:
