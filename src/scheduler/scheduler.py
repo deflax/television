@@ -5,7 +5,7 @@ import logging
 import json
 import requests
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, abort
 from flask.helpers import send_file
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
@@ -311,14 +311,20 @@ def database_route():
 
 @app.route("/video/<file_name>", methods=['GET'])
 def video_route(file_name):
+    if not os.path.exists(file_name):
+        abort(404)
     return send_file(f"{rec_path}/vod/{file_name}",mimetype='video/mp4')
 
 @app.route("/thumb/<file_name>", methods=['GET'])
 def thumb_route(file_name):
+    if not os.path.exists(file_name):
+        abort(404)
     return send_file(f"{rec_path}/thumb/{file_name}",mimetype='image/png')
 
 @app.route("/img/<file_name>", methods=['GET'])
 def img_route(file_name):
+    if not os.path.exists(file_name):
+        abort(404)
     return send_file(f"./img/{file_name}",mimetype='image/png')
 
 def create_app():
