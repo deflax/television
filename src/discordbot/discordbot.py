@@ -101,51 +101,64 @@ async def query_database():
         logger_discord.error('Cannot connect to the database!')
         return
         
+    if database == {}:
+        logger_discord.error('Database is empty!')
+        return
+    
     # Search for live streams
-    if database != {}:
-        for key, value in database.items():
-            stream_name = value['name']
-            stream_start_at = value['start_at'] 
-            if stream_start_at == 'now':
-                # Check if the job already exists
-                if scheduler.get_job('announce_live_channel') is None:
-                    # Job doesn't exist, so add it
-                    logger_discord.info(f'{stream_name} live stream detected!')
-                    scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name,))
-                    
-                    # Manually execute the job once immediately
-                    scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
-                    
-                    # Set global rechead
-                    rec_url = f'https://{scheduler_hostname}/rechead'
-                    if requests.get(rec_url).status_code == 200:
-                        response = requests.get(rec_url)
-                        response.raise_for_status()
-                        rechead = response.json()
-                    
-                    # Exit since we found one
-                    return
-                else:
-                    # Exit since we already have a announcement job
-                    return
+    for key, value in database.items():
+        stream_name = value['name']
+        stream_start_at = value['start_at'] 
+        if stream_start_at == 'now':
+            # Check if the job already exists
+            if scheduler.get_job('announce_live_channel') is None:
+                # Job doesn't exist, so add it
+                logger_discord.info(f'{stream_name} live stream detected!')
+                scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name,))
+                
+                # Manually execute the job once immediately
+                scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
+                
+                # Set global rechead
+                rec_url = f'https://{scheduler_hostname}/rechead'
+                if requests.get(rec_url).status_code == 200:
+                    response = requests.get(rec_url)
+                    response.raise_for_status()
+                    rechead = response.json()
+                
+                # Exit since we found one
+                return
+            else:
+                # Exit since we already have a announcement job
+                return
 
-        # Cleanup the announce job
-        if scheduler.get_job('announce_live_channel') is not None:
-            scheduler.remove_job('announce_live_channel')
-            
+    # Cleanup the announce job
+    if scheduler.get_job('announce_live_channel') is not None:
+        scheduler.remove_job('announce_live_channel')
+        if live_channel_id != 0:
+            live_channel = bot.get_channel(int(live_channel_id))
             if rechead != {}:
                 video_filename = rechead['video']
                 thumb_filename = rechead['thumb']
                 rechead = {}
-                vod_url = f'https://{scheduler_hostname}/video/{video_filename}'
+                video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
                 offline_msg = f'Live stream is now offline. [Download VoD recording]({vod_url}) {thumb_url}'
-            else:
-                offline_msg = f'Live stream is now offline.'
-            logger_discord.info(offline_msg)
-            if live_channel_id != 0:
-                live_channel = bot.get_channel(int(live_channel_id))
-                await live_channel.send(offline_msg)
+                
+                # Creating an embed
+                embed = discord.Embed(
+                    title='Download Example',
+                    description='Click the link below to download the MP4 file.',
+                    color=discord.Color.green()
+                )
+                embed.set_thumbnail(url=thumb_url)
+                embed.add_field(name='Download MP4', value='[Download Video](video_url)', inline=False)
+                embed.set_author(name='DeflaxTV', icon_url=bot.user.avatar_url)
+    
+                # Sending the embed to the channel
+                await live_channel.send(embed=embed)
+        else:
+            logger_discord.info('Live stream is now offline.')
 
 async def announce_live_channel(stream_name):
     logger_discord.info(f'{stream_name} is live!')
