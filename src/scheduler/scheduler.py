@@ -312,7 +312,7 @@ def database_route():
 
 @app.route("/video/<file_name>", methods=['GET'])
 def video_route(file_name):
-    reqfile = f'{rec_path}/video/{file_name}'
+    reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
     return send_file(reqfile, mimetype='video/mp4')
@@ -333,7 +333,7 @@ def img_route(file_name):
 
 @app.route('/watch/<file_name>')
 def watch_route(file_name):
-    reqfile = f'{rec_path}/video/{file_name}'
+    reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
     video_url=f'https://{scheduler_hostname}/video/{file_name}'
