@@ -331,8 +331,9 @@ def img_route(file_name):
         abort(404)
     return send_file(reqfile, mimetype='image/png')
 
-@app.route('/watch/<file_name>')
-def watch_route(file_name):
+@app.route('/watch/<file_name_no_extension>')
+def watch_route(file_name_no_extension):
+    file_name = file_name_no_extension + '.mp4'
     reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
