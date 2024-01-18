@@ -147,7 +147,8 @@ async def query_database():
                 # Creating an embed
                 video_url = f'https://{scheduler_hostname}/video/{video_filename}'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
-                watch_url = f'https://{scheduler_hostname}/watch/{video_filename}'
+                video_filename_no_extension = video_filename.split('.')[0]
+                watch_url = f'https://{scheduler_hostname}/watch/{video_filename_no_extension}'
                 img_url = f'https://{scheduler_hostname}/img'
                 embed = discord.Embed(title=f'{rec_stream_name}',
                                       url=f'{watch_url}',
