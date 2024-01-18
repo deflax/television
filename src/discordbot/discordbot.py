@@ -152,7 +152,7 @@ async def query_database():
                 video_filename_no_extension = video_filename.split('.')[0]
                 video_watch_url = f'https://{scheduler_hostname}/video/watch/{video_filename_no_extension}'
                 embed = discord.Embed(title=f'{rec_stream_name}',
-                                      url=f'{watch_url}',
+                                      url=f'{video_watch_url}',
                                       colour=0x00b0f4,
                                       timestamp=datetime.now())               
                 embed.add_field(name="Download",
