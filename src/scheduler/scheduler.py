@@ -311,21 +311,24 @@ def database_route():
 
 @app.route("/video/<file_name>", methods=['GET'])
 def video_route(file_name):
-    if not os.path.exists(file_name):
+    reqfile = f'{rec_path}/thumb/{file_name}'
+    if not os.path.exists(reqfile):
         abort(404)
-    return send_file(f"{rec_path}/vod/{file_name}",mimetype='video/mp4')
+    return send_file(reqfile, mimetype='video/mp4')
 
 @app.route("/thumb/<file_name>", methods=['GET'])
 def thumb_route(file_name):
-    if not os.path.exists(file_name):
+    reqfile = f'{rec_path}/thumb/{file_name}'
+    if not os.path.exists(reqfile):
         abort(404)
-    return send_file(f"{rec_path}/thumb/{file_name}",mimetype='image/png')
+    return send_file(reqfile, mimetype='image/png')
 
 @app.route("/img/<file_name>", methods=['GET'])
 def img_route(file_name):
-    if not os.path.exists(file_name):
+    reqfile = f'./img/{file_name}'
+    if not os.path.exists(reqfile):
         abort(404)
-    return send_file(f"./img/{file_name}",mimetype='image/png')
+    return send_file(reqfile, mimetype='image/png')
 
 def create_app():
    return app
