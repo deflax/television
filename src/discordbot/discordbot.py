@@ -152,7 +152,6 @@ async def query_database():
                 )
                 embed.set_thumbnail(url=thumb_url)
                 embed.add_field(name='Download MP4', value=f'[Download Video]({video_url})', inline=False)
-                embed.set_author(name='DeflaxTV', icon_url=bot.user.avatar_url)
     
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)

@@ -214,7 +214,7 @@ def exec_recorder(stream_id, stream_hls_url):
         # Generate thumbnail image from the recorded mp4 file
         ffmpeg_thumb = (
             FFmpeg()
-            .input(video_output, thumb_skip_time)
+            .input(video_output, ss=thumb_skip_time)
             .filter('scale', thumb_width, -1)
             .output(thumb_output, vframes=1)
         )
