@@ -194,7 +194,7 @@ def exec_recorder(stream_id, stream_hls_url):
         # Show Metadata
         ffmpeg_metadata = (
             FFmpeg(executable="ffprobe")
-            .input("input.mp4",
+            .input(video_output,
                    print_format="json",
                    show_streams=None,)
         )
