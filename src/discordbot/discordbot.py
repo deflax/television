@@ -93,12 +93,17 @@ async def query_database():
     global database
     global rechead
     db_url = f'https://{scheduler_hostname}/database'
-    if requests.get(db_url).status_code == 200:
-        response = requests.get(db_url)
-        response.raise_for_status()
-        database = response.json()
-    else:
+    try:
+        if requests.get(db_url).status_code == 200:
+            response = requests.get(db_url)
+            response.raise_for_status()
+            database = response.json()
+        else:
+            logger_discord.error('Cannot connect to the database!')
+            return
+    except Exception as e:
         logger_discord.error('Cannot connect to the database!')
+        logger_discord.error(e)
         return
         
     if database == {}:
