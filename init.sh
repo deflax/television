@@ -8,8 +8,6 @@ mkdir -v -p data/recorder/vod
 mkdir -v -p data/recorder/live
 mkdir -v -p data/recorder/thumb
 
-mkdir -v -p data/archive
-
 mkdir -v -p data/certbot/etc
 mkdir -v -p data/certbot/var
 mkdir -v -p logs/certbot

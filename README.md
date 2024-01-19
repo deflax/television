@@ -9,12 +9,9 @@ Multi channel stream setup with Flask REST API for scheduling channels.
 
 ### Usage
 1. Access the admin panel at `https://stream.example.com/ui`
-2. Access the recordings gallery at `https://vod.example.com/`
+2. Access the recordings gallery at `https://tv.example.com/gallery`
 
 ### EPG stream priorities
 - prio = 0 - scheduled
 - prio = 1 - live
 - prio = 2 - live and vod recording
-
-### Purge vod database
-`docker exec -ti television_archive_1 /app/gallery.js storage --storage /data/storage --database /data/config/database.db -l debug purge`
