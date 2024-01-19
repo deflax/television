@@ -104,6 +104,7 @@ async def query_database():
     except Exception as e:
         logger_discord.error('Cannot connect to the database!')
         logger_discord.error(e)
+        await asyncio.sleep(5)
         return
         
     if database == {}:
