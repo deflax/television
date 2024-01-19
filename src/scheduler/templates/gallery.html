@@ -5,15 +5,43 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeflaxTV Video Gallery</title>
+    <style>
+        body {
+            background-color: #333;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .gallery-item {
+            box-sizing: border-box;
+            width: calc(33.33% - 20px); /* Adjust the percentage based on the number of images you want in a row */
+            margin: 10px;
+            overflow: hidden;
+        }
+
+        .gallery-item img {
+            max-height: 320px;
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+    </style>
+
 </head>
 <body>
     <h1>Video Gallery</h1>
 
     <div>
         {% for thumbnail in thumbnails %}
+        <div class="gallery-item">
             <a href="{{ url_for('video_watch_route', file_name_no_extension=thumbnail[:-4]) }}">
-                <img src="{{ url_for('thumb_route', file_name=thumbnail) }}" alt="Thumbnail">
+                <img src="{{ url_for('thumb_route', file_name=thumbnail) }}" alt="{{ thumbnail }}">
             </a>
+        </div>
         {% endfor %}
     </div>
 </body>
