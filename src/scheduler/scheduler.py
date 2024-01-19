@@ -350,5 +350,13 @@ def video_watch_route(file_name_no_extension):
     video_url=f'https://{scheduler_hostname}/video/{file_name}'
     return render_template('watch.html', video_url=video_url)
 
+# Gallery
+@app.route("/gallery", methods=['GET'])
+def gallery_route():
+    # Get a list of video files and thumbnails
+    video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
+    thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
+    return render_template('gallery.html', video_files=video_files, thumbnails=thumbnails)
+
 def create_app():
    return app
