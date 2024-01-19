@@ -19,15 +19,10 @@
     <meta name='twitter:image' content={{ url_for('thumb_route', file_name=thumb_file) }}>
     <meta name='twitter:image:alt' content="{{ video_file[:-4] }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <style>
         body {
 	        background-color: #212529;
-        }
-
-        #player-container {
-            width: 100%;
-            height: 100vh; /* 100% of the viewport height */
-            object-fit: cover; /* This ensures the video covers the entire container, maintaining its aspect ratio */
         }
 
         .video-container {
@@ -56,24 +51,34 @@
         }
     </style>
     <title>DeflaxTV Video Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-
-<div class="video-container">
-    <video playsinline controls>
-        <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
-    </video>
+    
+<div class="content-container bg-dark text-white">
+    <div id="stream" class="container-fluid p-3 bg-dark text-white">
+    <div class="row">
+        <div class="col-xs-12 col-md-1">
+        </div>
+        <div class="col-xs-12 col-md-10">
+            <div class="video-container" poster="{{ url_for('thumb_route', file_name=thumb_file) }}">
+                <video id="player" controls crossorigin playsinline >
+                    <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
+                </video>
+            </div>
+        </div>
+        <div class="col-xs-12 col-md-1">
+        </div>
+    </div>
+    </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const player = new Plyr('#player');
     });
 </script>
-
-</body>
-</html>
 
 </body>
 </html>
