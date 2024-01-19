@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta property="og:type" content=video.other>
-    <meta property="og:image" content={{ thumb_url }}>
+    <meta property="og:image" content={{ url_for('thumb_route', file_name=thumb_file) }}>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
     <style>
         body {
@@ -28,7 +28,7 @@
 
 <div id="player-container">
     <video id="player" playsinline controls>
-        <source src="{{ video_url }}" type="video/mp4">
+        <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
     </video>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>

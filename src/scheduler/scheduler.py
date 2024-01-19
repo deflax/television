@@ -343,18 +343,11 @@ def video_download_route(file_name):
 
 @app.route('/video/watch/<file_name_no_extension>', methods=['GET'])
 def video_watch_route(file_name_no_extension):
-    video_file = f'{file_name_no_extension}.mp4'
-    video_path = f'{rec_path}/vod/{video_file}'
-    thumb_path = f'{rec_path}/thumb/{file_name_no_extension}.png'
-    if not os.path.exists(video_path):
+    video_file = f'{rec_path}/vod/{file_name_no_extension}.mp4'
+    thumb_file = f'{rec_path}/thumb/{file_name_no_extension}.png'
+    if not os.path.exists(video_file):
         abort(404)
-    else:
-        video_url=f'https://{scheduler_hostname}/video/{video_file}'
-    if not os.path.exists(thumb_path):
-        thumb_url = ""
-    else:
-        thumb_url=f'https://{scheduler_hostname}/thumb/{}'
-    return render_template('watch.html', video_url=video_url, thumb_url=thumb_url)
+    return render_template('watch.html', thumb_file=thumb_file, video_file=video_file)
 
 # Gallery
 @app.route("/gallery", methods=['GET'])
