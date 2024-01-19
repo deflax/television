@@ -4,8 +4,13 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta property="og:type" content=video.other>
+    <meta property="og:title" content="{{ video_file[:-4] }}"> 
+    <meta property="og:type" content="video.movie">
+    <meta property="og:url" content={{ url_for('video_watch_route', file_name_no_extension=video_file[:-4]) }}>
     <meta property="og:image" content={{ url_for('thumb_route', file_name=thumb_file) }}>
+    <meta property="og:image:type" content="image/png"> 
+    <meta property="og:image:width" content="1280"> 
+    <meta property="og:image:height" content="720">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
     <style>
         body {
