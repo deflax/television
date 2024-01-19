@@ -280,6 +280,8 @@ try:
 except Exception as err:
     logger_api.error('Client login error')
     logger_api.error(err)
+    time.sleep(10)
+    logger.api.error('Restarting...')
     sys.exit(1)
     
 # Schedule sync jobs
