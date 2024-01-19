@@ -24,31 +24,6 @@
         body {
 	        background-color: #212529;
         }
-
-        .video-container {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 100%;
-            height: 100%; 
-            overflow: hidden;
-        }
-
-        .video-container video {
-            /* Make video to at least 100% wide and tall */
-            min-width: 100%; 
-            min-height: 100%; 
-          
-            /* Setting width & height to auto prevents the browser from stretching or squishing the video */
-            width: auto;
-            height: auto;
-          
-            /* Center the video */
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%,-50%);
-        }
     </style>
     <title>DeflaxTV Video Player</title>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
@@ -62,10 +37,9 @@
         <div class="col-xs-12 col-md-1">
         </div>
         <div class="col-xs-12 col-md-10">
-            <div class="video-container" poster="{{ url_for('thumb_route', file_name=thumb_file) }}">
-                <video id="player" controls crossorigin playsinline >
-                    <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
-                </video>
+            <video id="player" controls crossorigin playsinline poster="{{ url_for('thumb_route', file_name=thumb_file) }}">
+                <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
+            </video>
             </div>
         </div>
         <div class="col-xs-12 col-md-1">
