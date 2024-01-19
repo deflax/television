@@ -38,7 +38,6 @@ services:
       - net
     labels:
       - meta.role=certbot
-    #entrypoint: sh -c 'while true; do sleep 1; done'
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 15d & wait $${!}; done;'"
 
   restreamer:
@@ -84,46 +83,3 @@ services:
       - net
     labels:
       - meta.role=discordbot
-
-  archive-api:
-    depends_on:
-      - "scheduler"
-    image: xemle/home-gallery-api-server
-    environment:
-      # TensorflowJS backends
-      # - cpu: slowest and best support
-      # - wasm: good perfromance for arm64 and amd64 platforms
-      # - node: best performance on amd64 platform
-      #- BACKEND=cpu
-      - BACKEND=wasm
-      #- BACKEND=node
-    restart: unless-stopped
-    networks:
-      - net
-    labels:
-      - meta.role=archive-api
-
-  archive:
-    depends_on:
-      - "scheduler"
-    image: xemle/home-gallery:1.14.6
-    environment:
-      - GALLERY_API_SERVER=http://archive-api:3000
-      - GALLERY_API_SERVER_CONCURRENT=5 # for SoC devices like Rasperry Pi. Use 5 otherwise
-      - GALLERY_API_SERVER_TIMEOUT=30 # for SoC devices like Rasperry Pi. Use 30 otherwise
-      #- GALLERY_USE_NATIVE=ffprobe,ffmpeg,vipsthumbnail # On issues with sharp resizer
-      - GALLERY_OPEN_BROWSER=false
-      # Use polling for safety of possible network mounts. Try 0 to use inotify via fs.watch
-      - GALLERY_WATCH_POLL_INTERVAL=300
-    volumes:
-      - "./config/archive/gallery.config.yml:/data/config/gallery.config.yml"
-      - "./data/archive:/data"
-      - "./data/recorder/vod:/data/vod:ro"
-    #user: "${CURRENT_USER}"
-    entrypoint: ['node', '/app/gallery.js']
-    command: ['run', 'server']
-    restart: unless-stopped
-    networks:
-      - net
-    labels:
-      - meta.role=archive
