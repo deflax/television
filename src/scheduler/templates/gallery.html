@@ -11,8 +11,8 @@
 
     <div>
         {% for thumbnail in thumbnails %}
-            <a href="{{ url_for('video', filename=thumbnail[:-4]) }}">
-                <img src="{{ url_for('thumb', filename=thumbnail) }}" alt="Thumbnail">
+            <a href="{{ url_for('video_watch_route', file_name_no_extension=thumbnail[:-4]) }}">
+                <img src="{{ url_for('thumb_route', file_name=thumbnail) }}" alt="Thumbnail">
             </a>
         {% endfor %}
     </div>
