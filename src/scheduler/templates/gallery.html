@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeflaxTV Video Gallery</title>
+</head>
+<body>
+    <h1>Video Gallery</h1>
+
+    <div>
+        {% for thumbnail in thumbnails %}
+            <a href="{{ url_for('video', filename=thumbnail[:-4]) }}">
+                <img src="{{ url_for('thumb', filename=thumbnail) }}" alt="Thumbnail">
+            </a>
+        {% endfor %}
+    </div>
+</body>
+</html>
