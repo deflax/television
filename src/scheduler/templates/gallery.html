@@ -13,25 +13,32 @@
         }
         
         .gallery {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-around;
-            margin: 0px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            background: teal;
+            padding: 15px;
         }
         
-        .gallery-item {
-            flex: 0 1 calc(25% - 20px);
-            margin: 10px; /* Added margin between items */
+        .gallery .gallery-item {
             overflow: hidden;
             position: relative;
             cursor: pointer;
-            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+            box-sizing: border-box;
         }
         
-        .gallery-item img {
-            max-width: 100%; /* Ensure images don't exceed the width of their container */
-            height: auto;
+        .gallery img {
+            width: 100%;
             display: block;
+            -webkit-filter: grayscale(1);
+            filter: grayscale(1);
+            transition: all 100ms ease-out;
+        }
+        
+        .gallery .gallery-item:hover img {
+            transform: scale(1.04);
+            -webkit-filter: grayscale(0);
+            filter: grayscale(0);
         }
         
         .overlay {
@@ -48,7 +55,7 @@
             transition: opacity 0.3s ease;
         }
         
-        .gallery-item:hover .overlay {
+        .gallery .gallery-item:hover .overlay {
             opacity: 1;
         }
         
@@ -61,7 +68,7 @@
             display: block;
             text-decoration: none;
             color: inherit;
-        }        
+        }             
     </style>
     <title>DeflaxTV Video Gallery</title>
 </head>
