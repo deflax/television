@@ -5,6 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta property="og:title" content="{{ video_file[:-4] }}"> 
+    <meta property="og:description" content="DeflaxTV Video"
     <meta property="og:type" content="video.movie">
     <meta property="og:url" content={{ url_for('video_watch_route', file_name_no_extension=video_file[:-4]) }}>
     <meta property="og:image" content={{ url_for('thumb_route', file_name=thumb_file) }}>
