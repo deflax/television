@@ -114,13 +114,14 @@ async def query_database():
     # Search for live streams
     for key, value in database.items():
         stream_name = value['name']
-        stream_start_at = value['start_at'] 
+        stream_start_at = value['start_at']
+        stream_meta = value['meta']
         if stream_start_at == 'now':
             # Check if the job already exists
             if scheduler.get_job('announce_live_channel') is None:
                 # Job doesn't exist, so add it
                 logger_discord.info(f'{stream_name} live stream detected!')
-                scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name,))
+                scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name, stream_meta))
                 
                 # Manually execute the job once immediately
                 scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
@@ -177,11 +178,11 @@ async def query_database():
         else:
             logger_discord.info('Live stream is now offline.')
 
-async def announce_live_channel(stream_name):
-    logger_discord.info(f'{stream_name} is live!')
+async def announce_live_channel(stream_name, stream_meta):
+    logger_discord.info(f'{stream_name} is live! {stream_meta}')
     if live_channel_id != 0:
         live_channel = bot.get_channel(int(live_channel_id))
-        await live_channel.send(f'{stream_name} is live!')
+        await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_meta}')
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
