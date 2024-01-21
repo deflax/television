@@ -366,8 +366,7 @@ def gallery_route():
     # Get the full file paths 
     thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
     # Sort the file paths by modification time in reverse order 
-    sorted_thumbnails_paths = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True)
-    
+    sorted_thumbnails_paths = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True) 
     # Extract file names from sorted paths
     sorted_thumbnails = [os.path.basename(file) for file in sorted_thumbnails_paths]
     
