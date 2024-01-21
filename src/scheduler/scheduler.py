@@ -220,11 +220,16 @@ def exec_recorder(stream_id, stream_name, stream_hls_url):
             .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
         )
         ffmpeg_thumb.execute()  
+        logger_job.warning(f'Thumbnail {thumb_file} created.')
         
         # When ready, move the recorded from the live dir to the archives and reset the rec head
         os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
         os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
+        
+        # Reset the rechead
+        time.sleep(5)
         rechead = {}
+        logger_job.warning(f'Rechead reset.')
 
 # Datarhei CORE API sync
 def core_api_sync():
