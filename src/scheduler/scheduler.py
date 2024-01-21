@@ -360,8 +360,16 @@ def video_watch_route(file_name_no_extension):
 def gallery_route():
     # Get a list of video files and thumbnails
     video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
+    
+    thumbnails_path = f'{rec_path}/thumb/'
+    thumbnails = [file for file in os.listdir(thumbnails_path) if file.endswith('.png')]
+    # Get the full file paths 
+    thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
+    # Sort the file paths by modification time in reverse order 
+    sorted_thumbnails = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True)
+    
     thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
-    return render_template('gallery.html', video_files=video_files, thumbnails=thumbnails)
+    return render_template('gallery.html', video_files=video_files, thumbnails=sorted_thumbnails)
 
 def create_app():
    return app
