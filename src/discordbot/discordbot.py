@@ -150,7 +150,7 @@ async def query_database():
                 thumb_filename = rechead['thumb']
                 # Reset the rechead
                 rechead = {}
-                await live_channel.send('Live stream is now offline.')
+                await live_channel.send('Stream is offline.')
                                
                 # Creating an embed
                 img_url = f'https://{scheduler_hostname}/img'
@@ -160,13 +160,14 @@ async def query_database():
                 video_watch_url = f'https://{scheduler_hostname}/video/watch/{video_filename_no_extension}'
                 embed = discord.Embed(title=f'{rec_stream_name}',
                                       url=f'{video_watch_url}',
+                                      description=f'{video_filename_no_extension}',
                                       colour=0x00b0f4,
                                       timestamp=datetime.now())               
                 embed.add_field(name="Download",
-                                value=f"[{video_filename}]({video_download_url})",
+                                value=f"[mp4 file]({video_download_url})",
                                 inline=True)
                 embed.add_field(name="Watch",
-                                value=f'[plyr.js]({video_watch_url})',
+                                value=f'[plyr.js player]({video_watch_url}) :]',
                                 inline=True)
                 embed.set_image(url=thumb_url)
                 embed.set_thumbnail(url=f'{img_url}/logo-96.png')
@@ -174,9 +175,9 @@ async def query_database():
                                  icon_url=f'{img_url}/logo-96.png')
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
-                logger_discord.info(f'{rec_stream_name} is now offline. VOD: {video_filename_no_extension}')
+                logger_discord.info(f'{rec_stream_name} is offline. VOD: {video_filename_no_extension}')
         else:
-            logger_discord.info('Live stream is now offline.')
+            logger_discord.info('Stream is offline.')
 
 async def announce_live_channel(stream_name, stream_meta):
     logger_discord.info(f'{stream_name} is live! {stream_meta}')
