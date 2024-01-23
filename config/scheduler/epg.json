@@ -16,12 +16,12 @@
   },
   {
     "name": "Jungletrain",
-    "start_at": "18",
+    "start_at": "19",
     "prio": 0
   },
   {
     "name": "Psyland",
-    "start_at": "23",
+    "start_at": "0",
     "prio": 0
   },
   {
