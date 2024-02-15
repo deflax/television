@@ -164,12 +164,15 @@ async def query_database():
                                       colour=0x00b0f4,
                                       timestamp=datetime.now())               
                 embed.add_field(name="Download",
-                                value=f"[mp4 file]({video_download_url})",
+                                value=f'[mp4 file]({video_download_url})',
                                 inline=True)
                 embed.add_field(name="Watch",
                                 value=f'[plyr.js player]({video_watch_url}) :]',
                                 inline=True)
-                embed.set_image(url=thumb_url)
+                embed.add_field(name="Preview",
+                                value=f'[thumb]({thumb_url})',
+                                inline=True)
+                #embed.set_image(url=thumb_url)
                 embed.set_thumbnail(url=f'{img_url}/logo-96.png')
                 embed.set_footer(text="DeflaxTV", 
                                  icon_url=f'{img_url}/logo-96.png')
