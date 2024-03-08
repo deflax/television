@@ -27,7 +27,7 @@
   {
     "name": "Deflax OBS",
     "start_at": "now",
-    "prio": 2
+    "prio": 1
   },
   {
     "name": "Deflax Records",
