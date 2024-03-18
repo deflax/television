@@ -10,7 +10,7 @@ import logging
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
-live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 5)
+live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440)
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
 
 # Discord API Intents
@@ -136,7 +136,7 @@ async def query_database():
                 # Exit since we found one
                 return
             else:
-                # Exit since we already have a announcement job
+                # Exit since we already have a live announcement job
                 return
 
     # Cleanup the announce job
@@ -150,7 +150,6 @@ async def query_database():
                 thumb_filename = rechead['thumb']
                 # Reset the rechead
                 rechead = {}
-                await live_channel.send('Stream is offline.')
                                
                 # Creating an embed
                 img_url = f'https://{scheduler_hostname}/img'
@@ -176,8 +175,10 @@ async def query_database():
                 # Sending the embed to the channel
                 await live_channel.send(embed=embed)
                 logger_discord.info(f'{rec_stream_name} is offline. VOD: {video_filename_no_extension}')
-        else:
-            logger_discord.info('Stream is offline.')
+            else:
+                # Send offline message only
+                await live_channel.send('Stream is offline.')
+        logger_discord.info('Stream is offline.')
 
 async def announce_live_channel(stream_name, stream_meta):
     logger_discord.info(f'{stream_name} is live! {stream_meta}')
