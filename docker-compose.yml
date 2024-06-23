@@ -41,7 +41,7 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 15d & wait $${!}; done;'"
 
   restreamer:
-    image: datarhei/restreamer:2.7.0
+    image: datarhei/restreamer:2.11.0
     env_file:
        - "variables.env"
     ports:
