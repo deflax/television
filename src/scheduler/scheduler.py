@@ -61,7 +61,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
         if stream_start == "never":
             # Skip channels that are set to never start automatically
             return
-        logger_job.warning(f'{stream_id} ({stream_name}) has been registered to the database')      
+        logger_job.warning(f'{stream_id} ({stream_name}) has been registered.')
         if stream_start == "now":
             logger_job.warning("Stream should start now. Preparing")
             # Check if the stream_hls_url returns 200
@@ -99,7 +99,7 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
     global playhead
     global rechead
     if stream_id in database:
-        logger_job.warning(f'{stream_id} ({stream_name}) will be removed from the database. Reason: {state.exec}')
+        logger_job.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state.exec}')
         database.pop(stream_id)
         try:
             scheduler.remove_job(stream_id)
