@@ -157,9 +157,9 @@ async def query_database():
                 video_download_url = f'https://{scheduler_hostname}/video/download/{video_filename}'
                 video_filename_no_extension = video_filename.split('.')[0]
                 video_watch_url = f'https://{scheduler_hostname}/video/watch/{video_filename_no_extension}'
-                embed = discord.Embed(title=f'{rec_stream_name}',
+                embed = discord.Embed(title=f'VOD: {video_filename_no_extension}',
                                       url=f'{video_watch_url}',
-                                      description=f'{video_filename_no_extension}',
+                                      description=f'{rec_stream_name}',
                                       colour=0x00b0f4,
                                       timestamp=datetime.now())               
                 embed.add_field(name="Download",
@@ -169,7 +169,7 @@ async def query_database():
                                 value=f'[plyr.js player]({video_watch_url}) :]',
                                 inline=True)
                 #embed.set_image(url=thumb_url)
-                embed.set_thumbnail(url=f'{img_url}/logo-96.png')
+                #embed.set_thumbnail(url=f'{img_url}/logo-96.png')
                 embed.set_footer(text="DeflaxTV", 
                                  icon_url=f'{img_url}/logo-96.png')
                 # Sending the embed to the channel
