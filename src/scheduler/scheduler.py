@@ -127,7 +127,7 @@ def fallback_search(database):
             scheduled_hours.append(value['start_at'])
 
             # convert the scheduled hours to a circular list
-            scheduled_hours = scheduled_hours + [h + 24 for h in scheduled_hours]
+            scheduled_hours = scheduled_hours + [h + 24 for int(h) in scheduled_hours]
 
             # find the closest scheduled hour
             closest_hour = min(scheduled_hours, key=lambda x: abs(x - current_hour))
