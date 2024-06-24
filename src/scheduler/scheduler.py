@@ -116,7 +116,7 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
 # Search for a fallback stream
 def fallback_search(database):
     logger_job.warning('Searching for a fallback job.')
-    current_hour = datetime.now().hour
+    current_hour = int(datetime.now().hour)
     scheduled_hours = []
     for key, value in database.items():
         if value['start_at'] == "now" or value['start_at'] == "never":
