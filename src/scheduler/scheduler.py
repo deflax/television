@@ -117,16 +117,22 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
 def fallback_search(database):
     logger_job.warning('Searching for a fallback job.')
     current_hour = datetime.now().hour
-    hour_set = []               
+    scheduled_hours = []
     for key, value in database.items():
         if value['start_at'] == "now" or value['start_at'] == "never":
             # do not use non-time scheduled streams as fallbacks
             continue
         else:
-            hour_set.append(value['start_at'])
-        closest_hour = min(hour_set, key=lambda item: abs(int(item) - current_hour))
+            # append the hours in the working set
+            scheduled_hours.append(value['start_at'])
+
+            # convert the scheduled hours to a circular list
+            scheduled_hours = scheduled_hours + [h + 24 for h in scheduled_hours]
+
+            # find the closest scheduled hour
+            closest_hour = min(scheduled_hours, key=lambda x: abs(x - current_hour))
         for key, value in database.items():
-            if value['start_at'] == str(closest_hour):
+            if value['start_at'] == str(closest_hour % 24):
                 fallback = { "stream_id": key,
                              "stream_name": value['name'],
                              "stream_hls_url": value['src']
