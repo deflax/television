@@ -179,57 +179,59 @@ def exec_recorder(stream_id, stream_name, stream_hls_url):
         video_output = f'{rec_path}/live/{video_file}'
         thumb_output = f'{rec_path}/live/{thumb_file}'
         
-        # Record a mp4 file
-        ffmpeg = (
-            FFmpeg()
-            .option("y")
-            .input(stream_hls_url)
-            .output(video_output,
-                    {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
-            ))
-        @ffmpeg.on("progress")
-        def on_progress(progress: Progress):
-            print(progress)
-        ffmpeg.execute()
-        logger_job.warning(f'Recording {video_file} finished.')
+        try:
+            # Record a mp4 file
+            ffmpeg = (
+                FFmpeg()
+                .option("y")
+                .input(stream_hls_url)
+                .output(video_output,
+                        {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
+                ))
+            @ffmpeg.on("progress")
+            def on_progress(progress: Progress):
+                print(progress)
+            ffmpeg.execute()
+            logger_job.warning(f'Recording {video_file} finished.')
         
-        # Show Metadata
-        ffmpeg_metadata = (
-            FFmpeg(executable="ffprobe")
-            .input(video_output,
-                   print_format="json",
-                   show_streams=None,)
-        )
-        media = json.loads(ffmpeg_metadata.execute())
-        logger_job.warning(f"# Video")
-        logger_job.warning(f"- Codec: {media['streams'][0]['codec_name']}")
-        logger_job.warning(f"- Resolution: {media['streams'][0]['width']} X {media['streams'][0]['height']}")
-        logger_job.warning(f"- Duration: {media['streams'][0]['duration']}")
-        logger_job.warning(f"# Audio")
-        logger_job.warning(f"- Codec: {media['streams'][1]['codec_name']}")
-        logger_job.warning(f"- Sample Rate: {media['streams'][1]['sample_rate']}")
-        logger_job.warning(f"- Duration: {media['streams'][1]['duration']}")
+            # Show Metadata
+            ffmpeg_metadata = (
+                FFmpeg(executable="ffprobe")
+                .input(video_output,
+                       print_format="json",
+                       show_streams=None,)
+            )
+            media = json.loads(ffmpeg_metadata.execute())
+            logger_job.warning(f"# Video")
+            logger_job.warning(f"- Codec: {media['streams'][0]['codec_name']}")
+            logger_job.warning(f"- Resolution: {media['streams'][0]['width']} X {media['streams'][0]['height']}")
+            logger_job.warning(f"- Duration: {media['streams'][0]['duration']}")
+            logger_job.warning(f"# Audio")
+            logger_job.warning(f"- Codec: {media['streams'][1]['codec_name']}")
+            logger_job.warning(f"- Sample Rate: {media['streams'][1]['sample_rate']}")
+            logger_job.warning(f"- Duration: {media['streams'][1]['duration']}")
         
-        thumb_skip_time = float(media['streams'][0]['duration']) // 2
-        thumb_width = media['streams'][0]['width'] 
+            thumb_skip_time = float(media['streams'][0]['duration']) // 2
+            thumb_width = media['streams'][0]['width'] 
     
-        # Generate thumbnail image from the recorded mp4 file
-        ffmpeg_thumb = (
-            FFmpeg()
-            .input(video_output, ss=thumb_skip_time)
-            .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
-        )
-        ffmpeg_thumb.execute()  
-        logger_job.warning(f'Thumbnail {thumb_file} created.')
+            # Generate thumbnail image from the recorded mp4 file
+            ffmpeg_thumb = (
+                FFmpeg()
+                .input(video_output, ss=thumb_skip_time)
+                .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
+            )
+            ffmpeg_thumb.execute()
+            logger_job.warning(f'Thumbnail {thumb_file} created.')
         
-        # When ready, move the recorded from the live dir to the archives and reset the rec head
-        os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
-        os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
-        
-        # Reset the rechead
-        time.sleep(5)
-        rechead = {}
-        logger_job.warning(f'Rechead reset.')
+            # When ready, move the recorded from the live dir to the archives and reset the rec head
+            os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
+            os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
+
+        finally:
+            # Reset the rechead
+            time.sleep(5)
+            rechead = {}
+            logger_job.warning(f'Rechead reset.')
 
 # Datarhei CORE API sync
 def core_api_sync():
