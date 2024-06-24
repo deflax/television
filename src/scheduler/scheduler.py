@@ -192,8 +192,13 @@ def exec_recorder(stream_id, stream_name, stream_hls_url):
             def on_progress(progress: Progress):
                 print(progress)
             ffmpeg.execute()
-            logger_job.warning(f'Recording {video_file} finished.')
-        
+            logger_job.warning(f'Recording of {video_file} finished.')
+
+        except Exception as joberror:
+            logger_job.error(f'Recording of {video_file} failed!')
+            logger_job.error(joberror)
+
+        else:
             # Show Metadata
             ffmpeg_metadata = (
                 FFmpeg(executable="ffprobe")
