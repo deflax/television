@@ -1,18 +1,29 @@
 #!/bin/bash
 
 echo "creating data dir structure"
-mkdir -v -p data/restreamer/config
-mkdir -v -p data/restreamer/data
 
-mkdir -v -p data/recorder/vod
-mkdir -v -p data/recorder/live
-mkdir -v -p data/recorder/thumb
-
+# certbot
 mkdir -v -p data/certbot/etc
 mkdir -v -p data/certbot/var
 mkdir -v -p logs/certbot
 
 mkdir -v -p data/certificates
+
+# restreamer
+mkdir -v -p data/restreamer/config
+mkdir -v -p data/restreamer/data
+
+# scheduler
+mkdir -v -p data/recorder/vod
+mkdir -v -p data/recorder/live
+mkdir -v -p data/recorder/thumb
+
+# icecast
+mkdir -v -p logs/icecast
+touch logs/icecast/access.log
+touch logs/icecast/error.log
+chown 1000:1000 logs/icecast/access.log
+chown 1000:1000 logs/icecast/error.log
 
 echo "generating self signed certificates for haproxy bootstrap"
 cd data/certificates

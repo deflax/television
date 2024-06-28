@@ -167,3 +167,6 @@ logs/
 
 # env vars
 variables.env
+
+# icecast conf
+icecast.xml
