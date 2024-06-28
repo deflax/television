@@ -36,7 +36,7 @@
         <mount-name>/stream.mp3</mount-name>
         <max-listeners>100</max-listeners>
         <max-listener-duration>3600</max-listener-duration>
-        <fallback-mount>/usr/share/icecast2/web/data/fallback.mp3</fallback-mount>
+        <fallback-mount>/data/fallback.mp3</fallback-mount>
         <fallback-override>1</fallback-override>
         <fallback-when-full>1</fallback-when-full>
         <public>1</public>
