@@ -17,9 +17,12 @@ scheduler = BackgroundScheduler()
 # Log handlers
 logger_api = logging.getLogger('waitress')
 logger_job = logging.getLogger('apscheduler')
+logger_content = logging.getLogger('content')
+
 log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
 logger_api.setLevel(log_level)
 logger_job.setLevel(log_level)
+logger_content = logging.getLogger('content')
 
 # Variables
 scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
@@ -352,6 +355,7 @@ def video_route(file_name):
     reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
+    logger_content.warning(str(reqfile) + ' stream')
     return send_file(reqfile, mimetype='video/mp4')
 
 @app.route("/video/download/<file_name>", methods=['GET'])
@@ -359,6 +363,7 @@ def video_download_route(file_name):
     reqfile = f'{rec_path}/vod/{file_name}'
     if not os.path.exists(reqfile):
         abort(404)
+    logger_content.warning(str(reqfile) + ' download')
     return send_file(reqfile, as_attachment=True, download_name=file_name)
 
 @app.route('/video/watch/<file_name_no_extension>', methods=['GET'])
@@ -371,6 +376,7 @@ def video_watch_route(file_name_no_extension):
         abort(404)
     if not os.path.exists(thumb_path):
         thumb_file = ""
+    logger_content.warning(str(video_path) + ' player')
     return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
 
 # Gallery
