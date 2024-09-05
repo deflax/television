@@ -18,7 +18,7 @@ services:
     depends_on:
       - "certbot"
       - "restreamer"
-      - "scheduler"
+      - "api"
     restart: unless-stopped
     networks:
       - net
@@ -55,25 +55,25 @@ services:
     labels:
       - meta.role=restreamer
 
-  scheduler:
+  api:
     depends_on:
       - "restreamer"
-    build: ./src/scheduler
-    image: tv-scheduler:latest
+    build: ./src/api
+    image: tv-api:latest
     env_file:
       - "variables.env"
     volumes:
-      - "./config/scheduler:/config"
+      - "./config/api:/config"
       - "./data/recorder:/recordings"
     restart: unless-stopped
     networks:
       - net
     labels:
-      - meta.role=scheduler
+      - meta.role=api
 
   discordbot:
     depends_on:
-      - "scheduler"
+      - "api"
     build: ./src/discordbot
     image: tv-discordbot:latest
     env_file:
