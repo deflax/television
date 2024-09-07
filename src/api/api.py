@@ -316,7 +316,18 @@ scheduler.start()
 # Frontend
 @app.route('/', methods=['GET'])
 def root_route():
-    return render_template('index.html', now=datetime.utcnow())
+    # Get a list of video files and thumbnails
+    video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
+    thumbnails_path = f'{rec_path}/thumb/'
+    thumbnails = [file for file in os.listdir(thumbnails_path) if file.endswith('.png')]
+    # Get the full file paths
+    thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
+    # Sort the file paths by modification time in reverse order
+    sorted_thumbnails_paths = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True)
+    # Extract file names from sorted paths
+    sorted_thumbnails = [os.path.basename(file) for file in sorted_thumbnails_paths]
+    thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
+    return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
 
 # API
 @app.route('/about', methods=['GET'])
@@ -377,24 +388,6 @@ def video_watch_route(file_name_no_extension):
         thumb_file = ""
     logger_content.warning(str(video_path) + ' player')
     return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
-
-# Gallery
-@app.route("/gallery", methods=['GET'])
-def gallery_route():
-    # Get a list of video files and thumbnails
-    video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
-    
-    thumbnails_path = f'{rec_path}/thumb/'
-    thumbnails = [file for file in os.listdir(thumbnails_path) if file.endswith('.png')]
-    # Get the full file paths 
-    thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
-    # Sort the file paths by modification time in reverse order 
-    sorted_thumbnails_paths = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True) 
-    # Extract file names from sorted paths
-    sorted_thumbnails = [os.path.basename(file) for file in sorted_thumbnails_paths]
-    
-    thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
-    return render_template('gallery.html', video_files=video_files, thumbnails=sorted_thumbnails)
 
 def create_app():
    return app
