@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="expires" content="0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="UTF-8">
+    <meta property="og:title" content=deflax.net>
+    <meta property="og:site_name" content="▷">
+    <meta property="og:url" content=https://deflax.net>
+    <meta property="og:description" content="The landing page of the flaxnet">
+    <meta property="og:type" content=product>
+    <meta property="og:image" content=https://deflax.net/img/logo.png>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>▷ deflax.net</title>
+
+    <link rel="stylesheet" href="css/root.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap/dist/css/bootstrap.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js/dist/hls.min.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+<nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#" style="padding-left: 8.5%;">
+      <img src="img/logo.png" alt="" width="40" height="40" class="d-inline-block align-text-center">
+    deflax.net
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse text-right" id="navbarNav" style="padding-right: 8.5%;">
+      <ul class="navbar-nav ms-auto flex-nowrap">
+        <li class="nav-item">
+          <a class="nav-link" href="#stream">Stream <i class="fas fa-satellite-dish" aria-hidden="true"></i></a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#playlists">Playlists <i class="fa fa-hard-drive" aria-hidden="true"></i></a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#archive">Archive <i class="fa fa-hard-drive" aria-hidden="true"></i></a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="content-container bg-dark text-white">
+  <div id="stream" class="container-fluid p-3 bg-dark text-white">
+    <div class="row">
+      <div class="col-xs-12 col-md-1">
+      </div>
+      <div class="col-xs-12 col-md-10">
+          <div class="content">
+              <video controls crossorigin playsinline poster="img/poster.png">
+              </video>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const video = document.querySelector("video");
+  const source = 'https://stream.deflax.net/memfs/f2844c7c-e86c-4f0a-afb6-a1b0e25a5071.m3u8';
+  const playhead_url = "https://tv.deflax.net/playhead";
+  
+  // For more options, see: https://github.com/sampotts/plyr/#options
+  // captions.update is required for captions to work with hls.js
+  const defaultOptions = {};
+
+  if (Hls.isSupported()) {
+    const hls = new Hls();
+
+    // Function to fetch and process JSON from the API
+    async function fetchData() {
+      try {
+        // Fetch data from the API
+        const response = await fetch(playhead_url);
+
+        // Check if the response is successful (status code 200)
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        // Parse JSON from the response
+        const data = await response.json();
+
+        // Now 'data' contains the parsed JSON
+        console.log("Fetched JSON data:", data);
+
+        const oldsrc = hls.url;
+        const newsrc = data.head;
+
+        if (newsrc === oldsrc) {
+          //console.log(oldsrc);
+          //console.log(newsrc);
+        } else {
+          console.log('playhead: switching to ' + newsrc)
+          hls.loadSource(newsrc);
+          video.load();  // Reload the video element to apply the new source
+          video.play().catch(error => {
+            console.error('Autoplay was prevented:', error);
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+
+    fetchData();
+    // Set the interval for periodic execution (e.g., every 5 seconds)
+    const interval = 4200; // in milliseconds
+    setInterval(fetchData, interval);
+
+    // Attach Hls.js to the video element
+    hls.loadSource(source);
+    hls.attachMedia(video);
+
+    // From the m3u8 playlist, hls parses the manifest and returns
+    // all available video qualities. This is important; in this approach,
+    // we will have one source on the Plyr player.
+    hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+      console.log('hls: manifest parsed');
+
+      // Transform available levels into an array of integers (height values).
+      const availableQualities = hls.levels.map((l) => l.height)
+      availableQualities.unshift(0); //prepend 0 to quality array
+
+      // Add new qualities to option
+      defaultOptions.quality = {
+        default: 0, //Default - AUTO
+        options: availableQualities,
+        forced: true,
+        onChange: (e) => updateQuality(e),
+      }
+
+      // Add Auto Label 
+      defaultOptions.i18n = {
+        qualityLabel: {
+          0: 'Auto',
+        },
+      }
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+        console.log('hls: level switched');
+        var span = document.querySelector(".plyr__menu__container [data-plyr='quality'][value='0'] span")
+        if (hls.autoLevelEnabled) {
+          span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`
+        } else {
+          span.innerHTML = `AUTO`
+        }
+      });
+
+      // Initialize new Plyr player with quality options
+      const player = new Plyr(video, defaultOptions);
+    });
+
+    window.hls = hls;
+
+  } else {
+    // Hls.js is not supported, fallback to standard video element
+    // Function to fetch and process JSON from the API
+    async function fetchInitData() {
+      try {
+        // Fetch data from the API
+        const response = await fetch(playhead_url);
+
+        // Check if the response is successful (status code 200)
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        // Parse JSON from the response
+        const data = await response.json();
+
+        // Now 'data' contains the parsed JSON
+        console.log("Fetched JSON data:", data);
+
+        video.src = data.head;
+        const player = new Plyr(video, defaultOptions);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+    fetchInitData();
+  }
+
+  function updateQuality(newQuality) {
+    if (newQuality === 0) {
+      window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
+    } else {
+      window.hls.levels.forEach((level, levelIndex) => {
+        if (level.height === newQuality) {
+          console.log("hls: Found quality match with " + newQuality);
+          window.hls.currentLevel = levelIndex;
+        }
+      });
+    }
+  }
+});
+
+</script>
+	</div>
+      </div>
+      <div class="col-xs-12 col-md-1">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-container bg-dark text-white">
+  <div id="terminal" class="container-fluid p-3 bg-dark text-white ">
+    <div class="row">
+      <div class="col-xs-12 col-md-1 d-none d-md-block">
+      </div>
+      <div class="col-xs-12 col-md-10 d-none d-md-block">
+        <div class="content">
+          <widgetbot
+            server="803220836407443506"
+            channel="1204242382489522250"
+            width="100%"
+            height="600"
+          ></widgetbot>
+          <script src="https://cdn.jsdelivr.net/npm/@widgetbot/html-embed"></script>
+        </div>
+      </div>
+      <div class="col-xs-12 col-md-1 d-none d-md-block">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-container bg-dark text-white">
+<div id="playlists" class="container-fluid p-3 bg-dark text-white">
+  <div class="row">
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+      <div class="col-xs-12 col-md-5 d-none d-md-block">
+        <div class="content">
+	  <h2>PVC playlist</h2>
+          <iframe width="100%" height="480" src="https://www.youtube.com/embed/videoseries?si=RdMNZq4hYudlCW37&amp;list=PLVB9xwlHyW_LhxubZ9HL8wzx1mmDNBj0z" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+      </div>
+      <div class="col-xs-12 col-md-5 d-none d-md-block">
+        <div class="content">
+          <h2>Digital playlist and stuff</h2>
+          <iframe width="100%" height="480" src="https://www.youtube.com/embed/videoseries?si=SPAsQfxoya_Jeurd&amp;list=PLVB9xwlHyW_LWz1KEmhxXhGbypcpcdHM3" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+      </div>
+    </div>
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="content-container bg-dark text-white">
+<div id="archive" class="container-fluid p-3 bg-dark text-white">
+  <div class="row">
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+    <div class="col-md-10 d-none d-md-block">
+      <div class="content">
+        <h2>Video Archive</h2>
+        <iframe width="100%" height="700" src="https://tv.deflax.net/gallery" title="Video Archive" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+      </div>
+    </div>
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="content-container bg-dark text-white">
+<div id="info" class="container-fluid p-3 bg-dark text-white">
+<div class="row">
+  <div class="col-xs-12 col-md-1">
+  </div>
+
+  <div class="col-xs-12 col-md-2">
+    <div class="content">
+      <h2>Upstreams</h2>
+        <p><a href='https://youtube.com/@daniel.deflax' target=_blank><img src="img/icons8-youtube-96.png"></a></p>
+        <p><a href='https://www.twitch.tv/deflaxtv' target_blank><img src="img/icons8-twitch-96.png"></a></p>
+        <p><a href='https://soundcloud.com/deflax' target=_blank><img src="img/icons8-soundcloud-96.png"></a></p>
+        <p><a href='https://facebook.com/daniel.default' target=_blank><img src="img/icons8-facebook-96.png"></a></p>
+        <p><a href='https://instagram.com/daniel.deflax' target=_blank><img src="img/icons8-instagram-96.png"></a></p>
+    </div>
+  </div>
+  <div class="col-xs-12 col-md-2">
+    <div class="content">
+      <h2>Backroom</h2>
+        <p><a href='https://discord.com/invite/KKGtn6GCE3' target=_blank><img src="img/icons8-discord-96.png"></a></p>
+        <p><a href='https://git.deflax.net/deflax' target=_blank rel="me"><img src="img/forgejo-96.png"></a></p>
+    </div>
+  </div>
+  <div class="col-xs-12 col-md-4">
+    <div class="content">
+        <h2>Friends</h2>
+	<p><a href='https://jungletrain.net/' target=_blank><img src="img/jtlogo.png" height="64"></a></p>
+	<p><a href='http://freerave.cz/' target=_blank><img src="img/freeravemini.png" height="64"></a></p>
+	<p><a href='http://iwayhigh.net/' target=_blank>|iway|High</a></p>
+	<p><a href='https://anima.sknt.ru/' target=_blank>Anima Amoris</a></p>
+	<p>You! 🙃</p>
+    </div>
+  </div>
+  <div class="col-xs-12 col-md-3">
+    <div class="content">
+      <h2>About</h2>
+<pre>
+  _______________________________
+ /|o............................o|
+| |:    .. flax network ..   .. :|
+| |:   ... .  ...    2024 ....  :|
+| |:      ,-.   _____   ,-.     :|
+| |:     ( `)) [_____] ( `))    :|
+|v|:      `-`   ' ' '   `-`     :|
+|||:      ,______________.      :|
+|||....../::::o::::::o::::\......|
+|^|o..../:::O::::::::::O:::\....o|
+|/`----/--------------------`----|
+`.____/ /====/ /=//=/ /====/_____/
+      `--------------------'
+</pre>
+<p>Icons by <a target="_blank" href="https://icons8.com">Icons8</a></p>
+<p>Everthying you do is a <a href='https://rareboc.org/' target=_blank>balloon</a></p>
+    </div>
+  </div>
+
+
+  <div class="col-xs-12 col-md-1">
+  </div>
+</div>
+</div>
+</div>
+
+</body>
+</html>
