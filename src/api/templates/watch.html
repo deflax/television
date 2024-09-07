@@ -40,6 +40,9 @@
             <video id="player" controls crossorigin playsinline poster="{{ url_for('thumb_route', file_name=thumb_file) }}">
                 <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
             </video>
+	    <button type="button" class="btn btn-lg btn-primary" onclick="history.back()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
             </div>
         </div>
         <div class="col-xs-12 col-md-1">
