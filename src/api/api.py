@@ -6,7 +6,7 @@ import json
 import requests
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, abort
-from flask.helpers import send_file
+from flask.helpers import send_file, send_from_directory
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 from ffmpeg import FFmpeg, Progress
@@ -312,9 +312,15 @@ scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
 # Start the scheduler
 scheduler.start()
 
-# Flask API
+## Flask
+# Frontend
 @app.route('/', methods=['GET'])
 def root_route():
+    return render_template('index.html')
+
+# API
+@app.route('/about', methods=['GET'])
+def about_route():
     about_json = { 'about': 'DeflaxTV API' }
     return jsonify(about_json)
 
@@ -335,13 +341,6 @@ def database_route():
     return jsonify(database)
 
 # Images
-@app.route("/img/<file_name>", methods=['GET'])
-def img_route(file_name):
-    reqfile = f'./img/{file_name}'
-    if not os.path.exists(reqfile):
-        abort(404)
-    return send_file(reqfile, mimetype='image/png')
-
 @app.route("/thumb/<file_name>", methods=['GET'])
 def thumb_route(file_name):
     reqfile = f'{rec_path}/thumb/{file_name}'
@@ -366,7 +365,7 @@ def video_download_route(file_name):
     logger_content.warning(str(reqfile) + ' download')
     return send_file(reqfile, as_attachment=True, download_name=file_name)
 
-@app.route('/video/watch/<file_name_no_extension>', methods=['GET'])
+@app.route("/video/watch/<file_name_no_extension>", methods=['GET'])
 def video_watch_route(file_name_no_extension):
     video_file = f'{file_name_no_extension}.mp4'
     thumb_file = f'{file_name_no_extension}.png'
