@@ -316,7 +316,7 @@ scheduler.start()
 # Frontend
 @app.route('/', methods=['GET'])
 def root_route():
-    return render_template('index.html')
+    return render_template('index.html', now=datetime.utcnow())
 
 # API
 @app.route('/about', methods=['GET'])

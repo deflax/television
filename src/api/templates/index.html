@@ -64,7 +64,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const video = document.querySelector("video");
   const source = 'https://stream.deflax.net/memfs/f2844c7c-e86c-4f0a-afb6-a1b0e25a5071.m3u8';
-  const playhead_url = "https://tv.deflax.net/playhead";
+  const playhead_url = "https://api.deflax.net/playhead";
   
   // For more options, see: https://github.com/sampotts/plyr/#options
   // captions.update is required for captions to work with hls.js
@@ -210,27 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
-<div class="content-container bg-dark text-white">
-  <div id="terminal" class="container-fluid p-3 bg-dark text-white ">
-    <div class="row">
-      <div class="col-xs-12 col-md-1 d-none d-md-block">
-      </div>
-      <div class="col-xs-12 col-md-10 d-none d-md-block">
-        <div class="content">
-          <widgetbot
-            server="803220836407443506"
-            channel="1204242382489522250"
-            width="100%"
-            height="600"
-          ></widgetbot>
-          <script src="https://cdn.jsdelivr.net/npm/@widgetbot/html-embed"></script>
-        </div>
-      </div>
-      <div class="col-xs-12 col-md-1 d-none d-md-block">
-      </div>
-    </div>
-  </div>
-</div>
 
 <div class="content-container bg-dark text-white">
 <div id="playlists" class="container-fluid p-3 bg-dark text-white">
@@ -263,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="col-md-10 d-none d-md-block">
       <div class="content">
         <h2>Video Archive</h2>
-        <iframe width="100%" height="700" src="https://tv.deflax.net/gallery" title="Video Archive" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        <iframe width="100%" height="700" src="https://api.deflax.net/gallery" title="Video Archive" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
       </div>
     </div>
     <div class="col-md-1 d-none d-md-block">
@@ -273,25 +252,46 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 <div class="content-container bg-dark text-white">
+  <div id="terminal" class="container-fluid p-3 bg-dark text-white ">
+    <div class="row">
+      <div class="col-xs-12 col-md-1 d-none d-md-block">
+      </div>
+      <div class="col-xs-12 col-md-10 d-none d-md-block">
+        <div class="content">
+          <widgetbot
+            server="803220836407443506"
+            channel="1204242382489522250"
+            width="100%"
+            height="600"
+          ></widgetbot>
+          <script src="https://cdn.jsdelivr.net/npm/@widgetbot/html-embed"></script>
+        </div>
+      </div>
+      <div class="col-xs-12 col-md-1 d-none d-md-block">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content-container bg-dark text-white">
 <div id="info" class="container-fluid p-3 bg-dark text-white">
 <div class="row">
   <div class="col-xs-12 col-md-1">
   </div>
-
   <div class="col-xs-12 col-md-2">
     <div class="content">
-      <h2>Upstreams</h2>
+      <h2>Media</h2>
         <p><a href='https://youtube.com/@daniel.deflax' target=_blank><img src="static/images/icons8-youtube-96.png"></a></p>
         <p><a href='https://www.twitch.tv/deflaxtv' target_blank><img src="static/images/icons8-twitch-96.png"></a></p>
         <p><a href='https://soundcloud.com/deflax' target=_blank><img src="static/images/icons8-soundcloud-96.png"></a></p>
-        <p><a href='https://facebook.com/daniel.default' target=_blank><img src="static/images/icons8-facebook-96.png"></a></p>
-        <p><a href='https://instagram.com/daniel.deflax' target=_blank><img src="static/images/icons8-instagram-96.png"></a></p>
     </div>
   </div>
   <div class="col-xs-12 col-md-2">
     <div class="content">
-      <h2>Backroom</h2>
+      <h2>Social</h2>
         <p><a href='https://discord.com/invite/KKGtn6GCE3' target=_blank><img src="static/images/icons8-discord-96.png"></a></p>
+        <p><a href='https://facebook.com/daniel.default' target=_blank><img src="static/images/icons8-facebook-96.png"></a></p>
+        <p><a href='https://instagram.com/daniel.deflax' target=_blank><img src="static/images/icons8-instagram-96.png"></a></p>
     </div>
   </div>
   <div class="col-xs-12 col-md-4">
@@ -311,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
   _______________________________
  /|o............................o|
 | |:    .. flax network ..   .. :|
-| |:   ... .  ...    2024 ....  :|
+| |:   ... .  ...    {{ now.year }} ....  :|
 | |:      ,-.   _____   ,-.     :|
 | |:     ( `)) [_____] ( `))    :|
 |v|:      `-`   ' ' '   `-`     :|
