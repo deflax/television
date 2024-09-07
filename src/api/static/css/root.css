@@ -1,0 +1,36 @@
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: black;
+    padding-top: 50px;
+}
+
+p {
+    font: bold 18px sans-serif;
+}
+
+a {
+    color: rgba(255,255,255,.55) !important;
+    text-decoration: none !important;
+    font: bold 18px sans-serif;
+}
+
+a:hover {
+    color: rgb(132,4,217) !important;
+}
+
+.content-container {
+  background-color: black;
+}
+
+.container-fluid {
+    scroll-margin-top: 60px;
+}
+
+.violet {
+    color: rgb(132,4,217) !important;
+}
+
+video {
+	width: 100%;
+}
