@@ -70,7 +70,39 @@ document.addEventListener('DOMContentLoaded', () => {
   // captions.update is required for captions to work with hls.js
   const defaultOptions = {};
 
-  if (Hls.isSupported()) {
+  //
+  // First check for native browser HLS support
+  //
+  if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    async function fetchInitData() {
+      try {
+        // Fetch data from the API
+        const response = await fetch(playhead_url);
+
+        // Check if the response is successful (status code 200)
+        if (!response.ok) {
+          throw new Error(`Video: HTTP error! Status: ${response.status}`);
+        }
+
+        // Parse JSON from the response
+        const data = await response.json();
+
+        // Now 'data' contains the parsed JSON
+        //console.log("Fetched JSON data:", data);
+
+        video.src = data.head;
+        console.log('Video: switching to ', data.head)
+
+        const player = new Plyr(video, defaultOptions);
+      } catch (error) {
+        console.error("Video: Error fetching data:", error);
+      }
+    }
+    fetchInitData();
+    //
+    // If no native HLS support, check if HLS.js is supported
+    //
+  } else if (Hls.isSupported()) {
     const hls = new Hls();
 
     // Function to fetch and process JSON from the API
@@ -157,35 +189,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.hls = hls;
-
-  } else {
-    // Hls.js is not supported, fallback to standard video element
-    // Function to fetch and process JSON from the API
-    async function fetchInitData() {
-      try {
-        // Fetch data from the API
-        const response = await fetch(playhead_url);
-
-        // Check if the response is successful (status code 200)
-        if (!response.ok) {
-          throw new Error(`Video: HTTP error! Status: ${response.status}`);
-        }
-
-        // Parse JSON from the response
-        const data = await response.json();
-
-        // Now 'data' contains the parsed JSON
-        //console.log("Fetched JSON data:", data);
-
-        video.src = data.head;
-        console.log('Video: switching to ', data.head)
-
-        const player = new Plyr(video, defaultOptions);
-      } catch (error) {
-        console.error("Video: Error fetching data:", error);
-      }
-    }
-    fetchInitData();
   }
 
   function updateQuality(newQuality) {
