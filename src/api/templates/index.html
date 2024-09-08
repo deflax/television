@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         //console.log("Fetched JSON data:", data);
 
         video.src = data.head;
-        console.log('Video: switching to ', data.head)
+        console.log("Video: switching to ", data.head);
 
         const player = new Plyr(video, defaultOptions);
       } catch (error) {
@@ -126,9 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const newsrc = data.head;
 
         if (newsrc === oldsrc) {
-          console.log('HLS.js: playing from ' newsrc);
+          console.log("HLS.js: playing from ", newsrc);
         } else {
-          console.log('HLS.js: switching to ' + newsrc)
+          console.log("HLS.js: switching to ", newsrc);
           hls.loadSource(newsrc);
           video.load();  // Reload the video element to apply the new source
           video.play().catch(error => {
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // all available video qualities. This is important; in this approach,
     // we will have one source on the Plyr player.
     hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-      console.log('HLS.js: manifest parsed');
+      console.log("HLS.js: manifest parsed");
 
       // Transform available levels into an array of integers (height values).
       const availableQualities = hls.levels.map((l) => l.height)
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-        console.log('HLS.js: level switched');
+        console.log("HLS.js: level switched");
         var span = document.querySelector(".plyr__menu__container [data-plyr='quality'][value='0'] span")
         if (hls.autoLevelEnabled) {
           span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`
