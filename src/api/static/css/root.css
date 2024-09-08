@@ -21,20 +21,20 @@ a:hover {
     color: rgb(132,4,217) !important;
 }
 
-.content-container {
-  background-color: black;
-}
-
-.container-fluid {
-    scroll-margin-top: 60px;
+video {
+    width: 100%;
 }
 
 .violet {
     color: rgb(132,4,217) !important;
 }
 
-video {
-	width: 100%;
+.content-container {
+    background-color: black;
+}
+
+.container-fluid {
+    scroll-margin-top: 60px;
 }
 
 .gallery {
