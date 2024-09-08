@@ -25,7 +25,7 @@ logger_job.setLevel(log_level)
 logger_content = logging.getLogger('content')
 
 # Variables
-scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
+scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'api.example.com')
 core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
