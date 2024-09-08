@@ -11,7 +11,7 @@ import logging
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
 live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440)
-scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'tv.example.com')
+scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'api.example.com')
 
 # Discord API Intents
 intents = discord.Intents.all()
