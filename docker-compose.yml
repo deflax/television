@@ -7,6 +7,7 @@ networks:
 services:
   haproxy:
     image: haproxy:lts
+    container_name: haproxy
     env_file:
        - "variables.env"
     ports:
@@ -16,7 +17,6 @@ services:
       - "./data/certificates:/certificates"
       - "./config/haproxy:/usr/local/etc/haproxy"
     depends_on:
-      - "certbot"
       - "restreamer"
       - "api"
     restart: unless-stopped
@@ -25,20 +25,17 @@ services:
     labels:
       - meta.role=haproxy
 
-  certbot:
-    image: "certbot/certbot"
-    hostname: certbot
+  acme-sh:
+    image: neilpang/acme.sh
+    container_name: acme.sh
     volumes:
+      - "./data/acme:/acme.sh"
       - "./data/certificates:/certificates"
-      - "./data/certbot/etc:/etc/letsencrypt"
-      - "./data/certbot/var:/var/lib/letsencrypt"
-      - "./logs/certbot:/var/log/letsencrypt"
-    restart: unless-stopped
-    networks:
-      - net
-    labels:
-      - meta.role=certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 15d & wait $${!}; done;'"
+    network_mode: host
+    command: daemon
+    stdin_open: true
+    tty: true
+    restart: "no"
 
   restreamer:
     image: datarhei/restreamer:2.11.0
