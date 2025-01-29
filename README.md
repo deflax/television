@@ -18,7 +18,7 @@ Multi channel stream setup with Flask REST API for scheduling channels.
 `source variables.env; docker exec acme.sh --issue -d $BASE_URL -d $CORE_HOSTNAME --stateless`
 
 7. Install the certificate:
-`source variables.env; docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"
+`source variables.env; docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"`
 
 8. Reastart haproxy container:
 `docker kill -s USR2 haproxy`
