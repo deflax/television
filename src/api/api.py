@@ -25,11 +25,10 @@ logger_job.setLevel(log_level)
 logger_content = logging.getLogger('content')
 
 # Variables
-scheduler_hostname = os.environ.get('SCHEDULER_API_HOSTNAME', 'api.example.com')
 core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
-api_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
-api_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
-api_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
+core_hostname = os.environ.get('CORE_HOSTNAME', 'stream.example.com')
+core_username = os.environ.get('CORE_USERNAME', 'admin')
+core_password = os.environ.get('CORE_PASSWORD', 'pass')
 rec_path = "/recordings"
 enable_delay = 24
 
@@ -161,7 +160,6 @@ def update_playhead(stream_id, stream_name, stream_prio, stream_hls_url):
 # Execute stream   
 def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
     global prio
-    logger_job.warning(f'Hello {stream_name}! :]')
     if stream_prio > prio:
         prio = stream_prio
         logger_job.warning(f'Source priority is now set to: {prio}')
@@ -278,7 +276,7 @@ def core_api_sync():
         stream_name = meta['restreamer-ui']['meta']['name']
         stream_description = meta['restreamer-ui']['meta']['description']
         stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
-        stream_hls_url = f'https://{api_hostname}/{stream_storage_type}/{stream_id}.m3u8'
+        stream_hls_url = f'https://{core_hostname}/{stream_storage_type}/{stream_id}.m3u8'
 
         if state.exec == "running":
             process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
@@ -295,8 +293,8 @@ def core_api_sync():
 
 # Datarhei CORE API login
 try:
-    client = Client(base_url='https://' + api_hostname, username=api_username, password=api_password)
-    logger_api.warning('Logging in to Datarhei Core API ' + api_username + '@' + api_hostname)
+    client = Client(base_url='https://' + core_hostname, username=core_username, password=core_password)
+    logger_api.warning('Logging in to Datarhei Core API ' + core_username + '@' + core_hostname)
     client.login()
 except Exception as err:
     logger_api.error('Client login error')
@@ -330,12 +328,6 @@ def root_route():
     return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
 
 # API
-@app.route('/about', methods=['GET'])
-def about_route():
-    about_json = { 'about': 'DeflaxTV API' }
-    return jsonify(about_json)
-
-# JSON data
 @app.route('/playhead', methods=['GET'])
 def playhead_route():
     global playhead

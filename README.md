@@ -15,7 +15,7 @@ Multi channel stream setup with Flask REST API for scheduling channels.
 5. Run the stack using `docker-compose up -d --build --remove-orphans`
 
 6. Issue a certificate:
-`source variables.env; docker exec acme.sh --issue -d $BASE_URL -d $SCHEDULER_API_HOSTNAME -d $CORE_API_HOSTNAME --stateless`
+`source variables.env; docker exec acme.sh --issue -d $BASE_URL d $CORE_HOSTNAME --stateless`
 
 7. Install the certificate:
 `source variables.env; docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"
