@@ -26,9 +26,9 @@ logger_content = logging.getLogger('content')
 
 # Variables
 core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
-core_hostname = os.environ.get('CORE_HOSTNAME', 'stream.example.com')
-core_username = os.environ.get('CORE_USERNAME', 'admin')
-core_password = os.environ.get('CORE_PASSWORD', 'pass')
+core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
+core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
+core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
 rec_path = "/recordings"
 enable_delay = 24
 
