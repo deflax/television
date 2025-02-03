@@ -52,7 +52,6 @@ def get_core_process_details(client, process_id):
     
 # Process a running channel
 def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
-    global recording
     if stream_id in database:
         # Skip learned channels
         return
