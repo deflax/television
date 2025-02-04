@@ -11,8 +11,8 @@ mkdir -v -p data/restreamer/config
 mkdir -v -p data/restreamer/data
 
 # scheduler
-mkdir -v -p data/recorder/vod
 mkdir -v -p data/recorder/live
+mkdir -v -p data/recorder/vod
 mkdir -v -p data/recorder/thumb
 
 # icecast

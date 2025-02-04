@@ -152,7 +152,7 @@ async def query_database():
                 rechead = {}
                                
                 # Creating an embed
-                img_url = f'https://{scheduler_hostname}/img'
+                img_url = f'https://{scheduler_hostname/static/images'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
                 video_download_url = f'https://{scheduler_hostname}/video/download/{video_filename}'
                 video_filename_no_extension = video_filename.split('.')[0]
@@ -168,7 +168,7 @@ async def query_database():
                 embed.add_field(name="Watch",
                                 value=f'[plyr.js player]({video_watch_url}) :]',
                                 inline=True)
-                #embed.set_image(url=thumb_url)
+                embed.set_image(url=thumb_url)
                 #embed.set_thumbnail(url=f'{img_url}/logo-96.png')
                 embed.set_footer(text="DeflaxTV", 
                                  icon_url=f'{img_url}/logo-96.png')
