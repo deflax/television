@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 import requests
 import discord
-from discord.ext.commands import Bot, has_permissions, CheckFailure
+from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
 
