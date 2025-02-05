@@ -11,23 +11,8 @@
   },
   {
     "name": "IwayHigh",
-    "start_at": "13",
-    "prio": 0
-  },
-  {
-    "name": "Jungletrain",
-    "start_at": "18",
-    "prio": 0
-  },
-  {
-    "name": "freerave",
     "start_at": "22",
     "prio": 0
-  },
-  {
-    "name": "Deflax OBS",
-    "start_at": "now",
-    "prio": 1
   },
   {
     "name": "Deflax Records",
