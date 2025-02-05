@@ -152,7 +152,7 @@ async def query_database():
                 rechead = {}
                                
                 # Creating an embed
-                img_url = f'https://{scheduler_hostname/static/images'
+                img_url = f'https://{scheduler_hostname}/static/images'
                 thumb_url = f'https://{scheduler_hostname}/thumb/{thumb_filename}'
                 video_download_url = f'https://{scheduler_hostname}/video/download/{video_filename}'
                 video_filename_no_extension = video_filename.split('.')[0]
