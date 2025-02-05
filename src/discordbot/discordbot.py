@@ -54,7 +54,7 @@ async def hello(ctx):
 async def hello_error(ctx, error):
     if isinstance(error, CheckFailure):
         author_name = ctx.author.name
-        await ctx.channel.send(f'do I know you, `{}`?')
+        await ctx.channel.send(f'do I know you, `{author_name}`?')
 
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
