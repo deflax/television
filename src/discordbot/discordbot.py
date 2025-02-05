@@ -24,6 +24,7 @@ intents.message_content = True
 
 # Discord client
 bot = Bot(command_prefix=".", intents=intents)
+worshipper_role_name = "worshipper"
 
 # Scheduler
 scheduler = AsyncIOScheduler()
@@ -44,7 +45,7 @@ async def on_ready():
     scheduler.start()
       
 @bot.command(name='hello', help='Say hello to the bot')
-@has_permissions(administrator=True)
+@has_role(worshipper_role_name)
 async def hello(ctx):
     author_name = ctx.author.name
     await ctx.channel.send(f'hi, `{author_name}` :blush:')
@@ -52,8 +53,8 @@ async def hello(ctx):
 @hello.error
 async def hello_error(ctx, error):
     if isinstance(error, CheckFailure):
-        msg = "{} access denied!".format(ctx.message.author.mention)  
-        await ctx.send(msg)
+        author_name = ctx.author.name
+        await ctx.channel.send(f'do I know you, `{}`?')
 
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
