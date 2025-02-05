@@ -1,9 +1,9 @@
 import asyncio
 import os
+from datetime import datetime, timezone
 import requests
 import discord
-from discord.ext import commands, tasks
-from datetime import datetime
+from discord.ext.commands import Bot, has_permissions, CheckFailure
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
 
@@ -23,7 +23,7 @@ intents.presences = True
 intents.message_content = True
 
 # Discord client
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = Bot(command_prefix="!", intents=intents)
 
 # Scheduler
 scheduler = AsyncIOScheduler()
@@ -44,9 +44,16 @@ async def on_ready():
     scheduler.start()
       
 @bot.command(name='hello', help='Say hello to the bot')
+@has_permissions(administrator=True)
 async def hello(ctx):
     author_name = ctx.author.name
     await ctx.channel.send(f'hi, `{author_name}` :blush:')
+
+@hello.error
+async def hello_error(ctx, error):
+    if isinstance(error, CheckFailure):
+        msg = "{} access denied!".format(ctx.message.author.mention)  
+        await ctx.send(msg)
 
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
@@ -69,14 +76,13 @@ async def epg(ctx):
  
 @bot.command(name='time', help='Show current time')
 async def time(ctx):
-    await ctx.channel.send(f'The time is: `{datetime.now()} UTC`')
+    await ctx.channel.send(f'The time is: `{datetime.now(timezone.utc)} UTC`')
     
 @bot.command(name='now', help='Displays whats playing right now')
 async def now(ctx):
     head = await query_playhead()
     await ctx.channel.send(head)
 
-# Helper functions
 async def query_playhead():
     head_url = f'https://{scheduler_hostname}/playhead'
     if requests.get(head_url).status_code == 200:
