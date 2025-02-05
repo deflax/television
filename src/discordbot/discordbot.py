@@ -23,7 +23,7 @@ intents.presences = True
 intents.message_content = True
 
 # Discord client
-bot = Bot(command_prefix="!", intents=intents)
+bot = Bot(command_prefix=".", intents=intents)
 
 # Scheduler
 scheduler = AsyncIOScheduler()
