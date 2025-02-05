@@ -38,3 +38,7 @@ ffmpeg -i brooklynsfinest_clip_1080p.mp4 \
 -hls_segment_filename stream_%v/data%02d.ts \
 -master_pl_name master.m3u8 \
 -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2" stream_%v.m3u8
+
+ffmpeg -i /dev/video0 -i /dev/video2 -stream_loop -1 -re -i audio.mp3 -filter_complex "[0][1]overlay=enable='lt(mod(t,60),30)'[v]" -map "[v]" -map 2:a -c:v libx264 -b:v 4000k -maxrate 4000k -bufsize 8000k -g 50 -c:a aac -f flv rtmp://youtube
+
+ffmpeg -i source.mp4 -s 640x360 -hls_list_size 30 -hls_flags delete_segments+append_list+omit_endlist -f hls out.m3u8
