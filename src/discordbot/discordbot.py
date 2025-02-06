@@ -145,7 +145,7 @@ async def query_database():
                 logger_discord.info(f'{stream_name} live stream detected!')
                 scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name, stream_meta))
                 
-                # Manually execute the job once immediately
+                # Manually execute the job immediately
                 scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
                 
                 # Set global rechead
@@ -198,7 +198,6 @@ async def query_database():
                 await live_channel.send(embed=embed)
                 logger_discord.info(f'{rec_stream_name} is offline. VOD: {video_filename_no_extension}')
             else:
-                # Send offline message only
                 await live_channel.send('Stream is offline.')
         logger_discord.info('Stream is offline.')
 

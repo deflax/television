@@ -36,7 +36,6 @@ enable_delay = 24
 # Init
 database = {}
 playhead = {}
-rechead = {}
 prio = 0
 
 with open('/config/epg.json', 'r') as epg_json:
@@ -96,7 +95,6 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
 def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
     global prio
     global playhead
-    global rechead
     if stream_id in database:
         logger_job.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state.exec}')
         database.pop(stream_id)
@@ -253,11 +251,6 @@ def root_route():
 def playhead_route():
     global playhead
     return jsonify(playhead)
-
-@app.route('/rechead', methods=['GET'])
-def rechead_route():
-    global rechead
-    return jsonify(rechead)
 
 @app.route('/database', methods=['GET'])
 def database_route():
