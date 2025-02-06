@@ -55,8 +55,7 @@ async def hello(ctx):
 @hello.error
 async def hello_error(ctx, error):
     if isinstance(error, CheckFailure):
-        author_name = ctx.author.name
-        await ctx.channel.send(f'do I know you, `{author_name}`?')
+        await ctx.channel.send('do I know you?')
 
 @bot.command(name='time', help='Show current time')
 async def time(ctx):
