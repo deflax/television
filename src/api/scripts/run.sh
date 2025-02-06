@@ -12,8 +12,8 @@ fi
 
 # Start Waitress
 echo "waitress-serve $APP_MODULE"
-# exec waitress-serve --listen=*:8080 --trusted-proxy='*' \
-# --trusted-proxy-headers="x-forwarded-for","x-forwarded-host","x-forwarded-proto","x-forwarded-port" \
-# --log-untrusted-proxy-headers --threads=16 --call app.api:create_app
 pwd
-waitress-serve --port=8080 --threads=16 --call $APP_MODULE
+waitress-serve --port=8080 --threads=16 \
+--trusted-proxy='*' --log-untrusted-proxy-headers \
+--trusted-proxy-headers='x-forwarded-for'
+--call $APP_MODULE
