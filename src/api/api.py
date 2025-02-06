@@ -229,7 +229,7 @@ scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
 # Start the scheduler
 scheduler.start()
 
-## Flask
+### Flask ###
 # Frontend
 @app.route('/', methods=['GET'])
 def root_route():
@@ -246,7 +246,7 @@ def root_route():
     thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
     return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
 
-# API
+# JSON Data
 @app.route('/playhead', methods=['GET'])
 def playhead_route():
     global playhead
