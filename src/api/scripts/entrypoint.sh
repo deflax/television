@@ -3,7 +3,7 @@
 set -e
 
 if [ -f /app/app.py ]; then
-    DEFAULT_MODULE_NAME=api
+    DEFAULT_MODULE_NAME=flask_api
 fi
 MODULE_NAME=${MODULE_NAME:-$DEFAULT_MODULE_NAME}
 VARIABLE_NAME=${VARIABLE_NAME:-api}
