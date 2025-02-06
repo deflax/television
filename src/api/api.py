@@ -265,24 +265,24 @@ def database_route():
     return jsonify(database)
 
 # Images
-@app.route("/thumb/<file_name>", methods=['GET'])
-def thumb_route(file_name):
-    reqfile = f'{rec_path}/thumb/{file_name}'
+@app.route("/thumb/<thumb_file>", methods=['GET'])
+def thumb_route(thumb_file):
+    reqfile = f'{rec_path}/thumb/{thumb_file}'
     if not os.path.exists(reqfile):
         abort(404)
     return send_file(reqfile, mimetype='image/png')
 
 # Video
-@app.route("/video/<file_name>", methods=['GET'])
-def video_route(file_name):
+@app.route("/video/<video_file>", methods=['GET'])
+def video_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(reqfile):
         abort(404)
     logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
     return send_file(reqfile, mimetype='video/mp4')
 
-@app.route("/video/download/<file_name>", methods=['GET'])
-def video_download_route(file_name):
+@app.route("/video/download/<video_file>", methods=['GET'])
+def video_download_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(reqfile):
         abort(404)
