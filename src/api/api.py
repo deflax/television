@@ -289,10 +289,10 @@ def video_download_route(video_file):
     logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
     return send_file(reqfile, as_attachment=True, download_name=file_name)
 
-@app.route("/video/watch/<file_name_no_extension>", methods=['GET'])
-def video_watch_route(file_name_no_extension):
-    video_file = f'{file_name_no_extension}.mp4'
-    thumb_file = f'{file_name_no_extension}.png'
+@app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
+def video_watch_route(video_file_no_extension):
+    video_file = f'{video_file_no_extension}.mp4'
+    thumb_file = f'{video_file_no_extension}.png'
     video_path = f'{rec_path}/vod/{video_file}'
     thumb_path = f'{rec_path}/thumb/{thumb_file}'
     if not os.path.exists(video_path):

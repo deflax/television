@@ -7,16 +7,16 @@
     <meta property="og:title" content="DeflaxTV Video">
     <meta property="og:description" content="{{ video_file[:-4] }}">
     <meta property="og:type" content="video.movie">
-    <meta property="og:url" content={{ url_for('video_watch_route', file_name_no_extension=video_file[:-4]) }}>
-    <meta property="og:image" content={{ url_for('thumb_route', file_name=thumb_file) }}>
+    <meta property="og:url" content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4]) }}>
+    <meta property="og:image" content={{ url_for('thumb_route', thumb_file=thumb_file) }}>
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200"> 
     <meta property="og:image:height" content="630">
     <meta name='twitter:card' content='summary_large_image'>
-    <meta name='twitter:site' content={{ url_for('video_watch_route', file_name_no_extension=video_file[:-4]) }}>
+    <meta name='twitter:site' content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4]) }}>
     <meta name='twitter:title' content='DeflaxTV Video'>
     <meta name='twitter:description' content="{{ video_file[:-4] }}">
-    <meta name='twitter:image' content={{ url_for('thumb_route', file_name=thumb_file) }}>
+    <meta name='twitter:image' content={{ url_for('thumb_route', thumb_file=thumb_file) }}>
     <meta name='twitter:image:alt' content="{{ video_file[:-4] }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap/dist/css/bootstrap.min.css" crossorigin="anonymous">
@@ -37,8 +37,8 @@
         <div class="col-xs-12 col-md-1">
         </div>
         <div class="col-xs-12 col-md-10">
-            <video id="player" controls crossorigin playsinline poster="{{ url_for('thumb_route', file_name=thumb_file) }}">
-                <source src="{{ url_for('video_route', file_name=video_file) }}" type="video/mp4">
+            <video id="player" controls crossorigin playsinline poster="{{ url_for('thumb_route', thumb_file=thumb_file) }}">
+                <source src="{{ url_for('video_route', video_file=video_file) }}" type="video/mp4">
             </video>
 	    <button type="button" class="btn btn-lg btn-primary" onclick="history.back()">
                 <i class="fa-solid fa-arrow-left"></i> Back
