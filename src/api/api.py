@@ -230,6 +230,13 @@ scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
 scheduler.start()
 
 ### Flask ###
+def client_address(req):
+    if req.environ.get('HTTP_X_FORWARDED_FOR') is None:
+        return req.environ['REMOTE_ADDR']
+    else:
+        # if behind a proxy
+        return req.environ['HTTP_X_FORWARDED_FOR']
+
 # Frontend
 @app.route('/', methods=['GET'])
 def root_route():
@@ -268,18 +275,18 @@ def thumb_route(file_name):
 # Video
 @app.route("/video/<file_name>", methods=['GET'])
 def video_route(file_name):
-    reqfile = f'{rec_path}/vod/{file_name}'
+    video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(reqfile):
         abort(404)
-    logger_content.warning(str(reqfile) + ' stream')
+    logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
     return send_file(reqfile, mimetype='video/mp4')
 
 @app.route("/video/download/<file_name>", methods=['GET'])
 def video_download_route(file_name):
-    reqfile = f'{rec_path}/vod/{file_name}'
+    video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(reqfile):
         abort(404)
-    logger_content.warning(str(reqfile) + ' download')
+    logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
     return send_file(reqfile, as_attachment=True, download_name=file_name)
 
 @app.route("/video/watch/<file_name_no_extension>", methods=['GET'])
@@ -292,7 +299,8 @@ def video_watch_route(file_name_no_extension):
         abort(404)
     if not os.path.exists(thumb_path):
         thumb_file = ""
-    logger_content.warning(str(video_path) + ' player')
+    remote_client = request.environ
+    logger_content.warning('[' + client_address(request) + '] player' + str(video_path))
     return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
 
 def create_app():
