@@ -50,7 +50,7 @@ async def on_ready():
 @has_role(worshipper_role_name)
 async def hello(ctx):
     author_name = ctx.author.name
-    await ctx.channel.send(f'hi, `{author_name}` :blush:')
+    await ctx.channel.send(f'hi, {author_name} :blush:')
 
 @hello.error
 async def hello_error(ctx, error):
@@ -88,13 +88,12 @@ async def now(ctx):
 @bot.command(name='rec', help='Start the recorder')
 @has_role(boss_role_name)
 async def rec(ctx):
-    await ctx.channel.send(f'soon...')
+    await ctx.channel.send('soon...')
 
 @rec.error
 async def rec_error(ctx, error):
     if isinstance(error, CheckFailure):
-        author_name = ctx.author.name
-        await ctx.channel.send(f'{author_name} access denied')
+        await ctx.channel.send('access denied')
 
 # Helper functions
 async def query_playhead():
@@ -107,7 +106,7 @@ async def query_playhead():
         logger_discord.error('Cannot connect to the playhead!')
     head_name = playhead['name']
     head_prio = playhead['prio']
-    return f'Now playing {head_name}'
+    return f'now playing {head_name}'
 
 async def query_database():
     global database
