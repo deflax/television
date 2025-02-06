@@ -12,7 +12,10 @@ Multi channel stream setup with Flask REST API for scheduling channels.
 
 4. Set the `ACCOUNT_THUMBPRINT` variable
 
-5. Run the stack using `docker-compose up -d --build --remove-orphans`
+5. Run the stack using:
+<pre>
+docker-compose up -d --build --remove-orphans
+</pre>
 
 6. Issue a certificate:
 <pre>
@@ -22,23 +25,21 @@ docker exec acme.sh --issue -d $CORE_API_HOSTNAME --stateless
 </pre>
 
 7. Install the certificate:
-</pre>
+<pre>
 source variables.env; \
 docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"; \
 docker exec acme.sh --install-cert -d $CORE_API_HOSTNAME --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$CORE_API_HOSTNAME.pem"
 </pre>
 
-8. Reastart haproxy container:
-`docker kill -s USR2 haproxy`
+8. Restart haproxy container:
+<pre>
+docker kill -s USR2 haproxy
+</pre>
 
 9. Set crontab:
-`0 0 1 * * docker exec acme.sh --cron && docker kill -s USR2 haproxy`
+<pre>
+0 0 1 * * docker exec acme.sh --cron && docker kill -s USR2 haproxy
+</pre>
 
 ### Usage
-1. Access the admin panel at `https://stream.example.com/ui`
-2. Access the recordings gallery at `https://tv.example.com/gallery`
-
-### EPG stream priorities
-- prio = 0 - scheduled
-- prio = 1 - live
-- prio = 2 - live and vod recording
+1. Access the admin panel at `https://stream.example.com/ui` to setup the channels that we list in `epg.json`
