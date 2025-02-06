@@ -60,9 +60,9 @@ async def hello_error(ctx, error):
     if isinstance(error, CheckFailure):
         await ctx.channel.send('do I know you?')
 
-@bot.command(name='time', help='Show current time')
+@bot.command(name='time', help='Show current time in UTC')
 async def time(ctx):
-    await ctx.channel.send(f'The time is: `{datetime.now(timezone.utc)} UTC`')
+    await ctx.channel.send(f'The Coordinated Universal Time is `{datetime.now(timezone.utc)}`')
 
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
