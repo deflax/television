@@ -17,11 +17,11 @@
   {
     "name": "Deflax Records",
     "start_at": "now",
-    "prio": 2
+    "prio": 1
   },
   {
     "name": "Deflax Mobile",
     "start_at": "now",
-    "prio": 2
+    "prio": 1
   }
 ]

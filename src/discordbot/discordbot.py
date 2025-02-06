@@ -1,11 +1,12 @@
-import asyncio
-import os
 from datetime import datetime, timezone
+import os
+import asyncio
+import logging
+import subprocess
 import requests
 import discord
 from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import logging
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
@@ -25,6 +26,7 @@ intents.message_content = True
 # Discord client
 bot = Bot(command_prefix=".", intents=intents)
 worshipper_role_name = "worshipper"
+boss_role_name = "bosmang"
 
 # Scheduler
 scheduler = AsyncIOScheduler()
@@ -56,6 +58,10 @@ async def hello_error(ctx, error):
         author_name = ctx.author.name
         await ctx.channel.send(f'do I know you, `{author_name}`?')
 
+@bot.command(name='time', help='Show current time')
+async def time(ctx):
+    await ctx.channel.send(f'The time is: `{datetime.now(timezone.utc)} UTC`')
+
 @bot.command(name='epg', help='Lists scheduled streams')    
 async def epg(ctx):
     global database
@@ -74,16 +80,24 @@ async def epg(ctx):
             await ctx.channel.send(f'```{live_list}```')
     else:
         await ctx.channel.send('```Empty.```')
- 
-@bot.command(name='time', help='Show current time')
-async def time(ctx):
-    await ctx.channel.send(f'The time is: `{datetime.now(timezone.utc)} UTC`')
     
 @bot.command(name='now', help='Displays whats playing right now')
 async def now(ctx):
     head = await query_playhead()
     await ctx.channel.send(head)
 
+@bot.command(name='rec', help='Start the recorder')
+@has_role(boss_role_name)
+async def rec(ctx):
+    await ctx.channel.send(f'soon...')
+
+@rec.error
+async def rec_error(ctx, error):
+    if isinstance(error, CheckFailure):
+        author_name = ctx.author.name
+        await ctx.channel.send(f'{author_name} access denied')
+
+# Helper functions
 async def query_playhead():
     head_url = f'https://{scheduler_hostname}/playhead'
     if requests.get(head_url).status_code == 200:
