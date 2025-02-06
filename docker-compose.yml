@@ -36,8 +36,6 @@ services:
     restart: "no"
 
   restreamer:
-    depends_on:
-      - "haproxy"
     image: datarhei/restreamer:2.12.0
     env_file:
        - "variables.env"
