@@ -24,8 +24,8 @@ docker exec acme.sh --issue -d $CORE_API_HOSTNAME --stateless
 7. Install the certificate:
 </pre>
 source variables.env; \
-docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem" \
-docker exec acme.sh --install-cert -d $CORE_API_HOSTNAME --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$CORE_API_HOSTNAME.pem" \
+docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"; \
+docker exec acme.sh --install-cert -d $CORE_API_HOSTNAME --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$CORE_API_HOSTNAME.pem"
 </pre>
 
 8. Reastart haproxy container:
