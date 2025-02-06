@@ -16,7 +16,8 @@ RUN pip3 install -r requirements-pydantic-pin.txt
 RUN pip3 install https://github.com/datarhei/core-client-python/archive/refs/tags/1.1.0.tar.gz
 
 COPY . .
+RUN chmod +x start.sh
 
 EXPOSE 8080
 
-CMD [ "waitress-serve", "--port=8080", "--trusted-proxy", "*", "--trusted-proxy-headers", "forwarded", "--log-untrusted-proxy-headers", "--threads", "16", "--call", "api:create_app" ]
+ENTRYPOINT [ "start.sh" ]
