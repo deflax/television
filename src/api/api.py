@@ -267,27 +267,27 @@ def database_route():
 # Images
 @app.route("/thumb/<thumb_file>", methods=['GET'])
 def thumb_route(thumb_file):
-    reqfile = f'{rec_path}/thumb/{thumb_file}'
-    if not os.path.exists(reqfile):
+    thumb_path = f'{rec_path}/thumb/{thumb_file}'
+    if not os.path.exists(thumb_path):
         abort(404)
-    return send_file(reqfile, mimetype='image/png')
+    return send_file(thumb_path, mimetype='image/png')
 
 # Video
 @app.route("/video/<video_file>", methods=['GET'])
 def video_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
-    if not os.path.exists(reqfile):
+    if not os.path.exists(video_path):
         abort(404)
     logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
-    return send_file(reqfile, mimetype='video/mp4')
+    return send_file(video_path, mimetype='video/mp4')
 
 @app.route("/video/download/<video_file>", methods=['GET'])
 def video_download_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
-    if not os.path.exists(reqfile):
+    if not os.path.exists(video_path):
         abort(404)
     logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
-    return send_file(reqfile, as_attachment=True, download_name=file_name)
+    return send_file(video_path, as_attachment=True, download_name=video_file)
 
 @app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
 def video_watch_route(video_file_no_extension):
