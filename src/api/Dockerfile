@@ -19,4 +19,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD [ "waitress-serve", "--port=8080", "--trusted-proxy='*'", "--trusted-proxy-headers='x-forwarded-for x-forwarded-proto x-forwarded-port'", "--log-untrusted-proxy-headers", "--threads=16", "--call", "api:create_app" ]
+CMD [ "waitress-serve", "--port=8080", "--trusted-proxy='*'", "--trusted-proxy-headers=x-forwarded-for", "--log-untrusted-proxy-headers", "--threads=16", "--call", "api:create_app" ]
