@@ -1,5 +1,3 @@
-version: '3'
-
 networks:
   net:
     external: false
@@ -38,6 +36,8 @@ services:
     restart: "no"
 
   restreamer:
+    depends_on:
+      - "haproxy"
     image: datarhei/restreamer:2.12.0
     env_file:
        - "variables.env"
@@ -75,6 +75,8 @@ services:
     image: tv-discordbot:latest
     env_file:
       - "variables.env"
+    volumes:
+      - "./data/recorder:/recordings"
     restart: unless-stopped
     networks:
       - net
@@ -82,8 +84,8 @@ services:
       - meta.role=discordbot
 
   icecast:
-    #depends_on:
-    #  - "radiorelay"
+    depends_on:
+      - "api"
     build: ./src/icecast
     image: tv-icecast:latest
     env_file:

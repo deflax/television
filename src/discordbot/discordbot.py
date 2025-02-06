@@ -7,6 +7,7 @@ import requests
 import discord
 from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from ffmpeg import FFmpeg, Progress
 
 # Read env variables
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
@@ -37,6 +38,8 @@ log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
 logger_discord.setLevel(log_level)
 
 database = {}
+
+rec_path = "/recordings"
 rechead = {}
 
 # Bot functions
@@ -204,6 +207,101 @@ async def announce_live_channel(stream_name, stream_meta):
     if live_channel_id != 0:
         live_channel = bot.get_channel(int(live_channel_id))
         await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_meta}')
+
+# Execute recorder
+async def exec_recorder(stream_id, stream_name, stream_hls_url):
+    global rechead
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S-%f")
+    video_file = current_datetime + ".mp4"
+    thumb_file = current_datetime + ".png"
+    if rechead != {}:
+        logger_job.error('Recorder is already started. Refusing to start another job.')
+    else:
+        logger_job.warning(f'Recording {video_file} started.')
+        rechead = { 'id': stream_id,
+                    'name': stream_name,
+                    'video': video_file,
+                    'thumb': thumb_file }
+        video_output = f'{rec_path}/live/{video_file}'
+        thumb_output = f'{rec_path}/live/{thumb_file}'
+        
+        try:
+            # Record a mp4 file
+            ffmpeg = (
+                FFmpeg()
+                .option("y")
+                .input(stream_hls_url)
+                .output(video_output,
+                        {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
+                ))
+            @ffmpeg.on("progress")
+            def on_progress(progress: Progress):
+                print(progress)
+            ffmpeg.execute()
+            logger_job.warning(f'Recording of {video_file} finished.')
+
+        except Exception as joberror:
+            logger_job.error(f'Recording of {video_file} failed!')
+            logger_job.error(joberror)
+
+        else:
+            # Show Metadata
+            ffmpeg_metadata = (
+                FFmpeg(executable="ffprobe")
+                .input(video_output,
+                       print_format="json",
+                       show_streams=None,)
+            )
+            media = json.loads(ffmpeg_metadata.execute())
+            logger_job.warning(f"# Video")
+            logger_job.warning(f"- Codec: {media['streams'][0]['codec_name']}")
+            logger_job.warning(f"- Resolution: {media['streams'][0]['width']} X {media['streams'][0]['height']}")
+            logger_job.warning(f"- Duration: {media['streams'][0]['duration']}")
+            logger_job.warning(f"# Audio")
+            logger_job.warning(f"- Codec: {media['streams'][1]['codec_name']}")
+            logger_job.warning(f"- Sample Rate: {media['streams'][1]['sample_rate']}")
+            logger_job.warning(f"- Duration: {media['streams'][1]['duration']}")
+        
+            thumb_skip_time = float(media['streams'][0]['duration']) // 2
+            thumb_width = media['streams'][0]['width'] 
+    
+            # Generate thumbnail image from the recorded mp4 file
+            ffmpeg_thumb = (
+                FFmpeg()
+                .input(video_output, ss=thumb_skip_time)
+                .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
+            )
+            ffmpeg_thumb.execute()
+            logger_job.warning(f'Thumbnail {thumb_file} created.')
+        
+            # When ready, move the recorded from the live dir to the archives and reset the rec head
+            os.rename(f'{video_output}', f'{rec_path}/vod/{video_file}')
+            os.rename(f'{thumb_output}', f'{rec_path}/thumb/{thumb_file}')
+
+        finally:
+            # Reset the rechead
+            time.sleep(5)
+            rechead = {}
+            logger_job.warning(f'Rechead reset.')
+
+# HLS Converter
+async def hls_converter():
+    directory = f'{rec_path}/vod/'
+    try:
+        # Check if the directory exists
+        if not os.path.exists(directory):
+            raise FileNotFoundError(f"The directory '{directory}' does not exist.")
+            
+        # Iterate through all entries in the directory
+        for entry in os.listdir(directory):
+            file_path = os.path.join(directory, entry)
+            if entry.lower().endswith('.mp4'):
+                input_file = file_path
+                break
+        #logger_job.warning(f'{input_file} found. Converting to HLS...')
+        
+    except Exception as e:
+        logger_job.error(e)
 
 # Run the bot with your token
 asyncio.run(bot.run(bot_token))
