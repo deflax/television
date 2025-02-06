@@ -299,7 +299,6 @@ def video_watch_route(video_file_no_extension):
         abort(404)
     if not os.path.exists(thumb_path):
         thumb_file = ""
-    remote_client = request.environ
     logger_content.warning('[' + client_address(request) + '] player' + str(video_path))
     return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
 
