@@ -261,7 +261,7 @@ def hls_converter():
             if entry.lower().endswith('.mp4'):
                 input_file = file_path
                 break
-        logger_job.warning(f'{input_file} found. Converting to HLS...')
+        #logger_job.warning(f'{input_file} found. Converting to HLS...')
         
     except Exception as e:
         logger_job.error(e)
