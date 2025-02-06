@@ -11,7 +11,7 @@ from flask.helpers import send_file, send_from_directory
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 
-api = Flask(__name__)
+app = Flask(__name__)
 scheduler = BackgroundScheduler()
 
 # Log handlers
@@ -238,7 +238,7 @@ def client_address(req):
         return req.environ['HTTP_X_FORWARDED_FOR']
 
 # Frontend
-@api.route('/', methods=['GET'])
+@app.route('/', methods=['GET'])
 def root_route():
     # Get a list of video files and thumbnails
     video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
@@ -254,18 +254,18 @@ def root_route():
     return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
 
 # JSON Data
-@api.route('/playhead', methods=['GET'])
+@app.route('/playhead', methods=['GET'])
 def playhead_route():
     global playhead
     return jsonify(playhead)
 
-@api.route('/database', methods=['GET'])
+@app.route('/database', methods=['GET'])
 def database_route():
     global database
     return jsonify(database)
 
 # Images
-@api.route("/thumb/<thumb_file>", methods=['GET'])
+@app.route("/thumb/<thumb_file>", methods=['GET'])
 def thumb_route(thumb_file):
     thumb_path = f'{rec_path}/thumb/{thumb_file}'
     if not os.path.exists(thumb_path):
@@ -273,7 +273,7 @@ def thumb_route(thumb_file):
     return send_file(thumb_path, mimetype='image/png')
 
 # Video
-@api.route("/video/<video_file>", methods=['GET'])
+@app.route("/video/<video_file>", methods=['GET'])
 def video_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(video_path):
@@ -281,7 +281,7 @@ def video_route(video_file):
     logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
     return send_file(video_path, mimetype='video/mp4')
 
-@api.route("/video/download/<video_file>", methods=['GET'])
+@app.route("/video/download/<video_file>", methods=['GET'])
 def video_download_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
     if not os.path.exists(video_path):
@@ -289,7 +289,7 @@ def video_download_route(video_file):
     logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
     return send_file(video_path, as_attachment=True, download_name=video_file)
 
-@api.route("/video/watch/<video_file_no_extension>", methods=['GET'])
+@app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
 def video_watch_route(video_file_no_extension):
     video_file = f'{video_file_no_extension}.mp4'
     thumb_file = f'{video_file_no_extension}.png'
@@ -302,5 +302,5 @@ def video_watch_route(video_file_no_extension):
     logger_content.warning('[' + client_address(request) + '] player' + str(video_path))
     return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
 
-def create_api():
-   return api
+def create_app():
+   return app
