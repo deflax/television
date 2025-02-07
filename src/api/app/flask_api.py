@@ -251,6 +251,7 @@ def root_route():
     # Extract file names from sorted paths
     sorted_thumbnails = [os.path.basename(file) for file in sorted_thumbnails_paths]
     thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
+    logger_content.warning('[' + client_address(request) + '] index /')
     return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
 
 # JSON Data
@@ -270,6 +271,7 @@ def thumb_route(thumb_file):
     thumb_path = f'{rec_path}/thumb/{thumb_file}'
     if not os.path.exists(thumb_path):
         abort(404)
+    logger_content.warning('[' + client_address(request) + '] thumb' + str(thumb_path))
     return send_file(thumb_path, mimetype='image/png')
 
 # Video
