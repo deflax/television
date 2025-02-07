@@ -42,9 +42,6 @@
         <li class="nav-item">
           <a class="nav-link" href="#stream">Stream <i class="fas fa-satellite-dish" aria-hidden="true"></i></a>
         </li>
-        <li class="nav-item d-none d-lg-block">
-          <a class="nav-link" href="#playlists">Playlists <i class="fa fa-hard-drive" aria-hidden="true"></i></a>
-        </li>
         <li class="nav-item">
           <a class="nav-link" href="#archive">Archive <i class="fa fa-hard-drive" aria-hidden="true"></i></a>
         </li>
@@ -221,30 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
-
-<div class="content-container bg-dark text-white">
-<div id="playlists" class="container-fluid p-3 bg-dark text-white">
-  <div class="row">
-    <div class="col-md-1 d-none d-md-block">
-    </div>
-      <div class="col-12 col-md-5 d-none d-lg-block">
-        <div class="content">
-          <iframe width="100%" height="480" src="https://www.youtube.com/embed/videoseries?si=RdMNZq4hYudlCW37&amp;list=PLVB9xwlHyW_LhxubZ9HL8wzx1mmDNBj0z" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-        </div>
-        <h3>Records</h3>
-      </div>
-      <div class="col-12 col-md-5 d-none d-lg-block">
-        <div class="content">
-          <iframe width="100%" height="480" src="https://www.youtube.com/embed/videoseries?si=SPAsQfxoya_Jeurd&amp;list=PLVB9xwlHyW_LWz1KEmhxXhGbypcpcdHM3" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-        <h3>Digital</h3>
-      </div>
-    </div>
-    <div class="col-md-1 d-none d-md-block">
-    </div>
-  </div>
-</div>
-</div>
-
 <div class="content-container bg-dark text-white">
 <div id="archive" class="container-fluid p-3 bg-dark text-white">
   <div class="row">
@@ -252,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <div class="col-12 col-lg-10">
       <div class="content">
-	<div class="gallery">
+	      <div class="gallery">
           {% for thumbnail in thumbnails %}
           <div class="gallery-item">
               <a href="{{ url_for('video_watch_route', video_file_no_extension=thumbnail[:-4]) }}" class="image-link">
@@ -266,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </a>
           </div>
           {% endfor %}
-	</div>
+	      </div>
       </div>
     </div>
     <div class="col-md-1 d-none d-md-block">
