@@ -90,7 +90,7 @@ async def now(ctx):
     playhead = await query_playhead()
     stream_name = playhead['name']
     stream_prio = playhead['prio']
-    await ctx.channel.send(f'Now playing {stream_name} (prio={stream_prio})')
+    await ctx.channel.send(f'Now playing {stream_name})')
 
 @bot.command(name='rec', help='Start the recorder')
 @has_role(boss_role_name)
@@ -135,7 +135,7 @@ async def query_playhead():
             response = await client.get(head_url)
             playhead = response.json()
             head = playhead['head']
-            logger_discord.info(f'Playhead at {head}') 
+            logger_discord.info(f'Playhead is at {head}') 
     except Exception as e:
         logger_discord.error('Cannot connect to the playhead!')
         logger_discord.error(e)
@@ -149,7 +149,7 @@ async def query_database():
         async with httpx.AsyncClient() as client:
             response = await client.get(db_url)
             database = response.json()
-            logger_discord.info(f'Database {database.keys()}') 
+            #logger_discord.info(f'Database {database.keys()}') 
     except Exception as e:
         logger_discord.error('Cannot connect to the database!')
         logger_discord.error(e)
