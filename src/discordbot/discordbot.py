@@ -125,12 +125,15 @@ async def stop_error(ctx, error):
 
 async def query_playhead():
     head_url = f'https://{scheduler_hostname}/playhead'
-    if requests.get(head_url).status_code == 200:
+    try:
+        requests.get(head_url).status_code == 200:
         response = requests.get(head_url)
         response.raise_for_status()
         playhead = response.json()
-    else:
+        logger_discord.info(f'Querying playhead at {head_url}')
+    except Exception as e:
         logger_discord.error('Cannot connect to the playhead!')
+        logger_discord.error(e)
     return playhead
 
 async def query_database():
