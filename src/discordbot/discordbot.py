@@ -44,9 +44,11 @@ rec_path = "/recordings"
 # Bot functions
 @bot.event
 async def on_ready():
-    # Schedule a database update
-    scheduler.add_job(func=query_database, trigger='interval', seconds=30, id='query_database') 
     scheduler.start()
+
+    # Schedule a database update
+    scheduler.add_job(func=query_database, trigger='interval', seconds=30, id='query_database')
+    scheduler.get_job('query_database').modify(next_run_time=datetime.now())
     logger_discord.info(scheduler.print_jobs())
       
 @bot.command(name='hello', help='Say hello to the bot')
