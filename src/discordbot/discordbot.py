@@ -214,7 +214,7 @@ async def exec_recorder(playhead):
             ))
         @ffmpeg.on("progress")
         def on_progress(progress: Progress):
-            print(progress)
+            logger_discord.info(progress)
         ffmpeg.execute()
         logger_discord.info(f'Recording of {video_file} finished.')
 
