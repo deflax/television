@@ -126,7 +126,7 @@ async def stop_error(ctx, error):
 async def query_playhead():
     head_url = f'https://{scheduler_hostname}/playhead'
     try:
-        requests.get(head_url).status_code == 200:
+        #requests.get(head_url).status_code == 200
         response = requests.get(head_url)
         response.raise_for_status()
         playhead = response.json()
