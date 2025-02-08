@@ -127,8 +127,7 @@ async def query_playhead():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(head_url)
-            playhead = response.json()
-            logger_discord.info(f'Querying playhead at {head_url}')
+            playhead = response.json()      
     except Exception as e:
         logger_discord.error('Cannot connect to the playhead!')
         logger_discord.error(e)
@@ -139,13 +138,9 @@ async def query_database():
     global database
     db_url = f'https://{scheduler_hostname}/database'
     try:
-        if requests.get(db_url).status_code == 200:
-            response = requests.get(db_url)
-            response.raise_for_status()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(db_url)
             database = response.json()
-        else:
-            logger_discord.error('Cannot connect to the database!')
-            return
     except Exception as e:
         logger_discord.error('Cannot connect to the database!')
         logger_discord.error(e)
