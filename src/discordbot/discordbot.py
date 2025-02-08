@@ -47,6 +47,7 @@ async def on_ready():
     # Schedule a database update
     scheduler.add_job(func=query_database, trigger='interval', seconds=30, id='query_database') 
     scheduler.start()
+    scheduler.print_jobs()
       
 @bot.command(name='hello', help='Say hello to the bot')
 @has_role(worshipper_role_name)
@@ -99,6 +100,7 @@ async def rec(ctx):
     if scheduler.get_job('recorder') is None:
         await ctx.channel.send(f'Recording from {stream_name} (prio={stream_prio})')
         scheduler.add_job(func=exec_recorder, id='recorder', args=(playhead))
+        scheduler.print_jobs()
     else:
         await ctx.channel.send(f'Recorder is busy!')
 
@@ -114,6 +116,7 @@ async def stop(ctx):
     if scheduler.get_job('recorder') is not None:
         await ctx.channel.send(f'Shutting down recorder')
         scheduler.remove_job('recorder')
+        scheduler.print_jobs()
     else:
         await ctx.channel.send(f'Recorder is stopped.')
 
@@ -165,6 +168,7 @@ async def query_database():
                 logger_discord.info(f'{stream_name} live stream detected!')
                 scheduler.add_job(func=announce_live_channel, trigger='interval', minutes=int(live_channel_update), id='announce_live_channel', args=(stream_name, stream_meta))
                 scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
+                scheduler.print_jobs()
                 return
             else:
                 # Exit since we already have a live announcement job
@@ -173,6 +177,7 @@ async def query_database():
     # Cleanup the announce job
     if scheduler.get_job('announce_live_channel') is not None:
         scheduler.remove_job('announce_live_channel')
+        scheduler.print_jobs()
         if live_channel_id != 0:
             live_channel = bot.get_channel(int(live_channel_id))
             await live_channel.send(f'{stream_name} is offline.')
