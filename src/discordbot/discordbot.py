@@ -99,7 +99,7 @@ async def rec(ctx):
     # Check if the recorder job already exists
     if scheduler.get_job('recorder') is None:
         await ctx.channel.send(f'Recording from {stream_name} (prio={stream_prio})')
-        scheduler.add_job(func=recorder, id='recorder', args=(playhead))
+        scheduler.add_job(func=exec_recorder, id='recorder', args=(playhead))
     else:
         await ctx.channel.send(f'Recorder is busy!')
 
