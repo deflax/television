@@ -87,8 +87,7 @@ async def now(ctx):
     playhead = await query_playhead()
     stream_name = playhead['name']
     stream_prio = playhead['prio']
-    return f'Now playing {stream_name} (prio={stream_prio})'
-    await ctx.channel.send(head)
+    await ctx.channel.send(f'Now playing {stream_name} (prio={stream_prio})')
 
 @bot.command(name='rec', help='Start the recorder')
 @has_role(boss_role_name)
