@@ -44,8 +44,8 @@ rec_path = "/recordings"
 # Bot functions
 @bot.event
 async def on_ready():
-    # Schedule a database update to run every 5 seconds
-    scheduler.add_job(func=query_database, trigger='interval', seconds=5, id='query_database') 
+    # Schedule a database update
+    scheduler.add_job(func=query_database, trigger='interval', seconds=30, id='query_database') 
     scheduler.start()
       
 @bot.command(name='hello', help='Say hello to the bot')
@@ -142,7 +142,7 @@ async def query_database():
         async with httpx.AsyncClient() as client:
             response = await client.get(db_url)
             database = response.json()
-            logger_discord.info(f'Database items {database.keys()}') 
+            logger_discord.info(f'Database {database.keys()}') 
     except Exception as e:
         logger_discord.error('Cannot connect to the database!')
         logger_discord.error(e)
