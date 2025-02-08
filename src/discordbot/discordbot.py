@@ -3,7 +3,7 @@ import os
 import asyncio
 import logging
 import subprocess
-import requests
+import httpx
 import discord
 from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -126,13 +126,10 @@ async def stop_error(ctx, error):
 async def query_playhead():
     head_url = f'https://{scheduler_hostname}/playhead'
     try:
-        if requests.get(head_url).status_code == 200:
-            response = requests.get(head_url)
-            response.raise_for_status()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(head_url)
             playhead = response.json()
             logger_discord.info(f'Querying playhead at {head_url}')
-        else:
-            logger_discord.error('Cannot connect to the playhead!')
     except Exception as e:
         logger_discord.error('Cannot connect to the playhead!')
         logger_discord.error(e)
