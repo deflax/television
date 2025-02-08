@@ -40,6 +40,7 @@ logger_discord.setLevel(log_level)
 database = {}
 
 rec_path = "/recordings"
+recorder = False
 
 # Bot functions
 @bot.event
@@ -94,15 +95,16 @@ async def now(ctx):
 @bot.command(name='rec', help='Start the recorder')
 @has_role(boss_role_name)
 async def rec(ctx):
-    playhead = await query_playhead()
-    stream_name = playhead['name']
-    stream_prio = playhead['prio']
+    global recorder
     # Check if the recorder job already exists
-    if scheduler.get_job('recorder') is None:
-        scheduler.add_job(func=exec_recorder, id='recorder', args=playhead)
-        await ctx.channel.send(f'Recording from {stream_name} (prio={stream_prio})')
+    if recorder:
+        await ctx.channel.send(f'Recorder is busy!')    
     else:
-        await ctx.channel.send(f'Recorder is busy!')
+        playhead = await query_playhead()
+        stream_name = playhead['name']
+        recorder = True
+        await ctx.channel.send(f'Recording from {stream_name}...')
+        await exec_recorder(playhead)
 
 @rec.error
 async def rec_error(ctx, error):
@@ -112,12 +114,14 @@ async def rec_error(ctx, error):
 @bot.command(name='stop', help='Stop the recorder')
 @has_role(boss_role_name)
 async def stop(ctx):
+    global recorder
     # Check if the recorder job already exists
-    if scheduler.get_job('recorder') is not None:
-        await ctx.channel.send(f'Shutting down recorder')
-        scheduler.remove_job('recorder')
+    if recorder:
+        await ctx.channel.send(f'Shutting down recorder...')
+        # kill any process currently running
+        recorder = False
     else:
-        await ctx.channel.send(f'Recorder is stopped.')
+        await ctx.channel.send(f'Recorder is already stopped.')
 
 @stop.error
 async def stop_error(ctx, error):
