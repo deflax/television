@@ -159,9 +159,6 @@ async def query_database():
     if database == {}:
         logger_discord.error('Database is empty!')
         return
-
-    # List jobs
-    logger_discord.info(scheduler.print_jobs())
     
     # Search for live streams and announce them
     for key, value in database.items():
