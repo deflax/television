@@ -2,8 +2,8 @@
 
 set -e
 
-# If there's a prestart.sh script in the /app directory, run it before starting
-PRE_START_PATH=/app/prestart.sh
+# If there's a init.sh script in the /app directory, run it before starting
+PRE_START_PATH=/app/init.sh
 if [ -f $PRE_START_PATH ] ; then
     . "$PRE_START_PATH"
 else
