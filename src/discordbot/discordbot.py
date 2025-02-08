@@ -127,7 +127,8 @@ async def query_playhead():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(head_url)
-            playhead = response.json()      
+            playhead = response.json()
+            logger_discord.info(f'Playhead at {playhead['head']}') 
     except Exception as e:
         logger_discord.error('Cannot connect to the playhead!')
         logger_discord.error(e)
@@ -141,6 +142,7 @@ async def query_database():
         async with httpx.AsyncClient() as client:
             response = await client.get(db_url)
             database = response.json()
+            logger_discord.info(f'Database items {database.keys()}') 
     except Exception as e:
         logger_discord.error('Cannot connect to the database!')
         logger_discord.error(e)
