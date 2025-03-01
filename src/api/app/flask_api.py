@@ -52,6 +52,7 @@ def get_core_process_details(client, process_id):
     
 # Process a running channel
 def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
+    global epg
     if stream_id in database:
         # Skip learned channels
         return
@@ -167,8 +168,7 @@ def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
 # Datarhei CORE API sync
 def core_api_sync():
     global database
-    global epg
-
+    
     new_ids = []
     try:
         process_list = client.v3_process_get_list()
