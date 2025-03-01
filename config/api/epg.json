@@ -16,12 +16,17 @@
   },
   {
     "name": "IwayHigh",
-    "start_at": "17",
+    "start_at": "14",
+    "prio": 0
+  },
+  {
+    "name": "Makao",
+    "start_at": "18",
     "prio": 0
   },
   {
     "name": "DTV Minimal Tech",
-    "start_at": "21",
+    "start_at": "20",
     "prio": 0
   },
   {
