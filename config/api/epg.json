@@ -11,7 +11,12 @@
   },
   {
     "name": "IwayHigh",
-    "start_at": "22",
+    "start_at": "17",
+    "prio": 0
+  },
+  {
+    "name": "FreeRave",
+    "start_at": "21",
     "prio": 0
   },
   {
