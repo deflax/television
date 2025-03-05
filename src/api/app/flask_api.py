@@ -61,7 +61,14 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
         except Exception as e:
             # Skip channels without readable meta
             return
-        logger_job.warning(f'{stream_id} ({stream_name}) has been registered with {api_settings} ')
+        logger_job.warning(f'{stream_id} ({stream_name}) found. {api_settings} ')
+
+        # Check whether we have stream details
+        try:
+            stream_details = api_settings.get('details')
+            logger_job.warning(f'Details found: {stream_details}')
+        except Exception as e:
+            stream_details = ""
 
         if stream_start == "now":
             # Check if the stream_hls_url returns 200
@@ -83,7 +90,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
                 func=exec_stream, trigger='cron', hour=stream_start, jitter=60,
                 id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
             )
-        database.update({stream_id: {'name': stream_name, 'start_at': stream_start, 'meta': stream_description, 'src': stream_hls_url}})
+        database.update({stream_id: {'name': stream_name, 'start_at': stream_start, 'details': stream_details, 'src': stream_hls_url}})
 
         # Bootstrap the playhead if its still empty.
         if playhead == {}:
