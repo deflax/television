@@ -1,6 +1,7 @@
 import time
 import sys
 import os
+import ast
 import subprocess
 import logging
 import json
@@ -38,34 +39,33 @@ database = {}
 playhead = {}
 prio = 0
 
-with open('/config/epg.json', 'r') as epg_json:
-    epg = json.load(epg_json)
-epg_json.close()
-
 # Helper function to get process details
 def get_core_process_details(client, process_id):
     try:
         return client.v3_process_get(id=process_id)
-    except Exception as err:
-        logger_job.error(f'Error getting process details for {process_id}: {err}')
+    except Exception as e:
+        logger_job.error(f'Error getting process details for {process_id}: {e}')
         return None
     
 # Process a running channel
 def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
-    global epg
     if stream_id in database:
         # Skip learned channels
         return
     else:
-        epg_result = find_event_entry(epg, stream_name)
-        stream_start = epg_result.get('start_at')
-        stream_prio = epg_result.get('prio', 0)
-        if stream_start == "never":
-            # Skip channels that are set to never start automatically
+        try:
+            # Get the channel settings from the stream description
+            api_settings = ast.literal_eval(stream_description)
+            stream_start = api_settings.get('start_at')
+            stream_prio = api_settings.get('prio', 0)
+        except Exception as e:
+            logger_job.error(e)
+            logger_job.warning(f'Skipping channel with meta: {api_settings}')
             return
         logger_job.warning(f'{stream_id} ({stream_name}) has been registered.')
         if stream_start == "now":
             logger_job.warning("Stream should start now. Preparing")
+
             # Check if the stream_hls_url returns 200
             req_counter = 0
             while True:
@@ -87,6 +87,7 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
                 id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
             )
         database.update({stream_id: {'name': stream_name, 'start_at': stream_start, 'meta': stream_description, 'src': stream_hls_url}})
+
         # Bootstrap the playhead if its still empty.
         if playhead == {}:
             fallback = fallback_search(database)
@@ -101,8 +102,8 @@ def remove_channel_from_database(database, scheduler, stream_id, stream_name, st
         database.pop(stream_id)
         try:
             scheduler.remove_job(stream_id)
-        except Exception as joberror:
-            logger_job.error(joberror)
+        except Exception as e:
+            logger_job.error(e)
         # Handle the situation where we remove an stream that is currently playing
         if stream_id == playhead['id']:
             logger_job.warning(f'{stream_id} was playing.')
@@ -137,13 +138,6 @@ def fallback_search(database):
                            }
                 return fallback
 
-# Find a matching stream name within epg.json
-def find_event_entry(epg, stream_name):
-    for entry in epg:
-        if "name" in entry and entry["name"] == stream_name:
-            return {"start_at": entry.get("start_at"), "prio": entry.get("prio")}
-    return None
-
 # Update the playhead
 def update_playhead(stream_id, stream_name, stream_prio, stream_hls_url):
     global playhead
@@ -172,8 +166,8 @@ def core_api_sync():
     new_ids = []
     try:
         process_list = client.v3_process_get_list()
-    except Exception as err:
-        logger_job.error(f'Error getting process list: {err}')
+    except Exception as e:
+        logger_job.error(f'Error getting process list: {e}')
         return True
     for process in process_list:
         try:
@@ -183,7 +177,7 @@ def core_api_sync():
             stream_id = get_process.reference
             meta = get_process.metadata
             state = get_process.state
-        except Exception as err:
+        except Exception as e:
             logger_job.debug(process)
             continue
         
@@ -215,9 +209,9 @@ try:
     client = Client(base_url='https://' + core_hostname, username=core_username, password=core_password)
     logger_api.warning('Logging in to Datarhei Core API ' + core_username + '@' + core_hostname)
     client.login()
-except Exception as err:
+except Exception as e:
     logger_api.error('Client login error')
-    logger_api.error(err)
+    logger_api.error(e)
     time.sleep(10)
     logger_api.error('Restarting...')
     sys.exit(1)

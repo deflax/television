@@ -58,7 +58,6 @@ services:
     env_file:
       - "variables.env"
     volumes:
-      - "./config/api:/config"
       - "./data/recorder:/recordings"
     restart: unless-stopped
     networks:

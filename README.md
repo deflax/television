@@ -42,4 +42,8 @@ docker kill -s USR2 haproxy
 </pre>
 
 ### Usage
-1. Access the admin panel at `https://stream.example.com/ui` to setup the channels that we list in `epg.json`
+1. Access the admin panel at `https://stream.example.com/ui` to setup the channels that we want to detect
+2. Control the api from the admin panel using json in the Description Metadata of the channel:
+<pre>
+{ "start_at": "21", "prio": 0 }
+</pre>
