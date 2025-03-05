@@ -50,7 +50,7 @@ def get_core_process_details(client, process_id):
 # Process a running channel
 def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
     if stream_id in database:
-        # Skip learned channels
+        # Skip already learned channels
         return
     else:
         try:
@@ -59,12 +59,11 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             stream_start = api_settings.get('start_at')
             stream_prio = api_settings.get('prio', 0)
         except Exception as e:
-            logger_job.error(e)
+            # Skip channels without readable meta
             return
-        logger_job.warning(f'{stream_id} ({stream_name}) has been registered.')
-        if stream_start == "now":
-            logger_job.warning("Stream should start now. Preparing")
+        logger_job.warning(f'{stream_id} ({stream_name}) has been registered with {api_settings} ')
 
+        if stream_start == "now":
             # Check if the stream_hls_url returns 200
             req_counter = 0
             while True:
@@ -80,7 +79,6 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
                     return
             scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
         else:
-            logger_job.warning(f"Stream start hour is set to {stream_start}")
             scheduler.add_job(
                 func=exec_stream, trigger='cron', hour=stream_start, jitter=60,
                 id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
