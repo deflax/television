@@ -39,8 +39,8 @@ video {
 
 .gallery {
     display: grid;
-    grid-gap: 5px;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 480px));
+    grid-gap: 7px;
+    grid-template-columns: repeat(auto-fit, minmax(min(120px, 320px), 1fr));
 }
 
 .gallery .gallery-item {
@@ -48,9 +48,15 @@ video {
     position: relative;
     cursor: pointer;
     box-sizing: border-box;
+    border: solid 1px rgb(132, 4, 217);
     border-radius: 3px;
-    background: rgb(132, 4, 217);
     background: linear-gradient(90deg, rgba(131, 58, 180, 0) 0%, rgba(58, 58, 180, 1) 20%, rgba(132, 4, 217, 1) 90%, rgba(252, 176, 69, 0) 100%);
+}
+
+.gallery .gallery-item:hover img {
+    transform: scale(1.02);
+    -webkit-filter: grayscale(1);
+    filter: grayscale(1);
 }
 
 .gallery img {
@@ -59,12 +65,6 @@ video {
     -webkit-filter: grayscale(0);
     filter: grayscale(0);
     transition: all 100ms ease-out;
-}
-
-.gallery .gallery-item:hover img {
-    transform: scale(1.03);
-    -webkit-filter: grayscale(1);
-    filter: grayscale(1);
 }
 
 .overlay {
