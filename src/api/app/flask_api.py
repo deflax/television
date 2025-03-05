@@ -60,7 +60,6 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             stream_prio = api_settings.get('prio', 0)
         except Exception as e:
             logger_job.error(e)
-            logger_job.warning(f'Skipping channel with meta: {api_settings}')
             return
         logger_job.warning(f'{stream_id} ({stream_name}) has been registered.')
         if stream_start == "now":
