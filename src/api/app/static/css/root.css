@@ -39,7 +39,8 @@ video {
 
 .gallery {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 3fr));
+    grid-gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .gallery .gallery-item {
@@ -47,6 +48,7 @@ video {
     position: relative;
     cursor: pointer;
     box-sizing: border-box;
+    border-radius: 5px;
 }
 
 .gallery img {
@@ -58,7 +60,7 @@ video {
 }
 
 .gallery .gallery-item:hover img {
-    transform: scale(1.05);
+    transform: scale(1.03);
     -webkit-filter: grayscale(1);
     filter: grayscale(1);
 }
