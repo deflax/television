@@ -144,7 +144,7 @@ def update_playhead(stream_id, stream_name, stream_prio, stream_hls_url):
                  "name": stream_name,
                  "prio": stream_prio,
                  "head": stream_hls_url }
-    logger_job.warning(f'Playhead position is: {str(playhead)}')
+    logger_job.warning(f'Playhead: {str(playhead)}')
 
 # Execute stream   
 def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
