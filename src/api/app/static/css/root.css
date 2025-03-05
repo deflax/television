@@ -37,7 +37,7 @@ video {
     scroll-margin-top: 60px;
 }
 
-@media only screen and (max-width: 619px)
+@media only screen and (max-width: 620px)
 {
     .gallery {
         display: grid;
@@ -46,7 +46,7 @@ video {
     }
 }
 
-@media only screen and (min-width: 620px) and (max-width: 1199px)
+@media only screen and (min-width: 620px) and (max-width: 1200px)
 {
     .gallery {
         display: grid;
@@ -56,10 +56,10 @@ video {
 }
 
 @media only screen and (min-width: 1200px) {
-  .gallery {
-    display: grid;
-    grid-gap: 7px;
-    grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+    .gallery {
+        display: grid;
+        grid-gap: 7px;
+        grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
   }
 }
 
