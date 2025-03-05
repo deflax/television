@@ -180,10 +180,6 @@ async def query_database():
     # Cleanup the announce job
     if scheduler.get_job('announce_live_channel') is not None:
         scheduler.remove_job('announce_live_channel')
-        if live_channel_id != 0:
-            live_channel = bot.get_channel(int(live_channel_id))
-            await live_channel.send(f'{stream_name} is offline.')
-        logger_discord.info(f'{stream_name} is offline.')
 
 async def announce_live_channel(stream_name, stream_details):
     if live_channel_id != 0:
