@@ -59,7 +59,7 @@ video {
     .gallery {
         display: grid;
         grid-gap: 7px;
-        grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   }
 }
 
@@ -68,9 +68,9 @@ video {
     position: relative;
     cursor: pointer;
     box-sizing: border-box;
-    border: solid 1px rgb(132, 4, 217);
+    border: solid 3px #cc4b0a;
     border-radius: 5px;
-    background: linear-gradient(90deg, rgba(131, 58, 180, 0) 0%, rgba(58, 58, 180, 1) 20%, rgba(132, 4, 217, 1) 90%, rgba(252, 176, 69, 0) 100%);
+    background: linear-gradient(90deg, #8404d9 0%, #cc4b0a 20%, #8404d9 90%, rgba(252, 176, 69, 0) 100%);
 }
 
 .gallery .gallery-item:hover img {
