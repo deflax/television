@@ -43,8 +43,10 @@
                 <source src="{{ url_for('video_route', video_file=video_file) }}" type="video/mp4">
             </video>
         </div>
-        <div class="col-xs-12 col-md-2"
-            <a href="{{ url_for('root_route') }}" class="image-button">Live Stream</a>
+        <div class="col-xs-12 col-md-2">
+            <button class="btn btn-outline-danger btn-lg">
+                <img src="https://deflax.net/{{ url_for('root_route') }}" width="20" /> Live Stream
+            </button>
         </div>
         <div class="col-xs-12 col-md-1">
         </div>
