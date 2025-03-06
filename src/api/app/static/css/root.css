@@ -68,9 +68,9 @@ video {
     position: relative;
     cursor: pointer;
     box-sizing: border-box;
-    border: solid 3px #cc4b0a;
+    border: solid 3px #000000;
     border-radius: 5px;
-    background: linear-gradient(90deg, #8404d9 0%, #cc4b0a 20%, #8404d9 90%, rgba(252, 176, 69, 0) 100%);
+    background: linear-gradient(90deg, #000000 0%, #3c57df 20%, #8404d9 90%, rgba(252, 176, 69, 0) 100%);
 }
 
 .gallery .gallery-item:hover img {
