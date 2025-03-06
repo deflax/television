@@ -64,11 +64,11 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
         logger_job.warning(f'{stream_id} ({stream_name}) found. {api_settings} ')
 
         # Check whether we have stream details
-        try:
-            stream_details = api_settings.get('details')
-            logger_job.warning(f'Details found: {stream_details}')
-        except Exception as e:
+        stream_details = api_settings.get('details')
+        if stream_details is None:
             stream_details = ""
+        else:
+            logger_job.warning(f'Details found: {stream_details}')
 
         if stream_start == "now":
             # Check if the stream_hls_url returns 200
