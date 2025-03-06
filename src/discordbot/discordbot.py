@@ -48,7 +48,7 @@ async def on_ready():
     scheduler.start()
 
     # Schedule a database update
-    scheduler.add_job(func=query_database, trigger='interval', seconds=30, id='query_database')
+    scheduler.add_job(func=query_database, trigger='interval', seconds=15, id='query_database')
     scheduler.get_job('query_database').modify(next_run_time=datetime.now())
       
 @bot.command(name='hello', help='Say hello to the bot')
@@ -118,7 +118,7 @@ async def stop(ctx):
     # Check if the recorder job already exists
     if recorder:
         await ctx.channel.send(f'Shutting down recorder...')
-        # kill any process currently running
+        # TODO: kill any process currently running
         recorder = False
     else:
         await ctx.channel.send(f'Recorder is already stopped.')
@@ -160,12 +160,13 @@ async def query_database():
         logger_discord.error('Database is empty!')
         return
     
-    # Search for live streams and announce them
+    # Search for streams and announce them
     for key, value in database.items():
         stream_name = value['name']
         stream_start_at = value['start_at']
         stream_details = value['details']
         if stream_start_at == 'now':
+            # Announce live streams
             # Check if the announement job already exists
             if scheduler.get_job('announce_live_channel') is None:
                 # Job doesn't exist, so add it
