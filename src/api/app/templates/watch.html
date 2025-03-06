@@ -42,8 +42,9 @@
             <video id="player" controls crossorigin playsinline poster="{{ url_for('thumb_route', thumb_file=thumb_file) }}">
                 <source src="{{ url_for('video_route', video_file=video_file) }}" type="video/mp4">
             </video>
-	    <button type="button" class="btn btn-lg btn-primary" onclick="history.back()">
-                <i class="fa-solid fa-arrow-left"></i> Back
+            <br />
+            <img src="https://deflax.net/static/images/logo.png" alt="">
+            <a href="{{ url_for('root_route') }}"><i class="fa-solid fa-arrow-left"></i> Live Stream</a>               
             </button>
             </div>
         </div>
