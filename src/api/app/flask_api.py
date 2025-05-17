@@ -272,7 +272,7 @@ def thumb_route(thumb_file):
     logger_content.warning('[' + client_address(request) + '] thumb' + str(thumb_path))
     return send_file(thumb_path, mimetype='image/png')
 
-# Video
+# Video streamer
 @app.route("/video/<video_file>", methods=['GET'])
 def video_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
@@ -281,6 +281,7 @@ def video_route(video_file):
     logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
     return send_file(video_path, mimetype='video/mp4')
 
+# Video download
 @app.route("/video/download/<video_file>", methods=['GET'])
 def video_download_route(video_file):
     video_path = f'{rec_path}/vod/{video_file}'
@@ -289,6 +290,7 @@ def video_download_route(video_file):
     logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
     return send_file(video_path, as_attachment=True, download_name=video_file)
 
+# Video player
 @app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
 def video_watch_route(video_file_no_extension):
     video_file = f'{video_file_no_extension}.mp4'
