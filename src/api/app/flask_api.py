@@ -9,23 +9,16 @@ import requests
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, abort
 from flask.helpers import send_file, send_from_directory
+from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 
 app = Flask(__name__)
 scheduler = BackgroundScheduler()
 
-# Log handlers
-logger_api = logging.getLogger('waitress')
-logger_job = logging.getLogger('apscheduler')
-logger_content = logging.getLogger('content')
-
-log_level = os.environ.get('SCHEDULER_LOG_LEVEL', 'INFO').upper()
-logger_api.setLevel(log_level)
-logger_job.setLevel(log_level)
-logger_content = logging.getLogger('content')
-
 # Variables
+log_level = os.environ.get('FLASKAPI_LOG_LEVEL', 'INFO').upper()
+vod_token = os.environ.get('FLASKAPI_VOD_TOKEN')
 core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
 core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
 core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
@@ -33,6 +26,15 @@ core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
 
 rec_path = "/recordings"
 enable_delay = 24
+
+# Log handlers
+logger_api = logging.getLogger('waitress')
+logger_job = logging.getLogger('apscheduler')
+logger_content = logging.getLogger('content')
+
+logger_api.setLevel(log_level)
+logger_job.setLevel(log_level)
+logger_content = logging.getLogger('content')
 
 # Init
 database = {}
@@ -271,6 +273,28 @@ def thumb_route(thumb_file):
         abort(404)
     logger_content.warning('[' + client_address(request) + '] thumb' + str(thumb_path))
     return send_file(thumb_path, mimetype='image/png')
+
+# Video uploader
+@app.route('/video', methods=['POST'])
+def video_upload():
+    token = request.headers.get("Authorization")
+    if token != "Bearer " + str(vod_token):
+        return "Unauthorized", 401
+    upload_path = f'{rec_path}/vod/'
+    if not os.path.exists(upload_path):
+        abort(404)
+    # Streaming chunks
+    #file = request.files['file']
+    #if file:
+    #    with open('large_file.txt', 'wb') as f:
+    #        for chunk in file.stream:
+    #            f.write(chunk)
+    #    return 'File uploaded successfully'
+    #return 'No file provided', 400
+    file = request.files['file']
+    filename = secure_filename(file.filename)
+    file.save(os.path.join(upload_path, filename))
+    return "File uploaded successfully"
 
 # Video streamer
 @app.route("/video/<video_file>", methods=['GET'])
