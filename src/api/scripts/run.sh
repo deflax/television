@@ -17,3 +17,4 @@ waitress-serve --port=8080 --threads=16 \
 --trusted-proxy='*' --log-untrusted-proxy-headers \
 --trusted-proxy-headers='x-forwarded-for x-forwarded-proto' \
 --call $APP_MODULE
+
