@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta property="og:title" content="DeflaxTV Video">
-    <meta property="og:description" content="{{ video_file[:-4] }}">
+    <meta property="og:title" content="{{ video_file[:-4] }}">
+    <meta property="og:description" content="DeflaxTV">
     <meta property="og:type" content="video.movie">
     <meta property="og:url" content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4]) }}>
     <meta property="og:image" content={{ url_for('thumb_route', thumb_file=thumb_file) }}>
@@ -27,7 +27,7 @@
 	        background-color: #212529;
         }
     </style>
-    <title>DeflaxTV Video Player</title>
+    <title>{{ video_file[:-4] }} - DeflaxTV Player</title>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
 </head>
