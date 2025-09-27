@@ -13,7 +13,7 @@ from ffmpeg import FFmpeg, Progress
 bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
 live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
 live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440)
-scheduler_hostname = os.environ.get('BASE_URL', 'example.com')
+scheduler_hostname = os.environ.get('SERVER_NAME', 'example.com')
 
 # Discord API Intents
 intents = discord.Intents.all()
