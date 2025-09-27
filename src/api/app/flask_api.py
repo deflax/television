@@ -14,6 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 
 app = Flask(__name__)
+app.config['SERVER_NAME'] = os.environ.get('SERVER_NAME')
 scheduler = BackgroundScheduler()
 
 # Variables
