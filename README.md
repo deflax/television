@@ -20,14 +20,14 @@ docker-compose up -d --build --remove-orphans
 6. Issue a certificate:
 <pre>
 source variables.env; \
-docker exec acme.sh --issue -d $BASE_URL --stateless; \
+docker exec acme.sh --issue -d $SERVER_NAME --stateless; \
 docker exec acme.sh --issue -d $CORE_API_HOSTNAME --stateless
 </pre>
 
 7. Install the certificate:
 <pre>
 source variables.env; \
-docker exec acme.sh --install-cert -d $BASE_URL --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$BASE_URL.pem"; \
+docker exec acme.sh --install-cert -d $SERVER_NAME --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$SERVER_NAME.pem"; \
 docker exec acme.sh --install-cert -d $CORE_API_HOSTNAME --reloadcmd "cat \$CERT_KEY_PATH \$CERT_FULLCHAIN_PATH > /certificates/$CORE_API_HOSTNAME.pem"
 </pre>
 
