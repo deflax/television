@@ -15,6 +15,8 @@ from core_client import Client
 
 app = Flask(__name__)
 app.config['SERVER_NAME'] = os.environ.get('SERVER_NAME')
+app.config['PREFERRED_URL_SCHEME'] = 'https'
+
 scheduler = BackgroundScheduler()
 
 # Variables

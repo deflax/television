@@ -27,31 +27,7 @@
 </head>
 
 <body>
-<nav class="navbar fixed-top navbar-dark bg-dark navbar-expand">
-  <div class="container-fluid">
-    <div class="col-lg-1 d-none d-md-block">
-    </div>
-    <a class="navbar-brand" href="#">
-      <img src="static/images/logo.png" alt="" width="40" height="40" class="d-inline-block align-text-center">
-    deflax.net
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-    <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse text-right" id="navbarNav">
-      <ul class="navbar-nav ms-auto flex-nowrap">
-        <li class="nav-item">
-          <a class="nav-link" href="#stream">Stream <i class="fa fa-satellite-dish" aria-hidden="true"></i></a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#archive">Archive <i class="fa fa-file-video" aria-hidden="true"></i></a>
-        </li>
-      </ul>
-    </div>
-    <div class="col-lg-1 d-none d-md-block">
-    </div>
-  </div>
-</nav>
+{% include 'nav.html' %}
 
 <div class="content-container bg-dark text-white">
   <div id="stream" class="container-fluid p-3 bg-dark text-white">
@@ -245,64 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 </div>
 
-<div class="content-container bg-dark text-white">
-<div id="info" class="container-fluid p-3 bg-dark text-white">
-<div class="row">
-  <div class="col-md-1 d-none d-md-block">
-  </div>
-  <div class="col col-xl-2">
-    <div class="content">
-      <h2>Friends</h2>
-	      <p><a href='https://jungletrain.net/' target=_blank><img src="static/images/jtlogo.png" height="64"></a></p>
-	      <p><a href='http://freerave.cz/' target=_blank><img src="static/images/freeravemini.png" height="64"></a></p>
-	      <p><a href='http://iwayhigh.net/' target=_blank>|iway|High</a></p>
-	      <p><a href='https://amoris.sknt.ru/' target=_blank>Anima Amoris</a></p>
-	      <p>You! 🙃</p>
-    </div>
-  </div>
-  <div class="col col-xl-2">
-    <div class="content">
-      <h2>Media</h2>
-      <p><a href='https://youtube.com/@daniel.deflax' target=_blank><img src="static/images/icons8-youtube-96.png"></a></p>
-      <p><a href='https://www.twitch.tv/deflaxtv' target_blank><img src="static/images/icons8-twitch-96.png"></a></p>
-      <p><a href='https://soundcloud.com/deflax' target=_blank><img src="static/images/icons8-soundcloud-96.png"></a></p>
-    </div>
-  </div>
-  <div class="col col-xl-4">
-    <div class="content">
-      <h2>Spam</h2>
-        <p><a href='https://discord.com/invite/KKGtn6GCE3' target=_blank><img src="static/images/icons8-discord-96.png"></a></p>
-        <p><a href='https://instagram.com/daniel.deflax' target=_blank><img src="static/images/icons8-instagram-96.png"></a></p>
-        <p><a href='https://facebook.com/daniel.default' target=_blank><img src="static/images/icons8-facebook-96.png"></a></p>
-    </div>
-  </div>
-  <div class="col col-xl-3">
-    <div class="content">
-      <h2>About</h2>
-<pre>
-  _______________________________
- /|o............................o|
-| |:    .. flax network ..   .. :|
-| |:   ... . .. 2008-{{ now.year }} ....  :|
-| |:      ,-.   _____   ,-.     :|
-| |:     ( `)) [_____] ( `))    :|
-|v|:      `-`   ' ' '   `-`     :|
-|||:      ,______________.      :|
-|||....../::::o::::::o::::\......|
-|^|o..../:::O::::::::::O:::\....o|
-|/`----/--------------------`----|
-`.____/ /====/ /=//=/ /====/_____/
-      `--------------------'
-</pre>
-<p>Icons by <a target="_blank" href="https://icons8.com">Icons8</a></p>
-<p>Everthying you do is a <a href='https://rareboc.org/' target=_blank>balloon</a></p>
-    </div>
-  </div>
-  <div class="col-md-1 d-none d-md-block">
-  </div>
-</div>
-</div>
-</div>
+{% include 'footer.html' %}
 
 </body>
 </html>

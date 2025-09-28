@@ -7,16 +7,16 @@
     <meta property="og:title" content="{{ video_file[:-4] }}">
     <meta property="og:description" content="DeflaxTV">
     <meta property="og:type" content="video.movie">
-    <meta property="og:url" content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4]) }}>
-    <meta property="og:image" content={{ url_for('thumb_route', thumb_file=thumb_file) }}>
+    <meta property="og:url" content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4], _external=True) }}>
+    <meta property="og:image" content={{ url_for('thumb_route', thumb_file=thumb_file, _external=True) }}>
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200"> 
     <meta property="og:image:height" content="630">
     <meta name='twitter:card' content='summary_large_image'>
     <meta name='twitter:site' content='DeflaxTV Video'>
-    <meta name='twitter:title' content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4]) }}>
+    <meta name='twitter:title' content={{ url_for('video_watch_route', video_file_no_extension=video_file[:-4], _external=True) }}>
     <meta name='twitter:description' content="{{ video_file[:-4] }}">
-    <meta name='twitter:image' content={{ url_for('thumb_route', thumb_file=thumb_file) }}>
+    <meta name='twitter:image' content={{ url_for('thumb_route', thumb_file=thumb_file, _external=True) }}>
     <meta name='twitter:image:alt' content="{{ video_file[:-4] }}">
 
     <link rel='shortcut icon' type='image/x-icon' href='/static/images/favicon.ico' />
@@ -45,7 +45,7 @@
         </div>
         <div class="col-xs-12 col-md-2 text-center">
             <a href="{{ url_for('root_route') }}" class="btn btn-outline-danger btn-lg" role="button">
-                <img src="https://deflax.net/static/images/logo.png" width="20" />
+                <img src="/static/images/logo.png" width="20" />
                 Live Stream
             </a>
         </div>
