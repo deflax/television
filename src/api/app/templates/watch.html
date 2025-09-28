@@ -1,6 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
+{% extends 'base.html' %}
+
+{% block metadata %}
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,23 +18,11 @@
     <meta name='twitter:description' content="{{ video_file[:-4] }}">
     <meta name='twitter:image' content={{ url_for('thumb_route', thumb_file=thumb_file, _external=True) }}>
     <meta name='twitter:image:alt' content="{{ video_file[:-4] }}">
+{% endblock %}
 
-    <link rel='shortcut icon' type='image/x-icon' href='/static/images/favicon.ico' />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap/dist/css/bootstrap.min.css" crossorigin="anonymous">
-    <style>
-        body {
-	        background-color: #212529;
-        }
-    </style>
-    <title>{{ video_file[:-4] }} - DeflaxTV Player</title>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/plyr/dist/plyr.min.js" crossorigin="anonymous"></script>
-</head>
-<body>
+{% block title %}▷ {{ video_file[:-4] }} - deflax.net{% endblock %}
 
-{% include 'nav.html' %}
-
+{% block content %}
 <div class="content-container bg-dark text-white">
     <div id="stream" class="container-fluid p-3 bg-dark text-white">
     <div class="row">
@@ -62,8 +50,4 @@
         const player = new Plyr('#player');
     });
 </script>
-
-{% include 'footer.html' %}
-
-</body>
-</html>
+{% endblock %}
