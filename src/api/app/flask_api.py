@@ -329,7 +329,7 @@ def video_watch_route(video_file_no_extension):
     if not os.path.exists(thumb_path):
         thumb_file = ""
     logger_content.warning('[' + client_address(request) + '] player' + str(video_path))
-    return render_template('watch.html', video_file=video_file, thumb_file=thumb_file)
+    return render_template('watch.html', now=datetime.utcnow(), video_file=video_file, thumb_file=thumb_file)
 
 def create_app():
    return app
