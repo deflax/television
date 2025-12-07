@@ -47,3 +47,12 @@ docker kill -s USR2 haproxy
 <pre>
 { "start_at": "21", "prio": 0 }
 </pre>
+3. SRT example url
+<pre>
+srt://SERVERADDR:6000?mode=caller&transtype=live&pkt_size=1316&streamid=STREAM-UUID.stream,mode:publish,token:CHANGEME
+</pre>
+
+4. RTMP example url
+<pre>
+rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
+</pre>
