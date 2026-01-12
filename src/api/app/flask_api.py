@@ -2,62 +2,96 @@ import time
 import sys
 import os
 import ast
-import subprocess
 import logging
-import json
 import requests
 from datetime import datetime
+from typing import Dict, Optional, Any, List
 from flask import Flask, render_template, jsonify, request, abort
-from flask.helpers import send_file, send_from_directory
+from flask.helpers import send_file
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 
-app = Flask(__name__)
-app.config['SERVER_NAME'] = os.environ.get('SERVER_NAME')
-app.config['PREFERRED_URL_SCHEME'] = 'https'
 
-scheduler = BackgroundScheduler()
+# Constants
+DEFAULT_REC_PATH = "/recordings"
+DEFAULT_ENABLE_DELAY = 24
+DEFAULT_CORE_SYNC_PERIOD = 15
+STREAM_ACCESS_RETRY_ATTEMPTS = 15
+STREAM_ACCESS_RETRY_INTERVAL = 6
+FALLBACK_JOB_ID = 'fallback'
+CORE_API_SYNC_JOB_ID = 'core_api_sync'
 
-# Variables
-log_level = os.environ.get('FLASKAPI_LOG_LEVEL', 'INFO').upper()
-vod_token = os.environ.get('FLASKAPI_VOD_TOKEN')
-core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
-core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
-core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
-core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', 15))
+# Supported video file extensions
+VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi')
+THUMBNAIL_EXTENSION = '.png'
 
-rec_path = "/recordings"
-enable_delay = 24
 
-# Log handlers
-logger_api = logging.getLogger('waitress')
-logger_job = logging.getLogger('apscheduler')
-logger_content = logging.getLogger('content')
-
-logger_api.setLevel(log_level)
-logger_job.setLevel(log_level)
-logger_content = logging.getLogger('content')
-
-# Init
-database = {}
-playhead = {}
-prio = 0
-
-# Helper function to get process details
-def get_core_process_details(client, process_id):
-    try:
-        return client.v3_process_get(id=process_id)
-    except Exception as e:
-        logger_job.error(f'Error getting process details for {process_id}: {e}')
-        return None
+class Config:
+    """Application configuration loaded from environment variables."""
     
-# Process a running channel
-def process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url):
-    if stream_id in database:
-        # Skip already learned channels
-        return
-    else:
+    def __init__(self):
+        self.log_level = os.environ.get('FLASKAPI_LOG_LEVEL', 'INFO').upper()
+        self.vod_token = os.environ.get('FLASKAPI_VOD_TOKEN')
+        self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
+        self.core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
+        self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
+        self.core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', DEFAULT_CORE_SYNC_PERIOD))
+        self.rec_path = DEFAULT_REC_PATH
+        self.enable_delay = DEFAULT_ENABLE_DELAY
+        self.server_name = os.environ.get('SERVER_NAME')
+
+
+class LoggerManager:
+    """Manages application loggers."""
+    
+    def __init__(self, log_level: str):
+        self.log_level = log_level
+        self._setup_loggers()
+    
+    def _setup_loggers(self) -> None:
+        """Initialize and configure loggers."""
+        self.api = logging.getLogger('waitress')
+        self.job = logging.getLogger('apscheduler')
+        self.content = logging.getLogger('content')
+        
+        self.api.setLevel(self.log_level)
+        self.job.setLevel(self.log_level)
+        self.content.setLevel(self.log_level)
+
+
+class StreamManager:
+    """Manages stream state, database, and scheduling logic."""
+    
+    def __init__(self, scheduler: BackgroundScheduler, client: Client, config: Config, logger: logging.Logger):
+        self.scheduler = scheduler
+        self.client = client
+        self.config = config
+        self.logger = logger
+        self.database: Dict[str, Dict[str, Any]] = {}
+        self.playhead: Dict[str, Any] = {}
+        self.priority = 0
+    
+    def get_core_process_details(self, process_id: str) -> Optional[Any]:
+        """Get process details from Core API."""
+        try:
+            return self.client.v3_process_get(id=process_id)
+        except Exception as e:
+            self.logger.error(f'Error getting process details for {process_id}: {e}')
+            return None
+    
+    def process_running_channel(
+        self, 
+        stream_id: str, 
+        stream_name: str, 
+        stream_description: str, 
+        stream_hls_url: str
+    ) -> None:
+        """Process and schedule a running channel."""
+        if stream_id in self.database:
+            # Skip already learned channels
+            return
+        
         try:
             # Get the channel settings from the stream description
             api_settings = ast.literal_eval(stream_description)
@@ -65,271 +99,470 @@ def process_running_channel(database, scheduler, stream_id, stream_name, stream_
             stream_prio = api_settings.get('prio', 0)
         except Exception as e:
             # Skip channels without readable meta
+            self.logger.debug(f'Failed to parse stream description for {stream_id}: {e}')
             return
-        logger_job.warning(f'{stream_id} ({stream_name}) found. {api_settings} ')
-
+        
+        self.logger.warning(f'{stream_id} ({stream_name}) found. {api_settings}')
+        
         # Check whether we have stream details
-        stream_details = api_settings.get('details')
-        if stream_details is None:
-            stream_details = ""
-        else:
-            logger_job.warning(f'Details found: {stream_details}')
-
+        stream_details = api_settings.get('details', "")
+        if stream_details:
+            self.logger.warning(f'Details found: {stream_details}')
+        
         if stream_start == "now":
-            # Check if the stream_hls_url returns 200
-            req_counter = 0
-            while True:
-                time.sleep(6)
-                req_counter += 1
-                if requests.get(stream_hls_url).status_code == 200:
-                    logger_job.warning(f'{stream_hls_url} accessible after {req_counter} attempts.')
-                    logger_job.warning(f'Waiting extra {enable_delay} seconds before we initiate the stream...')
-                    time.sleep(enable_delay)
-                    break
-                if req_counter == 15:
-                    logger_job.error(f'Stream {stream_name} cancelled after {req_counter} attempts.')
-                    return
-            scheduler.add_job(func=exec_stream, id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url))
-        else:
-            scheduler.add_job(
-                func=exec_stream, trigger='cron', hour=stream_start, jitter=60,
-                id=stream_id, args=(stream_id, stream_name, stream_prio, stream_hls_url)
+            if not self._wait_for_stream_access(stream_hls_url, stream_name):
+                return
+            self.scheduler.add_job(
+                func=self.exec_stream, 
+                id=stream_id, 
+                args=(stream_id, stream_name, stream_prio, stream_hls_url)
             )
-        database.update({stream_id: {'name': stream_name, 'start_at': stream_start, 'details': stream_details, 'src': stream_hls_url}})
-
-        # Bootstrap the playhead if its still empty.
-        if playhead == {}:
-            fallback = fallback_search(database)
-            scheduler.add_job(func=exec_stream, id='fallback', args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url']))
-
-# Remove channel from the database
-def remove_channel_from_database(database, scheduler, stream_id, stream_name, state):
-    global prio
-    global playhead
-    if stream_id in database:
-        logger_job.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state.exec}')
-        database.pop(stream_id)
-        try:
-            scheduler.remove_job(stream_id)
-        except Exception as e:
-            logger_job.error(e)
-        # Handle the situation where we remove an stream that is currently playing
-        if stream_id == playhead['id']:
-            logger_job.warning(f'{stream_id} was playing.')
-            fallback = fallback_search(database)
-            prio = 0
-            logger_job.warning(f'Source priority is reset to 0')
-            scheduler.add_job(func=exec_stream, id='fallback', args=(fallback['stream_id'], fallback['stream_name'], prio, fallback['stream_hls_url']))          
-
-# Search for a fallback stream
-def fallback_search(database):
-    logger_job.warning('Searching for a fallback job.')
-    current_hour = int(datetime.now().hour)
-    scheduled_hours = []
-    for key, value in database.items():
-        if value['start_at'] == "now" or value['start_at'] == "never":
-            # do not use non-time scheduled streams as fallbacks
-            continue
         else:
-            # append the hours in the working set
-            scheduled_hours.append(int(value['start_at']))
-
-            # convert the scheduled hours to a circular list
-            scheduled_hours = scheduled_hours + [h + 24 for h in scheduled_hours]
-
-            # find the closest scheduled hour
-            closest_hour = min(scheduled_hours, key=lambda x: abs(x - current_hour))
-        for key, value in database.items():
-            if value['start_at'] == str(closest_hour % 24):
-                fallback = { "stream_id": key,
-                             "stream_name": value['name'],
-                             "stream_hls_url": value['src']
-                           }
-                return fallback
-
-# Update the playhead
-def update_playhead(stream_id, stream_name, stream_prio, stream_hls_url):
-    global playhead
-    playhead = { "id": stream_id,
-                 "name": stream_name,
-                 "prio": stream_prio,
-                 "head": stream_hls_url }
-    logger_job.warning(f'Playhead: {str(playhead)}')
-
-# Execute stream   
-def exec_stream(stream_id, stream_name, stream_prio, stream_hls_url):
-    global prio
-    if stream_prio > prio:
-        prio = stream_prio
-        logger_job.warning(f'Source priority is now set to: {prio}')
-        update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
-    elif stream_prio == prio:
-        update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
-    elif stream_prio < prio:
-        logger_job.warning(f'Source with higher priority ({prio}) is blocking. Skipping playhead update.') 
-
-# Datarhei CORE API sync
-def core_api_sync():
-    global database
+            self.scheduler.add_job(
+                func=self.exec_stream, 
+                trigger='cron', 
+                hour=stream_start, 
+                jitter=60,
+                id=stream_id, 
+                args=(stream_id, stream_name, stream_prio, stream_hls_url)
+            )
+        
+        self.database[stream_id] = {
+            'name': stream_name, 
+            'start_at': stream_start, 
+            'details': stream_details, 
+            'src': stream_hls_url
+        }
+        
+        # Bootstrap the playhead if it's still empty
+        if not self.playhead:
+            try:
+                fallback = self.fallback_search()
+                self.scheduler.add_job(
+                    func=self.exec_stream, 
+                    id=FALLBACK_JOB_ID, 
+                    args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url'])
+                )
+            except ValueError as e:
+                self.logger.warning(f'Could not bootstrap playhead: {e}')
     
-    new_ids = []
-    try:
-        process_list = client.v3_process_get_list()
-    except Exception as e:
-        logger_job.error(f'Error getting process list: {e}')
-        return True
-    for process in process_list:
+    def _wait_for_stream_access(self, stream_hls_url: str, stream_name: str) -> bool:
+        """Wait for stream to become accessible."""
+        req_counter = 0
+        while True:
+            time.sleep(STREAM_ACCESS_RETRY_INTERVAL)
+            req_counter += 1
+            try:
+                if requests.get(stream_hls_url).status_code == 200:
+                    self.logger.warning(
+                        f'{stream_hls_url} accessible after {req_counter} attempts.'
+                    )
+                    self.logger.warning(
+                        f'Waiting extra {self.config.enable_delay} seconds before we initiate the stream...'
+                    )
+                    time.sleep(self.config.enable_delay)
+                    return True
+            except Exception as e:
+                self.logger.debug(f'Stream access check failed: {e}')
+            
+            if req_counter == STREAM_ACCESS_RETRY_ATTEMPTS:
+                self.logger.error(
+                    f'Stream {stream_name} cancelled after {req_counter} attempts.'
+                )
+                return False
+    
+    def remove_channel_from_database(
+        self, 
+        stream_id: str, 
+        stream_name: str, 
+        state: Any
+    ) -> None:
+        """Remove channel from database and handle cleanup."""
+        if stream_id not in self.database:
+            return
+        
+        self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state.exec}')
+        self.database.pop(stream_id)
+        
         try:
-            get_process = get_core_process_details(client, process.id)
-            if not get_process:
+            self.scheduler.remove_job(stream_id)
+        except Exception as e:
+            self.logger.error(f'Error removing job {stream_id}: {e}')
+        
+        # Handle the situation where we remove a stream that is currently playing
+        if stream_id == self.playhead.get('id'):
+            self.logger.warning(f'{stream_id} was playing.')
+            try:
+                fallback = self.fallback_search()
+                self.priority = 0
+                self.logger.warning('Source priority is reset to 0')
+                self.scheduler.add_job(
+                    func=self.exec_stream, 
+                    id=FALLBACK_JOB_ID, 
+                    args=(fallback['stream_id'], fallback['stream_name'], self.priority, fallback['stream_hls_url'])
+                )
+            except ValueError as e:
+                self.logger.error(f'Could not find fallback stream after removing {stream_id}: {e}')
+                self.playhead = {}
+    
+    def fallback_search(self) -> Dict[str, str]:
+        """Search for a fallback stream based on current time."""
+        self.logger.warning('Searching for a fallback job.')
+        current_hour = int(datetime.now().hour)
+        scheduled_hours = []
+        
+        # Collect scheduled hours from database
+        for key, value in self.database.items():
+            if value['start_at'] in ("now", "never"):
+                # Do not use non-time scheduled streams as fallbacks
                 continue
-            stream_id = get_process.reference
-            meta = get_process.metadata
-            state = get_process.state
-        except Exception as e:
-            logger_job.debug(process)
-            continue
+            try:
+                scheduled_hours.append(int(value['start_at']))
+            except (ValueError, TypeError):
+                continue
         
-        if meta is None or meta['restreamer-ui'].get('meta') is None:
-            # Skip processes without metadata or meta key
-            continue
+        if not scheduled_hours:
+            # No scheduled streams available, return first available stream
+            if self.database:
+                first_key = next(iter(self.database))
+                first_value = self.database[first_key]
+                return {
+                    "stream_id": first_key,
+                    "stream_name": first_value['name'],
+                    "stream_hls_url": first_value['src']
+                }
+            # No streams at all
+            raise ValueError("No streams available for fallback")
         
-        new_ids.append(stream_id)
-        stream_name = meta['restreamer-ui']['meta']['name']
-        stream_description = meta['restreamer-ui']['meta']['description']
-        stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
-        stream_hls_url = f'https://{core_hostname}/{stream_storage_type}/{stream_id}.m3u8'
-
-        if state.exec == "running":
-            process_running_channel(database, scheduler, stream_id, stream_name, stream_description, stream_hls_url)
-        else:
-            remove_channel_from_database(database, scheduler, stream_id, stream_name, state)
-            new_ids.remove(stream_id)
-
-    # Cleanup orphaned references
-    orphan_keys = [key for key in database if key not in new_ids]
-    for orphan_key in orphan_keys:
-        logger_job.warning(f'Key {orphan_key} is an orphan. Removing.')
-        database.pop(orphan_key)
-        scheduler.remove_job(orphan_key)
-
-# Datarhei CORE API login
-try:
-    client = Client(base_url='https://' + core_hostname, username=core_username, password=core_password)
-    logger_api.warning('Logging in to Datarhei Core API ' + core_username + '@' + core_hostname)
-    client.login()
-except Exception as e:
-    logger_api.error('Client login error')
-    logger_api.error(e)
-    time.sleep(10)
-    logger_api.error('Restarting...')
-    sys.exit(1)
+        # Convert the scheduled hours to a circular list
+        scheduled_hours = scheduled_hours + [h + 24 for h in scheduled_hours]
+        
+        # Find the closest scheduled hour
+        closest_hour = min(scheduled_hours, key=lambda x: abs(x - current_hour))
+        target_hour = str(closest_hour % 24)
+        
+        # Find stream matching the closest hour
+        for key, value in self.database.items():
+            if value['start_at'] == target_hour:
+                return {
+                    "stream_id": key,
+                    "stream_name": value['name'],
+                    "stream_hls_url": value['src']
+                }
+        
+        # Fallback to first available stream if no match found
+        if self.database:
+            first_key = next(iter(self.database))
+            first_value = self.database[first_key]
+            return {
+                "stream_id": first_key,
+                "stream_name": first_value['name'],
+                "stream_hls_url": first_value['src']
+            }
+        
+        raise ValueError("No streams available for fallback")
     
-# Schedule API sync job
-scheduler.add_job(func=core_api_sync, trigger='interval', seconds=core_sync_period, id='core_api_sync')
-scheduler.get_job('core_api_sync').modify(next_run_time=datetime.now())
+    def update_playhead(
+        self, 
+        stream_id: str, 
+        stream_name: str, 
+        stream_prio: int, 
+        stream_hls_url: str
+    ) -> None:
+        """Update the playhead with new stream information."""
+        self.playhead = {
+            "id": stream_id,
+            "name": stream_name,
+            "prio": stream_prio,
+            "head": stream_hls_url
+        }
+        self.logger.warning(f'Playhead: {str(self.playhead)}')
+    
+    def exec_stream(
+        self, 
+        stream_id: str, 
+        stream_name: str, 
+        stream_prio: int, 
+        stream_hls_url: str
+    ) -> None:
+        """Execute stream based on priority."""
+        if stream_prio > self.priority:
+            self.priority = stream_prio
+            self.logger.warning(f'Source priority is now set to: {self.priority}')
+            self.update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
+        elif stream_prio == self.priority:
+            self.update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
+        else:
+            self.logger.warning(
+                f'Source with higher priority ({self.priority}) is blocking. Skipping playhead update.'
+            )
+    
+    def core_api_sync(self) -> None:
+        """Synchronize with Datarhei CORE API."""
+        new_ids = []
+        
+        try:
+            process_list = self.client.v3_process_get_list()
+        except Exception as e:
+            self.logger.error(f'Error getting process list: {e}')
+            return
+        
+        for process in process_list:
+            try:
+                get_process = self.get_core_process_details(process.id)
+                if not get_process:
+                    continue
+                
+                stream_id = get_process.reference
+                meta = get_process.metadata
+                state = get_process.state
+            except Exception as e:
+                self.logger.debug(f'Error processing stream: {process}, {e}')
+                continue
+            
+            if meta is None or meta.get('restreamer-ui', {}).get('meta') is None:
+                # Skip processes without metadata or meta key
+                continue
+            
+            new_ids.append(stream_id)
+            stream_name = meta['restreamer-ui']['meta']['name']
+            stream_description = meta['restreamer-ui']['meta']['description']
+            stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
+            stream_hls_url = f'https://{self.config.core_hostname}/{stream_storage_type}/{stream_id}.m3u8'
+            
+            if state.exec == "running":
+                self.process_running_channel(
+                    stream_id, stream_name, stream_description, stream_hls_url
+                )
+            else:
+                self.remove_channel_from_database(stream_id, stream_name, state)
+                if stream_id in new_ids:
+                    new_ids.remove(stream_id)
+        
+        # Cleanup orphaned references
+        orphan_keys = [key for key in self.database if key not in new_ids]
+        for orphan_key in orphan_keys:
+            self.logger.warning(f'Key {orphan_key} is an orphan. Removing.')
+            self.database.pop(orphan_key)
+            try:
+                self.scheduler.remove_job(orphan_key)
+            except Exception as e:
+                self.logger.error(f'Error removing orphan job {orphan_key}: {e}')
 
-# Start the scheduler
-scheduler.start()
 
-### Flask ###
-def client_address(req):
+# Global instances (will be initialized in create_app)
+config = Config()
+loggers = LoggerManager(config.log_level)
+scheduler = BackgroundScheduler()
+stream_manager: Optional[StreamManager] = None
+client: Optional[Client] = None
+app = Flask(__name__)
+
+def _initialize_core_client(config: Config, logger: logging.Logger) -> Client:
+    """Initialize and authenticate Core API client."""
+    try:
+        client = Client(
+            base_url=f'https://{config.core_hostname}',
+            username=config.core_username,
+            password=config.core_password
+        )
+        logger.warning(f'Logging in to Datarhei Core API {config.core_username}@{config.core_hostname}')
+        client.login()
+        return client
+    except Exception as e:
+        logger.error('Client login error')
+        logger.error(e)
+        time.sleep(10)
+        logger.error('Restarting...')
+        sys.exit(1)
+
+
+def _setup_scheduler(stream_manager: StreamManager, config: Config) -> None:
+    """Setup and start the scheduler with sync job."""
+    scheduler.add_job(
+        func=stream_manager.core_api_sync,
+        trigger='interval',
+        seconds=config.core_sync_period,
+        id=CORE_API_SYNC_JOB_ID
+    )
+    scheduler.get_job(CORE_API_SYNC_JOB_ID).modify(next_run_time=datetime.now())
+    scheduler.start()
+
+# Flask route helpers
+def get_client_address(req) -> str:
+    """Get client IP address, handling proxy headers."""
     if req.environ.get('HTTP_X_FORWARDED_FOR') is None:
         return req.environ['REMOTE_ADDR']
-    else:
-        # if behind a proxy
-        return req.environ['HTTP_X_FORWARDED_FOR']
+    return req.environ['HTTP_X_FORWARDED_FOR']
 
-# Frontend
+
+def get_video_files(rec_path: str) -> List[str]:
+    """Get list of video files from recordings directory."""
+    vod_path = os.path.join(rec_path, 'vod')
+    if not os.path.exists(vod_path):
+        return []
+    return [
+        file for file in os.listdir(vod_path)
+        if file.endswith(VIDEO_EXTENSIONS)
+    ]
+
+
+def get_sorted_thumbnails(rec_path: str) -> List[str]:
+    """Get sorted list of thumbnail files by modification time."""
+    thumbnails_path = os.path.join(rec_path, 'thumb')
+    if not os.path.exists(thumbnails_path):
+        return []
+    
+    thumbnails = [
+        file for file in os.listdir(thumbnails_path)
+        if file.endswith(THUMBNAIL_EXTENSION)
+    ]
+    
+    # Get full paths and sort by modification time
+    thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
+    sorted_thumbnails_paths = sorted(
+        thumbnail_paths,
+        key=lambda x: os.path.getmtime(x),
+        reverse=True
+    )
+    
+    # Extract file names from sorted paths
+    return [os.path.basename(file) for file in sorted_thumbnails_paths]
+
+
+# Flask Routes
 @app.route('/', methods=['GET'])
 def root_route():
-    # Get a list of video files and thumbnails
-    video_files = [file for file in os.listdir(f'{rec_path}/vod/') if file.endswith(('.mp4', '.mkv', '.avi'))]
-    thumbnails_path = f'{rec_path}/thumb/'
-    thumbnails = [file for file in os.listdir(thumbnails_path) if file.endswith('.png')]
-    # Get the full file paths
-    thumbnail_paths = [os.path.join(thumbnails_path, file) for file in thumbnails]
-    # Sort the file paths by modification time in reverse order
-    sorted_thumbnails_paths = sorted(thumbnail_paths, key=lambda x: os.path.getmtime(x), reverse=True)
-    # Extract file names from sorted paths
-    sorted_thumbnails = [os.path.basename(file) for file in sorted_thumbnails_paths]
-    thumbnails = [file for file in os.listdir(f'{rec_path}/thumb/') if file.endswith('.png')]
-    logger_content.warning('[' + client_address(request) + '] index /')
-    return render_template('index.html', now=datetime.utcnow(), video_files=video_files, thumbnails=sorted_thumbnails)
+    """Frontend index page."""
+    video_files = get_video_files(config.rec_path)
+    sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
+    client_ip = get_client_address(request)
+    loggers.content.warning(f'[{client_ip}] index /')
+    return render_template(
+        'index.html',
+        now=datetime.utcnow(),
+        video_files=video_files,
+        thumbnails=sorted_thumbnails
+    )
 
-# JSON Data
+
 @app.route('/playhead', methods=['GET'])
 def playhead_route():
-    global playhead
-    return jsonify(playhead)
+    """Get current playhead information."""
+    if stream_manager is None:
+        return jsonify({}), 503
+    return jsonify(stream_manager.playhead)
+
 
 @app.route('/database', methods=['GET'])
 def database_route():
-    global database
-    return jsonify(database)
+    """Get stream database information."""
+    if stream_manager is None:
+        return jsonify({}), 503
+    return jsonify(stream_manager.database)
 
-# Images
+
 @app.route("/thumb/<thumb_file>", methods=['GET'])
-def thumb_route(thumb_file):
-    thumb_path = f'{rec_path}/thumb/{thumb_file}'
+def thumb_route(thumb_file: str):
+    """Serve thumbnail images."""
+    thumb_path = os.path.join(config.rec_path, 'thumb', thumb_file)
     if not os.path.exists(thumb_path):
         abort(404)
-    logger_content.warning('[' + client_address(request) + '] thumb' + str(thumb_path))
+    
+    client_ip = get_client_address(request)
+    loggers.content.warning(f'[{client_ip}] thumb {thumb_path}')
     return send_file(thumb_path, mimetype='image/png')
 
-# Video uploader
+
 @app.route('/video', methods=['POST'])
 def video_upload():
+    """Handle video file uploads."""
     token = request.headers.get("Authorization")
-    if token != "Bearer " + str(vod_token):
+    if token != f"Bearer {config.vod_token}":
         return "Unauthorized", 401
-    upload_path = f'{rec_path}/vod/'
+    
+    upload_path = os.path.join(config.rec_path, 'vod')
     if not os.path.exists(upload_path):
         abort(404)
-    # Streaming chunks
-    #file = request.files['file']
-    #if file:
-    #    with open('large_file.txt', 'wb') as f:
-    #        for chunk in file.stream:
-    #            f.write(chunk)
-    #    return 'File uploaded successfully'
-    #return 'No file provided', 400
+    
+    if 'file' not in request.files:
+        return 'No file provided', 400
+    
     file = request.files['file']
+    if file.filename == '':
+        return 'No file selected', 400
+    
     filename = secure_filename(file.filename)
     file.save(os.path.join(upload_path, filename))
-    return "File uploaded successfully"
+    return "File uploaded successfully", 200
 
-# Video streamer
+
 @app.route("/video/<video_file>", methods=['GET'])
-def video_route(video_file):
-    video_path = f'{rec_path}/vod/{video_file}'
+def video_route(video_file: str):
+    """Stream video files."""
+    video_path = os.path.join(config.rec_path, 'vod', video_file)
     if not os.path.exists(video_path):
         abort(404)
-    logger_content.warning('[' + client_address(request) + '] stream' + str(video_path))
+    
+    client_ip = get_client_address(request)
+    loggers.content.warning(f'[{client_ip}] stream {video_path}')
     return send_file(video_path, mimetype='video/mp4')
 
-# Video download
+
 @app.route("/video/download/<video_file>", methods=['GET'])
-def video_download_route(video_file):
-    video_path = f'{rec_path}/vod/{video_file}'
+def video_download_route(video_file: str):
+    """Download video files."""
+    video_path = os.path.join(config.rec_path, 'vod', video_file)
     if not os.path.exists(video_path):
         abort(404)
-    logger_content.warning('[' + client_address(request) + '] download' + str(video_path))
-    return send_file(video_path, as_attachment=True, download_name=video_file)
+    
+    client_ip = get_client_address(request)
+    loggers.content.warning(f'[{client_ip}] download {video_path}')
+    return send_file(
+        video_path,
+        as_attachment=True,
+        download_name=video_file
+    )
 
-# Video player
+
 @app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
-def video_watch_route(video_file_no_extension):
+def video_watch_route(video_file_no_extension: str):
+    """Video player page."""
     video_file = f'{video_file_no_extension}.mp4'
     thumb_file = f'{video_file_no_extension}.png'
-    video_path = f'{rec_path}/vod/{video_file}'
-    thumb_path = f'{rec_path}/thumb/{thumb_file}'
+    video_path = os.path.join(config.rec_path, 'vod', video_file)
+    thumb_path = os.path.join(config.rec_path, 'thumb', thumb_file)
+    
     if not os.path.exists(video_path):
         abort(404)
+    
     if not os.path.exists(thumb_path):
         thumb_file = ""
-    logger_content.warning('[' + client_address(request) + '] player' + str(video_path))
-    return render_template('watch.html', now=datetime.utcnow(), video_file=video_file, thumb_file=thumb_file)
+    
+    client_ip = get_client_address(request)
+    loggers.content.warning(f'[{client_ip}] player {video_path}')
+    return render_template(
+        'watch.html',
+        now=datetime.utcnow(),
+        video_file=video_file,
+        thumb_file=thumb_file
+    )
 
-def create_app():
-   return app
+def create_app() -> Flask:
+    """Create and configure Flask application."""
+    global stream_manager, client
+    
+    # Configure Flask app
+    app.config['SERVER_NAME'] = config.server_name
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
+    
+    # Initialize Core API client
+    client = _initialize_core_client(config, loggers.api)
+    
+    # Initialize stream manager
+    stream_manager = StreamManager(scheduler, client, config, loggers.job)
+    
+    # Setup scheduler
+    _setup_scheduler(stream_manager, config)
+    
+    return app
