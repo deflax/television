@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from flask import Flask, render_template, jsonify, request, abort
 from flask.helpers import send_file
@@ -66,7 +66,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         loggers.content.warning(f'[{client_ip}] index /')
         return render_template(
             'index.html',
-            now=datetime.utcnow(),
+            now=datetime.now(timezone.utc),
             video_files=video_files,
             thumbnails=sorted_thumbnails
         )
@@ -162,7 +162,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         loggers.content.warning(f'[{client_ip}] player {video_path}')
         return render_template(
             'watch.html',
-            now=datetime.utcnow(),
+            now=datetime.now(timezone.utc),
             video_file=video_file,
             thumb_file=thumb_file
         )
