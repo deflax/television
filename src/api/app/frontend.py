@@ -48,11 +48,12 @@ def send_timecode_to_discord(webhook_url: str, obfuscated_hostname: str, timecod
     
     try:
         payload = {
-            "content": f"🔐 **Timecode Request**\n"
-                      f"Hostname: `{obfuscated_hostname}`\n"
-                      f"Timecode: `{timecode}`\n"
-                      f"Time: {datetime.now(timezone.utc).isoformat()}"
+            "content": f"🔐 **Access Request**\n"
+                      f"**Hostname**: `{obfuscated_hostname}`\n"
+                      f"**Timecode**: `{timecode}`\n"
         }
+        #               f"Time: {datetime.now(timezone.utc).isoformat()}"
+        # }
         # Use httpx in sync mode for simplicity
         response = httpx.post(webhook_url, json=payload, timeout=5.0)
         response.raise_for_status()
