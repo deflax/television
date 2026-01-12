@@ -29,7 +29,7 @@ def get_client_hostname(req) -> str:
     # Try to get hostname from various headers
     hostname = (
         req.headers.get('X-Forwarded-Host') or
-        # req.headers.get('Host') or
+        req.headers.get('Host') or
         # req.environ.get('HTTP_HOST') or
         # req.environ.get('SERVER_NAME') or
         'unknown'
