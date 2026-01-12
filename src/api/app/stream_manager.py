@@ -9,11 +9,9 @@ from core_client import Client
 
 
 # Constants
-DEFAULT_ENABLE_DELAY = 24
 STREAM_ACCESS_RETRY_ATTEMPTS = 15
 STREAM_ACCESS_RETRY_INTERVAL = 6
 FALLBACK_JOB_ID = 'fallback'
-CORE_API_SYNC_JOB_ID = 'core_api_sync'
 
 
 class StreamManager:
