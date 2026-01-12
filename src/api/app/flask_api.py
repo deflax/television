@@ -32,6 +32,9 @@ class Config:
         self.rec_path = DEFAULT_REC_PATH
         self.enable_delay = DEFAULT_ENABLE_DELAY
         self.server_name = os.environ.get('SERVER_NAME')
+        self.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
+        self.discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+        self.discord_timecode_channel_id = os.environ.get('DISCORDBOT_TIMECODE_CHANNEL_ID')
 
 
 class LoggerManager:
@@ -99,6 +102,8 @@ def create_app() -> Flask:
     # Configure Flask app
     app.config['SERVER_NAME'] = config.server_name
     app.config['PREFERRED_URL_SCHEME'] = 'https'
+    app.config['SECRET_KEY'] = config.secret_key
+    app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours in seconds
     
     # Initialize Core API client
     client = _initialize_core_client(config, loggers.api)

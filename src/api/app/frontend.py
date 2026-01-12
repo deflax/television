@@ -1,9 +1,13 @@
 import os
-from datetime import datetime, timezone
+import httpx
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from flask import Flask, render_template, jsonify, request, abort
+from flask import Flask, render_template, jsonify, request, abort, session, redirect, url_for
 from flask.helpers import send_file
 from werkzeug.utils import secure_filename
+from functools import wraps
+
+from timecode_manager import TimecodeManager
 
 
 # Constants
@@ -18,6 +22,82 @@ def get_client_address(req) -> str:
     if req.environ.get('HTTP_X_FORWARDED_FOR') is None:
         return req.environ['REMOTE_ADDR']
     return req.environ['HTTP_X_FORWARDED_FOR']
+
+
+def get_client_hostname(req) -> str:
+    """Get client hostname from request headers."""
+    # Try to get hostname from various headers
+    hostname = (
+        req.headers.get('X-Forwarded-Host') or
+        req.headers.get('Host') or
+        req.environ.get('HTTP_HOST') or
+        req.environ.get('SERVER_NAME') or
+        'unknown'
+    )
+    # Remove port if present
+    if ':' in hostname:
+        hostname = hostname.split(':')[0]
+    return hostname.lower()
+
+
+def send_timecode_to_discord(webhook_url: str, obfuscated_hostname: str, timecode: str) -> None:
+    """Send timecode request to Discord via webhook."""
+    if not webhook_url:
+        return
+    
+    try:
+        payload = {
+            "content": f"🔐 **Timecode Request**\n"
+                      f"Hostname: `{obfuscated_hostname}`\n"
+                      f"Timecode: `{timecode}`\n"
+                      f"Time: {datetime.now(timezone.utc).isoformat()}"
+        }
+        # Use httpx in sync mode for simplicity
+        response = httpx.post(webhook_url, json=payload, timeout=5.0)
+        response.raise_for_status()
+    except Exception as e:
+        # Log error but don't fail the request
+        print(f"Failed to send timecode to Discord: {e}")
+
+
+def requires_auth(f):
+    """Decorator to require timecode authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if user is authenticated
+        if not session.get('authenticated', False):
+            return redirect(url_for('root_route'))
+        
+        # Validate identifier matches session
+        client_ip = get_client_address(request)
+        current_hostname = get_client_hostname(request)
+        
+        # Determine current identifier (same logic as root_route)
+        identifier = current_hostname
+        if current_hostname in ('unknown', 'localhost', '127.0.0.1') or not '.' in current_hostname:
+            identifier = client_ip
+        
+        session_identifier = session.get('identifier', session.get('hostname'))
+        
+        if session_identifier != identifier:
+            # Identifier mismatch - invalidate session
+            session.clear()
+            return redirect(url_for('root_route'))
+        
+        # Check session expiration (24 hours)
+        session_created = session.get('created_at')
+        if session_created:
+            try:
+                created_dt = datetime.fromisoformat(session_created)
+                if datetime.now(timezone.utc) - created_dt > timedelta(hours=24):
+                    session.clear()
+                    return redirect(url_for('root_route'))
+            except (ValueError, TypeError):
+                session.clear()
+                return redirect(url_for('root_route'))
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def get_video_files(rec_path: str) -> List[str]:
@@ -57,19 +137,114 @@ def get_sorted_thumbnails(rec_path: str) -> List[str]:
 def register_routes(app: Flask, stream_manager, config, loggers) -> None:
     """Register all Flask routes for the frontend."""
     
-    @app.route('/', methods=['GET'])
+    # Initialize timecode manager
+    timecode_manager = TimecodeManager()
+    
+    @app.route('/', methods=['GET', 'POST'])
     def root_route():
-        """Frontend index page."""
-        video_files = get_video_files(config.rec_path)
-        sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
+        """Frontend index page with timecode authentication."""
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] index /')
+        client_hostname = get_client_hostname(request)
+        
+        # Use IP address for timecode generation if hostname is not a proper domain
+        identifier = client_hostname
+        if client_hostname in ('unknown', 'localhost', '127.0.0.1') or not '.' in client_hostname:
+            # Use IP address as identifier for timecode generation
+            identifier = client_ip
+        
+        # Handle POST (timecode submission)
+        if request.method == 'POST':
+            submitted_timecode = request.form.get('timecode', '').strip()
+            
+            if timecode_manager.validate_timecode(identifier, submitted_timecode):
+                # Valid timecode - create session
+                session.permanent = True
+                session['authenticated'] = True
+                session['hostname'] = client_hostname
+                session['identifier'] = identifier  # Store identifier for validation
+                session['created_at'] = datetime.now(timezone.utc).isoformat()
+                loggers.content.warning(f'[{client_ip}] authenticated with identifier {identifier}')
+                return redirect(url_for('root_route'))
+            else:
+                # Invalid timecode
+                loggers.content.warning(f'[{client_ip}] invalid timecode attempt from {identifier}')
+                return render_template(
+                    'index.html',
+                    now=datetime.now(timezone.utc),
+                    video_files=[],
+                    thumbnails=[],
+                    authenticated=False,
+                    error='Invalid timecode. Please request a new one.'
+                )
+        
+        # Handle GET
+        # Check if already authenticated
+        if session.get('authenticated', False):
+            # Validate identifier matches (hostname or IP)
+            session_identifier = session.get('identifier', session.get('hostname'))
+            if session_identifier == identifier:
+                # Check session expiration
+                session_created = session.get('created_at')
+                if session_created:
+                    try:
+                        created_dt = datetime.fromisoformat(session_created)
+                        if datetime.now(timezone.utc) - created_dt <= timedelta(hours=24):
+                            # Valid session - show content
+                            video_files = get_video_files(config.rec_path)
+                            sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
+                            loggers.content.warning(f'[{client_ip}] index / (authenticated)')
+                            return render_template(
+                                'index.html',
+                                now=datetime.now(timezone.utc),
+                                video_files=video_files,
+                                thumbnails=sorted_thumbnails,
+                                authenticated=True
+                            )
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Session invalid - clear it
+            session.clear()
+        
+        # Not authenticated - show timecode form
+        loggers.content.warning(f'[{client_ip}] index / (not authenticated)')
         return render_template(
             'index.html',
             now=datetime.now(timezone.utc),
-            video_files=video_files,
-            thumbnails=sorted_thumbnails
+            video_files=[],
+            thumbnails=[],
+            authenticated=False
         )
+    
+    @app.route('/request-timecode', methods=['POST'])
+    def request_timecode_route():
+        """Request a timecode for the current hostname."""
+        client_ip = get_client_address(request)
+        client_hostname = get_client_hostname(request)
+        
+        # Use IP address for timecode generation if hostname is not a proper domain
+        # This ensures IP-based visitors get consistent timecodes
+        identifier = client_hostname
+        if client_hostname in ('unknown', 'localhost', '127.0.0.1') or not '.' in client_hostname:
+            # Use IP address as identifier for timecode generation
+            identifier = client_ip
+        
+        # Generate timecode using the identifier
+        timecode = timecode_manager.generate_timecode(identifier)
+        # Obfuscate for display, passing IP for reverse DNS lookup
+        obfuscated_hostname = timecode_manager.obfuscate_hostname(client_hostname, client_ip)
+        
+        # Send to Discord
+        if config.discord_webhook_url:
+            send_timecode_to_discord(config.discord_webhook_url, obfuscated_hostname, timecode)
+        
+        loggers.content.warning(f'[{client_ip}] timecode requested for {obfuscated_hostname}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Timecode has been sent to Discord channel',
+            'obfuscated_hostname': obfuscated_hostname
+        })
     
     @app.route('/playhead', methods=['GET'])
     def playhead_route():
@@ -86,6 +261,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         return jsonify(stream_manager.database)
     
     @app.route("/thumb/<thumb_file>", methods=['GET'])
+    @requires_auth
     def thumb_route(thumb_file: str):
         """Serve thumbnail images."""
         thumb_path = os.path.join(config.rec_path, 'thumb', thumb_file)
@@ -119,6 +295,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         return "File uploaded successfully", 200
     
     @app.route("/video/<video_file>", methods=['GET'])
+    @requires_auth
     def video_route(video_file: str):
         """Stream video files."""
         video_path = os.path.join(config.rec_path, 'vod', video_file)
@@ -130,6 +307,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         return send_file(video_path, mimetype='video/mp4')
     
     @app.route("/video/download/<video_file>", methods=['GET'])
+    @requires_auth
     def video_download_route(video_file: str):
         """Download video files."""
         video_path = os.path.join(config.rec_path, 'vod', video_file)
@@ -145,6 +323,7 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         )
     
     @app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
+    @requires_auth
     def video_watch_route(video_file_no_extension: str):
         """Video player page."""
         video_file = f'{video_file_no_extension}.mp4'
