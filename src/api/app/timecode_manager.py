@@ -44,7 +44,7 @@ class TimecodeManager:
         
         # Generate HMAC
         hmac_obj = hmac.new(self.secret_key, message, hashlib.sha256)
-        timecode = hmac_obj.hexdigest()[:12]  # Use first 12 characters for readability
+        timecode = hmac_obj.hexdigest()[:6]  # Use first 6 characters for readability
         
         return timecode
     
@@ -85,7 +85,7 @@ class TimecodeManager:
         """
         message = f"{hostname}:{date}".encode()
         hmac_obj = hmac.new(self.secret_key, message, hashlib.sha256)
-        return hmac_obj.hexdigest()[:12]
+        return hmac_obj.hexdigest()[:6]
     
     def obfuscate_hostname(self, hostname: str, ip_address: Optional[str] = None) -> str:
         """
