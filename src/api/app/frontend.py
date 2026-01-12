@@ -26,18 +26,19 @@ def get_client_address(req) -> str:
 
 def get_client_hostname(req) -> str:
     """Get client hostname from request headers."""
-    # Try to get hostname from various headers
-    hostname = (
-        req.headers.get('X-Forwarded-Host') or
-        req.headers.get('Host') or
-        # req.environ.get('HTTP_HOST') or
-        # req.environ.get('SERVER_NAME') or
-        'unknown'
-    )
-    # Remove port if present
-    if ':' in hostname:
-        hostname = hostname.split(':')[0]
-    return hostname.lower()
+    # # Try to get hostname from various headers
+    # hostname = (
+    #     req.headers.get('X-Forwarded-Host') or
+    #     req.headers.get('Host') or
+    #     req.environ.get('HTTP_HOST') or
+    #     req.environ.get('SERVER_NAME') or
+    #     'unknown'
+    # )
+    # # Remove port if present
+    # if ':' in hostname:
+    #     hostname = hostname.split(':')[0]
+    # return hostname.lower()
+    return 'unknown'
 
 
 def send_timecode_to_discord(webhook_url: str, obfuscated_hostname: str, timecode: str) -> None:
