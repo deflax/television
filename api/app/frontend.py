@@ -62,6 +62,8 @@ def requires_auth(f):
     def decorated_function(*args, **kwargs):
         # Check if user is authenticated
         if not session.get('authenticated', False):
+            # Store the URL user was trying to access
+            session['next'] = request.url
             return redirect(url_for('archive_route'))
         
         # Validate identifier matches session
@@ -170,6 +172,11 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
                 session['identifier'] = identifier  # Store identifier for validation
                 session['created_at'] = datetime.now(timezone.utc).isoformat()
                 loggers.content.warning(f'[{client_ip}] authenticated with identifier {identifier}')
+
+                # Redirect to original page if available
+                next_url = session.pop('next', None)
+                if next_url:
+                    return redirect(next_url)
                 return redirect(url_for('archive_route'))
             else:
                 # Invalid timecode
