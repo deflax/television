@@ -17,84 +17,7 @@
 {% block title %}▷ deflax.net{% endblock %}
 
 {% block content %}
-{% if not authenticated %}
-<!-- Timecode Authentication Form -->
-<div class="content-container bg-dark text-white">
-  <div class="container-fluid p-5">
-    <div class="row justify-content-center">
-      <div class="col-12 col-md-8 col-lg-6">
-        <div class="card bg-secondary text-white">
-          <div class="card-body p-4">
-            <h2 class="card-title text-center mb-4">🔐 Access Required</h2>
-            <p class="text-center mb-4">Please enter your timecode to access this content.</p>
-            
-            {% if error %}
-            <div class="alert alert-danger" role="alert">
-              {{ error }}
-            </div>
-            {% endif %}
-            
-            <form method="POST" action="{{ url_for('root_route') }}" id="timecodeForm">
-              <div class="mb-3">
-                <label for="timecode" class="form-label">Timecode</label>
-                <input type="text" class="form-control form-control-lg" id="timecode" name="timecode" 
-                       placeholder="Enter your timecode" required autofocus>
-                <small class="form-text text-muted">Don't have a timecode? Request one below.</small>
-              </div>
-              <div class="d-grid gap-2">
-                <button type="submit" class="btn btn-primary btn-lg">Submit</button>
-                <button type="button" class="btn btn-outline-light" id="requestTimecodeBtn">Request Timecode</button>
-              </div>
-            </form>
-            
-            <div id="timecodeRequestStatus" class="mt-3" style="display: none;"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const requestBtn = document.getElementById('requestTimecodeBtn');
-  const statusDiv = document.getElementById('timecodeRequestStatus');
-  
-  requestBtn.addEventListener('click', async () => {
-    requestBtn.disabled = true;
-    requestBtn.textContent = 'Requesting...';
-    statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div class="alert alert-info">Requesting timecode...</div>';
-    
-    try {
-      const response = await fetch('/request-timecode', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        statusDiv.innerHTML = `<div class="alert alert-success">
-          <strong>Success!</strong> Timecode has been sent to Discord channel.<br>
-          <small>Hostname: ${data.obfuscated_hostname}</small>
-        </div>`;
-      } else {
-        statusDiv.innerHTML = '<div class="alert alert-danger">Failed to request timecode. Please try again.</div>';
-      }
-    } catch (error) {
-      statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
-    } finally {
-      requestBtn.disabled = false;
-      requestBtn.textContent = 'Request Timecode';
-    }
-  });
-});
-</script>
-{% else %}
-<!-- Authenticated Content -->
+<!-- Live Stream - Public Access -->
 <div class="content-container bg-dark text-white">
   <div id="stream" class="container-fluid p-3 bg-dark text-white">
     <div class="row">
@@ -258,6 +181,84 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
+{% if not authenticated %}
+<!-- Timecode Authentication Form for Archive Access -->
+<div class="content-container bg-dark text-white">
+  <div class="container-fluid p-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-8 col-lg-6">
+        <div class="card bg-secondary text-white">
+          <div class="card-body p-4">
+            <h2 class="card-title text-center mb-4">🔐 Archive Access Required</h2>
+            <p class="text-center mb-4">Please enter your timecode to access the archive.</p>
+
+            {% if error %}
+            <div class="alert alert-danger" role="alert">
+              {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('root_route') }}" id="timecodeForm">
+              <div class="mb-3">
+                <label for="timecode" class="form-label">Timecode</label>
+                <input type="text" class="form-control form-control-lg" id="timecode" name="timecode"
+                       placeholder="Enter your timecode" required autofocus>
+                <small class="form-text text-muted">Don't have a timecode? Request one below.</small>
+              </div>
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">Submit</button>
+                <button type="button" class="btn btn-outline-light" id="requestTimecodeBtn">Request Timecode</button>
+              </div>
+            </form>
+
+            <div id="timecodeRequestStatus" class="mt-3" style="display: none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const requestBtn = document.getElementById('requestTimecodeBtn');
+  const statusDiv = document.getElementById('timecodeRequestStatus');
+
+  requestBtn.addEventListener('click', async () => {
+    requestBtn.disabled = true;
+    requestBtn.textContent = 'Requesting...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="alert alert-info">Requesting timecode...</div>';
+
+    try {
+      const response = await fetch('/request-timecode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        statusDiv.innerHTML = `<div class="alert alert-success">
+          <strong>Success!</strong> Timecode has been sent to Discord channel.<br>
+          <small>Hostname: ${data.obfuscated_hostname}</small>
+        </div>`;
+      } else {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Failed to request timecode. Please try again.</div>';
+      }
+    } catch (error) {
+      statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
+    } finally {
+      requestBtn.disabled = false;
+      requestBtn.textContent = 'Request Timecode';
+    }
+  });
+});
+</script>
+{% else %}
+<!-- Archive - Protected Content -->
 <div class="content-container bg-dark text-white">
 <div id="archive" class="container-fluid p-3 bg-dark text-white">
   <div class="row">
