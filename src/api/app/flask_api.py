@@ -2,6 +2,8 @@ import time
 import sys
 import os
 import logging
+import asyncio
+import threading
 from datetime import datetime
 from typing import Optional
 from flask import Flask
@@ -10,6 +12,7 @@ from core_client import Client
 
 from stream_manager import StreamManager
 from frontend import register_routes
+from discord_bot_manager import DiscordBotManager
 
 
 # Constants
@@ -21,7 +24,7 @@ CORE_API_SYNC_JOB_ID = 'core_api_sync'
 
 class Config:
     """Application configuration loaded from environment variables."""
-    
+
     def __init__(self):
         self.log_level = os.environ.get('FLASKAPI_LOG_LEVEL', 'INFO').upper()
         self.vod_token = os.environ.get('FLASKAPI_VOD_TOKEN')
@@ -33,26 +36,27 @@ class Config:
         self.enable_delay = DEFAULT_ENABLE_DELAY
         self.server_name = os.environ.get('SERVER_NAME')
         self.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
-        self.discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
-        self.discord_timecode_channel_id = os.environ.get('DISCORDBOT_TIMECODE_CHANNEL_ID')
+        self.discord_bot_enabled = os.environ.get('DISCORDBOT_ENABLED', 'false').lower() == 'true'
 
 
 class LoggerManager:
     """Manages application loggers."""
-    
+
     def __init__(self, log_level: str):
         self.log_level = log_level
         self._setup_loggers()
-    
+
     def _setup_loggers(self) -> None:
         """Initialize and configure loggers."""
         self.api = logging.getLogger('waitress')
         self.job = logging.getLogger('apscheduler')
         self.content = logging.getLogger('content')
-        
+        self.discord = logging.getLogger('discord')
+
         self.api.setLevel(self.log_level)
         self.job.setLevel(self.log_level)
         self.content.setLevel(self.log_level)
+        self.discord.setLevel(self.log_level)
 
 
 # Global instances (will be initialized in create_app)
@@ -61,6 +65,7 @@ loggers = LoggerManager(config.log_level)
 scheduler = BackgroundScheduler()
 stream_manager: Optional[StreamManager] = None
 client: Optional[Client] = None
+discord_bot_manager: Optional[DiscordBotManager] = None
 app = Flask(__name__)
 
 
@@ -95,26 +100,58 @@ def _setup_scheduler(stream_manager: StreamManager, config: Config) -> None:
     scheduler.start()
 
 
+def _run_discord_bot(bot_manager: DiscordBotManager) -> None:
+    """Run Discord bot in a separate thread with its own event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(bot_manager.start())
+    except Exception as e:
+        loggers.discord.error(f'Discord bot error: {e}')
+    finally:
+        loop.close()
+
+
+def _initialize_discord_bot(config: Config, logger: logging.Logger) -> Optional[DiscordBotManager]:
+    """Initialize and start Discord bot in a separate thread."""
+    if not config.discord_bot_enabled:
+        logger.info('Discord bot is disabled')
+        return None
+
+    try:
+        bot_manager = DiscordBotManager(config, logger)
+        bot_thread = threading.Thread(target=_run_discord_bot, args=(bot_manager,), daemon=True)
+        bot_thread.start()
+        logger.info('Discord bot started in background thread')
+        return bot_manager
+    except Exception as e:
+        logger.error(f'Failed to initialize Discord bot: {e}')
+        return None
+
+
 def create_app() -> Flask:
     """Create and configure Flask application."""
-    global stream_manager, client
-    
+    global stream_manager, client, discord_bot_manager
+
     # Configure Flask app
     app.config['SERVER_NAME'] = config.server_name
     app.config['PREFERRED_URL_SCHEME'] = 'https'
     app.config['SECRET_KEY'] = config.secret_key
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours in seconds
-    
+
     # Initialize Core API client
     client = _initialize_core_client(config, loggers.api)
-    
+
     # Initialize stream manager
     stream_manager = StreamManager(scheduler, client, config, loggers.job)
-    
+
     # Setup scheduler
     _setup_scheduler(stream_manager, config)
-    
+
+    # Initialize Discord bot (if enabled)
+    discord_bot_manager = _initialize_discord_bot(config, loggers.discord)
+
     # Register frontend routes
-    register_routes(app, stream_manager, config, loggers)
-    
+    register_routes(app, stream_manager, config, loggers, discord_bot_manager)
+
     return app

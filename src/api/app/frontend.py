@@ -1,5 +1,4 @@
 import os
-import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from flask import Flask, render_template, jsonify, request, abort, session, redirect, url_for
@@ -41,25 +40,20 @@ def get_client_hostname(req) -> str:
     return 'unknown'
 
 
-def send_timecode_to_discord(webhook_url: str, obfuscated_hostname: str, timecode: str) -> None:
-    """Send timecode request to Discord via webhook."""
-    if not webhook_url:
-        return
-    
+def send_timecode_to_discord(discord_bot_manager, obfuscated_hostname: str, timecode: str) -> bool:
+    """Send timecode request to Discord via bot.
+
+    Returns True if message was sent successfully, False otherwise.
+    """
+    if discord_bot_manager is None:
+        return False
+
     try:
-        payload = {
-            "content": f"🔐 **Access Request**\n"
-                      f"**Hostname**: `{obfuscated_hostname}`\n"
-                      f"**Timecode**: `{timecode}`\n"
-        }
-        #               f"Time: {datetime.now(timezone.utc).isoformat()}"
-        # }
-        # Use httpx in sync mode for simplicity
-        response = httpx.post(webhook_url, json=payload, timeout=5.0)
-        response.raise_for_status()
+        return discord_bot_manager.send_timecode_message(obfuscated_hostname, timecode)
     except Exception as e:
         # Log error but don't fail the request
         print(f"Failed to send timecode to Discord: {e}")
+        return False
 
 
 def requires_auth(f):
@@ -136,9 +130,9 @@ def get_sorted_thumbnails(rec_path: str) -> List[str]:
     return [os.path.basename(file) for file in sorted_thumbnails_paths]
 
 
-def register_routes(app: Flask, stream_manager, config, loggers) -> None:
+def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_manager=None) -> None:
     """Register all Flask routes for the frontend."""
-    
+
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
     
@@ -245,16 +239,20 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         timecode = timecode_manager.generate_timecode(identifier)
         # Obfuscate for display, passing IP for reverse DNS lookup
         obfuscated_hostname = timecode_manager.obfuscate_hostname(client_hostname, client_ip)
-        
-        # Send to Discord
-        if config.discord_webhook_url:
-            send_timecode_to_discord(config.discord_webhook_url, obfuscated_hostname, timecode)
-        
+
+        # Send to Discord via bot
+        sent_to_discord = send_timecode_to_discord(discord_bot_manager, obfuscated_hostname, timecode)
+
         loggers.content.warning(f'[{client_ip}] timecode requested for {obfuscated_hostname}')
-        
+
+        if sent_to_discord:
+            message = 'Timecode has been sent to Discord channel'
+        else:
+            message = 'Timecode generated (Discord bot not available)'
+
         return jsonify({
             'success': True,
-            'message': 'Timecode has been sent to Discord channel',
+            'message': message,
             'obfuscated_hostname': obfuscated_hostname
         })
     
