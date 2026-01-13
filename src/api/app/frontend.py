@@ -62,7 +62,7 @@ def requires_auth(f):
     def decorated_function(*args, **kwargs):
         # Check if user is authenticated
         if not session.get('authenticated', False):
-            return redirect(url_for('root_route'))
+            return redirect(url_for('archive_route'))
         
         # Validate identifier matches session
         client_ip = get_client_address(request)
