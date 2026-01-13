@@ -54,7 +54,7 @@ services:
   api:
     depends_on:
       - "restreamer"
-    build: ./src/api
+    build: ./api
     image: tv-api:latest
     env_file:
       - "variables.env"
@@ -69,7 +69,7 @@ services:
 #  icecast:
 #    depends_on:
 #      - "api"
-#    build: ./src/icecast
+#    build: ./icecast
 #    image: tv-icecast:latest
 #    env_file:
 #      - "variables.env"
