@@ -142,22 +142,32 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
     
-    @app.route('/', methods=['GET', 'POST'])
+    @app.route('/', methods=['GET'])
     def root_route():
-        """Frontend index page with timecode authentication."""
+        """Frontend index page - public live stream."""
+        client_ip = get_client_address(request)
+        loggers.content.warning(f'[{client_ip}] index /')
+        return render_template(
+            'index.html',
+            now=datetime.now(timezone.utc)
+        )
+    
+    @app.route('/archive', methods=['GET', 'POST'])
+    def archive_route():
+        """Archive page with timecode authentication."""
         client_ip = get_client_address(request)
         client_hostname = get_client_hostname(request)
-        
+
         # Use IP address for timecode generation if hostname is not a proper domain
         identifier = client_hostname
         if client_hostname in ('unknown', 'localhost', '127.0.0.1') or not '.' in client_hostname:
             # Use IP address as identifier for timecode generation
             identifier = client_ip
-        
+
         # Handle POST (timecode submission)
         if request.method == 'POST':
             submitted_timecode = request.form.get('timecode', '').strip()
-            
+
             if timecode_manager.validate_timecode(identifier, submitted_timecode):
                 # Valid timecode - create session
                 session.permanent = True
@@ -166,19 +176,19 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
                 session['identifier'] = identifier  # Store identifier for validation
                 session['created_at'] = datetime.now(timezone.utc).isoformat()
                 loggers.content.warning(f'[{client_ip}] authenticated with identifier {identifier}')
-                return redirect(url_for('root_route'))
+                return redirect(url_for('archive_route'))
             else:
                 # Invalid timecode
                 loggers.content.warning(f'[{client_ip}] invalid timecode attempt from {identifier}')
                 return render_template(
-                    'index.html',
+                    'archive.html',
                     now=datetime.now(timezone.utc),
                     video_files=[],
                     thumbnails=[],
                     authenticated=False,
                     error='Invalid timecode. Please request a new one.'
                 )
-        
+
         # Handle GET
         # Check if already authenticated
         if session.get('authenticated', False):
@@ -194,9 +204,9 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
                             # Valid session - show content
                             video_files = get_video_files(config.rec_path)
                             sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
-                            loggers.content.warning(f'[{client_ip}] index / (authenticated)')
+                            loggers.content.warning(f'[{client_ip}] archive (authenticated)')
                             return render_template(
-                                'index.html',
+                                'archive.html',
                                 now=datetime.now(timezone.utc),
                                 video_files=video_files,
                                 thumbnails=sorted_thumbnails,
@@ -204,20 +214,20 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
                             )
                     except (ValueError, TypeError):
                         pass
-            
+
             # Session invalid - clear it
             session.clear()
-        
+
         # Not authenticated - show timecode form
-        loggers.content.warning(f'[{client_ip}] index / (not authenticated)')
+        loggers.content.warning(f'[{client_ip}] archive (not authenticated)')
         return render_template(
-            'index.html',
+            'archive.html',
             now=datetime.now(timezone.utc),
             video_files=[],
             thumbnails=[],
             authenticated=False
         )
-    
+
     @app.route('/request-timecode', methods=['POST'])
     def request_timecode_route():
         """Request a timecode for the current hostname."""

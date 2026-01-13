@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block metadata %}
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="expires" content="0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="UTF-8">
+    <meta property="og:title" content="Archive - deflax.net">
+    <meta property="og:site_name" content="▷">
+    <meta property="og:url" content=https://deflax.net/archive>
+    <meta property="og:description" content="Video archive">
+    <meta property="og:type" content=product>
+    <meta property="og:image" content=https://deflax.net/static/images/logo.png>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+{% endblock %}
+
+{% block title %}Archive - deflax.net{% endblock %}
+
+{% block content %}
+{% if not authenticated %}
+<!-- Timecode Authentication Form for Archive Access -->
+<div class="content-container bg-dark text-white">
+  <div class="container-fluid p-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-8 col-lg-6">
+        <div class="card bg-secondary text-white">
+          <div class="card-body p-4">
+            <h2 class="card-title text-center mb-4">🔐 Archive Access Required</h2>
+            <p class="text-center mb-4">Please enter your timecode to access the archive.</p>
+
+            {% if error %}
+            <div class="alert alert-danger" role="alert">
+              {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('archive_route') }}" id="timecodeForm">
+              <div class="mb-3">
+                <label for="timecode" class="form-label">Timecode</label>
+                <input type="text" class="form-control form-control-lg" id="timecode" name="timecode"
+                       placeholder="Enter your timecode" required autofocus>
+                <small class="form-text text-muted">Don't have a timecode? Request one below.</small>
+              </div>
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">Submit</button>
+                <button type="button" class="btn btn-outline-light" id="requestTimecodeBtn">Request Timecode</button>
+              </div>
+            </form>
+
+            <div id="timecodeRequestStatus" class="mt-3" style="display: none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const requestBtn = document.getElementById('requestTimecodeBtn');
+  const statusDiv = document.getElementById('timecodeRequestStatus');
+
+  requestBtn.addEventListener('click', async () => {
+    requestBtn.disabled = true;
+    requestBtn.textContent = 'Requesting...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="alert alert-info">Requesting timecode...</div>';
+
+    try {
+      const response = await fetch('/request-timecode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        statusDiv.innerHTML = `<div class="alert alert-success">
+          <strong>Success!</strong> Timecode has been sent to Discord channel.<br>
+          <small>Hostname: ${data.obfuscated_hostname}</small>
+        </div>`;
+      } else {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Failed to request timecode. Please try again.</div>';
+      }
+    } catch (error) {
+      statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
+    } finally {
+      requestBtn.disabled = false;
+      requestBtn.textContent = 'Request Timecode';
+    }
+  });
+});
+</script>
+{% else %}
+<!-- Archive - Protected Content -->
+<div class="content-container bg-dark text-white">
+<div id="archive" class="container-fluid p-3 bg-dark text-white">
+  <div class="row">
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+    <div class="col-12 col-lg-10">
+      <div class="content">
+	      <div class="gallery">
+          {% for thumbnail in thumbnails %}
+          <div class="gallery-item">
+              <a href="{{ url_for('video_watch_route', video_file_no_extension=thumbnail[:-4]) }}" class="image-link">
+                  <img src="{{ url_for('thumb_route', thumb_file=thumbnail) }}" alt="{{ thumbnail }}">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <p>{{ thumbnail[:-4] }}</p>
+                  </div>
+              </div>
+              </a>
+          </div>
+          {% endfor %}
+	      </div>
+      </div>
+    </div>
+    <div class="col-md-1 d-none d-md-block">
+    </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
