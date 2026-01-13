@@ -332,13 +332,13 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
         thumb_file = f'{video_file_no_extension}.png'
         video_path = os.path.join(config.rec_path, 'vod', video_file)
         thumb_path = os.path.join(config.rec_path, 'thumb', thumb_file)
-        
+
         if not os.path.exists(video_path):
             abort(404)
-        
+
         if not os.path.exists(thumb_path):
             thumb_file = ""
-        
+
         client_ip = get_client_address(request)
         loggers.content.warning(f'[{client_ip}] player {video_path}')
         return render_template(
@@ -347,3 +347,11 @@ def register_routes(app: Flask, stream_manager, config, loggers) -> None:
             video_file=video_file,
             thumb_file=thumb_file
         )
+
+    @app.route('/logout', methods=['GET'])
+    def logout_route():
+        """Clear session and logout user."""
+        client_ip = get_client_address(request)
+        loggers.content.warning(f'[{client_ip}] logout')
+        session.clear()
+        return redirect(url_for('root_route'))
