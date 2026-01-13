@@ -59,8 +59,35 @@
 document.addEventListener('DOMContentLoaded', () => {
   const requestBtn = document.getElementById('requestTimecodeBtn');
   const statusDiv = document.getElementById('timecodeRequestStatus');
+  const COOLDOWN_SECONDS = 60;
+  let cooldownRemaining = 0;
+  let cooldownInterval = null;
+
+  function startCooldown() {
+    cooldownRemaining = COOLDOWN_SECONDS;
+    requestBtn.disabled = true;
+    updateCooldownText();
+    
+    cooldownInterval = setInterval(() => {
+      cooldownRemaining--;
+      if (cooldownRemaining <= 0) {
+        clearInterval(cooldownInterval);
+        cooldownInterval = null;
+        requestBtn.disabled = false;
+        requestBtn.textContent = 'Request Timecode';
+      } else {
+        updateCooldownText();
+      }
+    }, 1000);
+  }
+
+  function updateCooldownText() {
+    requestBtn.textContent = `Wait ${cooldownRemaining}s`;
+  }
 
   requestBtn.addEventListener('click', async () => {
+    if (cooldownRemaining > 0) return;
+    
     requestBtn.disabled = true;
     requestBtn.textContent = 'Requesting...';
     statusDiv.style.display = 'block';
@@ -81,12 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
           <strong>Success!</strong> Timecode has been sent to Discord channel.<br>
           <small>Hostname: ${data.obfuscated_hostname}</small>
         </div>`;
+        startCooldown();
       } else {
         statusDiv.innerHTML = '<div class="alert alert-danger">Failed to request timecode. Please try again.</div>';
+        requestBtn.disabled = false;
+        requestBtn.textContent = 'Request Timecode';
       }
     } catch (error) {
       statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
-    } finally {
       requestBtn.disabled = false;
       requestBtn.textContent = 'Request Timecode';
     }
