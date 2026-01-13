@@ -33,6 +33,10 @@ video {
     background-color: black;
 }
 
+.watch-container {
+    padding-top: 50px;
+}
+
 .container-fluid {
     scroll-margin-top: 60px;
 }
