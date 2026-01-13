@@ -90,65 +90,88 @@ class TimecodeManager:
     def obfuscate_hostname(self, hostname: str, ip_address: Optional[str] = None) -> str:
         """
         Obfuscate a hostname or IP address for display in Discord.
-        
-        For IPs with reverse DNS: shows reverse DNS with obfuscation of the last two parts
-        For IPs without reverse DNS: shows IP with last two octets obfuscated
-        For hostnames: obfuscates the main part
-        
+
+        For IPs with reverse DNS: shows first part and last 2 parts, obfuscates middle parts
+        For IPs without reverse DNS or "unknown": shows IP with last two octets obfuscated
+        For hostnames: obfuscates the middle parts
+
         Args:
             hostname: The hostname or IP address to obfuscate
             ip_address: Optional IP address for reverse DNS lookup
-            
+
         Returns:
             Obfuscated hostname/IP address
         """
         if not hostname:
             return "***"
-        
+
+        # If hostname is "unknown", treat it as IP address lookup
+        if hostname == "unknown" and ip_address:
+            hostname = ip_address
+
         # Check if it's an IP address
         is_ip = self._is_ip_address(hostname)
         ip_to_check = ip_address if ip_address else (hostname if is_ip else None)
-        
+
         if ip_to_check:
             # Try reverse DNS lookup
             try:
                 reverse_dns = socket.gethostbyaddr(ip_to_check)[0]
-                # Obfuscate reverse DNS: show first two numeric parts as "x.x"
+                # Obfuscate reverse DNS: show first part and last 2 parts
+                # Example: clients-pools.pl.cooolbox.bg -> clients-pools.***.cooolbox.bg
                 parts = reverse_dns.split('.')
-                if len(parts) >= 2:
-                    obfuscated_parts = []
-                    for i, part in enumerate(parts):
-                        if i < 2 and part.isdigit():
-                            obfuscated_parts.append('x')
-                        else:
-                            obfuscated_parts.append(part)
-                    return '.'.join(obfuscated_parts)
+                if len(parts) >= 4:
+                    # Keep first part and last 2 parts, obfuscate middle
+                    middle_count = len(parts) - 3
+                    obfuscated_middle = ['***'] * middle_count
+                    return f"{parts[0]}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
+                elif len(parts) == 3:
+                    # For 3 parts, keep first and last, obfuscate middle
+                    return f"{parts[0]}.{self._obfuscate_part(parts[1])}.{parts[2]}"
+                elif len(parts) == 2:
+                    # For 2 parts, partially obfuscate first part
+                    return f"{self._obfuscate_part(parts[0])}.{parts[1]}"
                 else:
-                    return reverse_dns
+                    return self._obfuscate_part(reverse_dns)
             except (socket.herror, socket.gaierror, OSError):
                 # No reverse DNS - obfuscate IP (show first two octets, hide last two)
-                if is_ip:
+                if is_ip or ip_to_check:
                     octets = ip_to_check.split('.')
                     if len(octets) == 4:
                         return f"{octets[0]}.{octets[1]}.x.x"
                     return ip_to_check
                 # Fall through to hostname obfuscation
-        
+
         # Regular hostname obfuscation
         parts = hostname.split('.')
-        if len(parts) >= 2:
+        if len(parts) >= 4:
+            # Keep first part and last 2 parts, obfuscate middle
+            middle_count = len(parts) - 3
+            obfuscated_middle = ['***'] * middle_count
+            return f"{parts[0]}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
+        elif len(parts) == 3:
+            # For 3 parts, keep first and last, obfuscate middle
+            return f"{parts[0]}.{self._obfuscate_part(parts[1])}.{parts[2]}"
+        elif len(parts) == 2:
             # Obfuscate the main part, keep TLD visible
-            main_part = parts[0]
-            if len(main_part) <= 2:
-                obfuscated = "**"
-            else:
-                obfuscated = main_part[:2] + "*" * min(3, len(main_part) - 2)
-            return f"{obfuscated}.{'.'.join(parts[1:])}"
+            return f"{self._obfuscate_part(parts[0])}.{parts[1]}"
         else:
             # Single part hostname
-            if len(hostname) <= 2:
-                return "**"
-            return hostname[:2] + "*" * min(3, len(hostname) - 2)
+            return self._obfuscate_part(hostname)
+
+    def _obfuscate_part(self, part: str) -> str:
+        """
+        Obfuscate a single hostname part.
+
+        Args:
+            part: The hostname part to obfuscate
+
+        Returns:
+            Obfuscated part
+        """
+        if len(part) <= 2:
+            return "**"
+        return part[:2] + "*" * min(3, len(part) - 2)
     
     def _is_ip_address(self, value: str) -> bool:
         """
