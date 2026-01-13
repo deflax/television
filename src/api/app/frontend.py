@@ -262,14 +262,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         if stream_manager is None:
             return jsonify({}), 503
         return jsonify(stream_manager.playhead)
-    
-    @app.route('/database', methods=['GET'])
-    def database_route():
-        """Get stream database information."""
-        if stream_manager is None:
-            return jsonify({}), 503
-        return jsonify(stream_manager.database)
-    
+
     @app.route("/thumb/<thumb_file>", methods=['GET'])
     @requires_auth
     def thumb_route(thumb_file: str):

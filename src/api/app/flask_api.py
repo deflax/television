@@ -112,14 +112,14 @@ def _run_discord_bot(bot_manager: DiscordBotManager) -> None:
         loop.close()
 
 
-def _initialize_discord_bot(config: Config, logger: logging.Logger) -> Optional[DiscordBotManager]:
+def _initialize_discord_bot(config: Config, logger: logging.Logger, stream_manager: StreamManager) -> Optional[DiscordBotManager]:
     """Initialize and start Discord bot in a separate thread."""
     if not config.discord_bot_enabled:
         logger.info('Discord bot is disabled')
         return None
 
     try:
-        bot_manager = DiscordBotManager(config, logger)
+        bot_manager = DiscordBotManager(config, logger, stream_manager)
         bot_thread = threading.Thread(target=_run_discord_bot, args=(bot_manager,), daemon=True)
         bot_thread.start()
         logger.info('Discord bot started in background thread')
@@ -148,8 +148,8 @@ def create_app() -> Flask:
     # Setup scheduler
     _setup_scheduler(stream_manager, config)
 
-    # Initialize Discord bot (if enabled)
-    discord_bot_manager = _initialize_discord_bot(config, loggers.discord)
+    # Initialize Discord bot (if enabled) - must be after stream_manager
+    discord_bot_manager = _initialize_discord_bot(config, loggers.discord, stream_manager)
 
     # Register frontend routes
     register_routes(app, stream_manager, config, loggers, discord_bot_manager)
