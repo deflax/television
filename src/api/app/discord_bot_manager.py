@@ -4,7 +4,6 @@ import logging
 import json
 from datetime import datetime, timezone
 from typing import Optional
-import httpx
 import discord
 from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -14,9 +13,10 @@ from ffmpeg import FFmpeg, Progress
 class DiscordBotManager:
     """Manages Discord bot functionality integrated with the Flask API."""
 
-    def __init__(self, config, logger: logging.Logger):
+    def __init__(self, config, logger: logging.Logger, stream_manager):
         self.config = config
         self.logger = logger
+        self.stream_manager = stream_manager
 
         # Read Discord-specific env variables
         self.bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
@@ -145,32 +145,20 @@ class DiscordBotManager:
                 await ctx.channel.send('Access denied!')
 
     async def query_playhead(self):
-        """Query the playhead from the API."""
-        head_url = f'https://{self.scheduler_hostname}/playhead'
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(head_url)
-                playhead = response.json()
-                head = playhead['head']
-                self.logger.info(f'Playhead is at {head}')
-        except Exception as e:
-            self.logger.error('Cannot connect to the playhead!')
-            self.logger.error(e)
-            await asyncio.sleep(5)
+        """Query the playhead from stream_manager."""
+        # Get playhead directly from stream_manager
+        playhead = self.stream_manager.playhead.copy()
+        if playhead:
+            head = playhead.get('head', 'unknown')
+            self.logger.info(f'Playhead is at {head}')
+        else:
+            self.logger.warning('Playhead is empty')
         return playhead
 
     async def query_database(self):
-        """Query the database from the API and announce live streams."""
-        db_url = f'https://{self.scheduler_hostname}/database'
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(db_url)
-                self.database = response.json()
-        except Exception as e:
-            self.logger.error('Cannot connect to the database!')
-            self.logger.error(e)
-            await asyncio.sleep(5)
-            return
+        """Query the database from stream_manager and announce live streams."""
+        # Get database directly from stream_manager
+        self.database = self.stream_manager.database.copy()
 
         if self.database == {}:
             self.logger.error('Database is empty!')
