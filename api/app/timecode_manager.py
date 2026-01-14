@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import ipaddress
 import os
 import secrets
 import socket
@@ -134,13 +135,30 @@ class TimecodeManager:
                 else:
                     return self._obfuscate_part(reverse_dns)
             except (socket.herror, socket.gaierror, OSError):
-                # No reverse DNS - obfuscate IP (show first two octets, hide last two)
+                # No reverse DNS - obfuscate IP
                 if is_ip or ip_to_check:
-                    octets = ip_to_check.split('.')
-                    if len(octets) == 4:
-                        return f"{octets[0]}.{octets[1]}.x.x"
-                    return ip_to_check
+                    if self._is_ipv6(ip_to_check):
+                        # For IPv6, show first 2 segments, obfuscate rest
+                        # e.g., 2001:db8:85a3::8a2e:370:7334 -> 2001:db8:*:*:*:*:*:*
+                        addr = ipaddress.ip_address(ip_to_check)
+                        # Get exploded form to have all 8 segments
+                        exploded = addr.exploded
+                        segments = exploded.split(':')
+                        return f"{segments[0]}:{segments[1]}:*:*:*:*:*:*"
+                    else:
+                        # IPv4: show first two octets, hide last two
+                        octets = ip_to_check.split('.')
+                        if len(octets) == 4:
+                            return f"{octets[0]}.{octets[1]}.*.*"
+                        return ip_to_check
                 # Fall through to hostname obfuscation
+
+        # Check if hostname is an IPv6 address that wasn't handled above
+        if self._is_ipv6(hostname):
+            addr = ipaddress.ip_address(hostname)
+            exploded = addr.exploded
+            segments = exploded.split(':')
+            return f"{segments[0]}:{segments[1]}:*:*:*:*:*:*"
 
         # Regular hostname obfuscation
         parts = hostname.split('.')
@@ -175,7 +193,7 @@ class TimecodeManager:
     
     def _is_ip_address(self, value: str) -> bool:
         """
-        Check if a string is an IP address.
+        Check if a string is an IP address (IPv4 or IPv6).
         
         Args:
             value: String to check
@@ -184,13 +202,22 @@ class TimecodeManager:
             True if value is an IP address, False otherwise
         """
         try:
-            parts = value.split('.')
-            if len(parts) != 4:
-                return False
-            for part in parts:
-                num = int(part)
-                if num < 0 or num > 255:
-                    return False
+            ipaddress.ip_address(value)
             return True
+        except (ValueError, AttributeError):
+            return False
+    
+    def _is_ipv6(self, value: str) -> bool:
+        """
+        Check if a string is an IPv6 address.
+        
+        Args:
+            value: String to check
+            
+        Returns:
+            True if value is an IPv6 address, False otherwise
+        """
+        try:
+            return isinstance(ipaddress.ip_address(value), ipaddress.IPv6Address)
         except (ValueError, AttributeError):
             return False
