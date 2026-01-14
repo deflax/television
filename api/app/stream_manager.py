@@ -56,12 +56,12 @@ class StreamManager:
             self.logger.debug(f'Failed to parse stream description for {stream_id}: {e}')
             return
         
-        self.logger.warning(f'{stream_id} ({stream_name}) found. {api_settings}')
+        self.logger.info(f'{stream_id} ({stream_name}) found. {api_settings}')
         
         # Check whether we have stream details
         stream_details = api_settings.get('details', "")
         if stream_details:
-            self.logger.warning(f'Details found: {stream_details}')
+            self.logger.info(f'Details found: {stream_details}')
         
         if stream_start == "now":
             if not self._wait_for_stream_access(stream_hls_url, stream_name):
@@ -108,10 +108,10 @@ class StreamManager:
             req_counter += 1
             try:
                 if requests.get(stream_hls_url).status_code == 200:
-                    self.logger.warning(
+                    self.logger.info(
                         f'{stream_hls_url} accessible after {req_counter} attempts.'
                     )
-                    self.logger.warning(
+                    self.logger.info(
                         f'Waiting extra {self.config.enable_delay} seconds before we initiate the stream...'
                     )
                     time.sleep(self.config.enable_delay)
@@ -145,11 +145,11 @@ class StreamManager:
         
         # Handle the situation where we remove a stream that is currently playing
         if stream_id == self.playhead.get('id'):
-            self.logger.warning(f'{stream_id} was playing.')
+            self.logger.info(f'{stream_id} was playing.')
             try:
                 fallback = self.fallback_search()
                 self.priority = 0
-                self.logger.warning('Source priority is reset to 0')
+                self.logger.info('Source priority is reset to 0')
                 self.scheduler.add_job(
                     func=self.exec_stream, 
                     id=FALLBACK_JOB_ID, 
@@ -230,7 +230,7 @@ class StreamManager:
             "prio": stream_prio,
             "head": stream_hls_url
         }
-        self.logger.warning(f'Playhead: {str(self.playhead)}')
+        self.logger.info(f'Playhead: {str(self.playhead)}')
     
     def exec_stream(
         self, 
@@ -242,7 +242,7 @@ class StreamManager:
         """Execute stream based on priority."""
         if stream_prio > self.priority:
             self.priority = stream_prio
-            self.logger.warning(f'Source priority is now set to: {self.priority}')
+            self.logger.info(f'Source priority is now set to: {self.priority}')
             self.update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)
         elif stream_prio == self.priority:
             self.update_playhead(stream_id, stream_name, stream_prio, stream_hls_url)

@@ -77,7 +77,7 @@ def _initialize_core_client(config: Config, logger: logging.Logger) -> Client:
             username=config.core_username,
             password=config.core_password
         )
-        logger.warning(f'Logging in to Datarhei Core API {config.core_username}@{config.core_hostname}')
+        logger.info(f'Logging in to Datarhei Core API {config.core_username}@{config.core_hostname}')
         client.login()
         return client
     except Exception as e:
