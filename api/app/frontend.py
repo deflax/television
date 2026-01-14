@@ -142,7 +142,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
     def root_route():
         """Frontend index page - public live stream."""
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] index /')
+        loggers.content.info(f'[{client_ip}] index /')
         return render_template(
             'index.html',
             now=datetime.now(timezone.utc)
@@ -171,7 +171,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
                 session['hostname'] = client_hostname
                 session['identifier'] = identifier  # Store identifier for validation
                 session['created_at'] = datetime.now(timezone.utc).isoformat()
-                loggers.content.warning(f'[{client_ip}] authenticated with identifier {identifier}')
+                loggers.content.info(f'[{client_ip}] authenticated with identifier {identifier}')
 
                 # Redirect to original page if available
                 next_url = session.pop('next', None)
@@ -205,7 +205,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
                             # Valid session - show content
                             video_files = get_video_files(config.rec_path)
                             sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
-                            loggers.content.warning(f'[{client_ip}] archive (authenticated)')
+                            loggers.content.info(f'[{client_ip}] archive (authenticated)')
                             return render_template(
                                 'archive.html',
                                 now=datetime.now(timezone.utc),
@@ -220,7 +220,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             session.clear()
 
         # Not authenticated - show timecode form
-        loggers.content.warning(f'[{client_ip}] archive (not authenticated)')
+        loggers.content.info(f'[{client_ip}] archive (not authenticated)')
         return render_template(
             'archive.html',
             now=datetime.now(timezone.utc),
@@ -250,7 +250,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         # Send to Discord via bot
         sent_to_discord = send_timecode_to_discord(discord_bot_manager, obfuscated_hostname, timecode)
 
-        loggers.content.warning(f'[{client_ip}] timecode requested for {obfuscated_hostname}')
+        loggers.content.info(f'[{client_ip}] timecode requested for {obfuscated_hostname}')
 
         if sent_to_discord:
             message = 'Timecode has been sent to Discord channel'
@@ -279,7 +279,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             abort(404)
         
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] thumb {thumb_path}')
+        loggers.content.info(f'[{client_ip}] thumb {thumb_path}')
         return send_file(thumb_path, mimetype='image/png')
     
     @app.route('/video', methods=['POST'])
@@ -313,7 +313,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             abort(404)
         
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] stream {video_path}')
+        loggers.content.info(f'[{client_ip}] stream {video_path}')
         return send_file(video_path, mimetype='video/mp4')
     
     @app.route("/video/download/<video_file>", methods=['GET'])
@@ -325,7 +325,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             abort(404)
         
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] download {video_path}')
+        loggers.content.info(f'[{client_ip}] download {video_path}')
         return send_file(
             video_path,
             as_attachment=True,
@@ -348,7 +348,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             thumb_file = ""
 
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] player {video_path}')
+        loggers.content.info(f'[{client_ip}] player {video_path}')
         return render_template(
             'watch.html',
             now=datetime.now(timezone.utc),
@@ -360,6 +360,6 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
     def logout_route():
         """Clear session and logout user."""
         client_ip = get_client_address(request)
-        loggers.content.warning(f'[{client_ip}] logout')
+        loggers.content.info(f'[{client_ip}] logout')
         session.clear()
         return redirect(url_for('root_route'))
