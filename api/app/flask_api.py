@@ -26,8 +26,14 @@ class Config:
     """Application configuration loaded from environment variables."""
 
     def __init__(self):
-        self.log_level = os.environ.get('FLASKAPI_LOG_LEVEL', 'INFO').upper()
-        self.vod_token = os.environ.get('FLASKAPI_VOD_TOKEN')
+        # Log levels for each component (fallback to API_LOG_LEVEL, then INFO)
+        default_log_level = os.environ.get('API_LOG_LEVEL', 'INFO').upper()
+        self.log_level_api = os.environ.get('API_LOG_LEVEL_API', default_log_level).upper()
+        self.log_level_job = os.environ.get('API_LOG_LEVEL_JOB', default_log_level).upper()
+        self.log_level_content = os.environ.get('API_LOG_LEVEL_CONTENT', default_log_level).upper()
+        self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', default_log_level).upper()
+
+        self.vod_token = os.environ.get('API_VOD_TOKEN')
         self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
         self.core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
         self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
@@ -42,8 +48,8 @@ class Config:
 class LoggerManager:
     """Manages application loggers."""
 
-    def __init__(self, log_level: str):
-        self.log_level = log_level
+    def __init__(self, config: Config):
+        self.config = config
         self._setup_loggers()
 
     def _setup_loggers(self) -> None:
@@ -53,15 +59,15 @@ class LoggerManager:
         self.content = logging.getLogger('content')
         self.discord = logging.getLogger('discord')
 
-        self.api.setLevel(self.log_level)
-        self.job.setLevel(self.log_level)
-        self.content.setLevel(self.log_level)
-        self.discord.setLevel(self.log_level)
+        self.api.setLevel(self.config.log_level_api)
+        self.job.setLevel(self.config.log_level_job)
+        self.content.setLevel(self.config.log_level_content)
+        self.discord.setLevel(self.config.log_level_discord)
 
 
 # Global instances (will be initialized in create_app)
 config = Config()
-loggers = LoggerManager(config.log_level)
+loggers = LoggerManager(config)
 scheduler = BackgroundScheduler()
 stream_manager: Optional[StreamManager] = None
 client: Optional[Client] = None
