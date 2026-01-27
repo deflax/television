@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 
 from timecode_manager import TimecodeManager
+from visitor_tracker import VisitorTracker
 
 
 # Constants
@@ -137,6 +138,9 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
 
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
+
+    # Initialize visitor tracker (30s timeout, matching ~7x the 4.2s poll interval)
+    visitor_tracker = VisitorTracker(timeout=30)
     
     @app.route('/', methods=['GET'])
     def root_route():
@@ -266,9 +270,18 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
     @app.route('/playhead', methods=['GET'])
     def playhead_route():
         """Get current playhead information."""
+        # Register visitor heartbeat
+        client_ip = get_client_address(request)
+        visitor_tracker.heartbeat(client_ip)
+
         if stream_manager is None:
             return jsonify({}), 503
         return jsonify(stream_manager.playhead)
+
+    @app.route('/visitors', methods=['GET'])
+    def visitors_route():
+        """Get current number of active visitors."""
+        return jsonify({'visitors': visitor_tracker.count})
 
     @app.route("/thumb/<thumb_file>", methods=['GET'])
     @requires_auth

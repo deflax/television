@@ -172,6 +172,27 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// Visitor counter
+(function() {
+  const visitorNumber = document.getElementById('visitor-number');
+  if (!visitorNumber) return;
+
+  async function updateVisitorCount() {
+    try {
+      const response = await fetch('/visitors');
+      if (response.ok) {
+        const data = await response.json();
+        visitorNumber.textContent = data.visitors;
+      }
+    } catch (e) {
+      // silently ignore
+    }
+  }
+
+  updateVisitorCount();
+  setInterval(updateVisitorCount, 10000);
+})();
+
 </script>
 	        </div>
       </div>
