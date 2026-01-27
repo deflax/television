@@ -7,13 +7,13 @@ body {
 }
 
 p {
-    font: bold 18px sans-serif;
+    font: bold 16px sans-serif;
 }
 
 a {
     color: rgba(255,255,255,.55) !important;
     text-decoration: none !important;
-    font: bold 18px sans-serif;
+    font: bold 16px sans-serif;
 }
 
 a:hover {
