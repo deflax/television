@@ -172,7 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Visitor counter
+</script>
+              <p class="mt-2 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
+<script>
 (function() {
   const visitorNumber = document.getElementById('visitor-number');
   if (!visitorNumber) return;
@@ -192,9 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateVisitorCount();
   setInterval(updateVisitorCount, 10000);
 })();
-
 </script>
-              <p class="mt-2 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
 	        </div>
       </div>
       <div class="col-md-1 d-none d-md-block">
