@@ -31,86 +31,70 @@
 document.addEventListener('DOMContentLoaded', () => {
   const video = document.querySelector("video");
   const source = 'https://stream.deflax.net/memfs/f2844c7c-e86c-4f0a-afb6-a1b0e25a5071.m3u8';
-  const playhead_url = "https://deflax.net/playhead";
-  
+  const visitorNumber = document.getElementById('visitor-number');
+
   // For more options, see: https://github.com/sampotts/plyr/#options
-  // captions.update is required for captions to work with hls.js
   const defaultOptions = {};
+
+  //
+  // SSE connection for real-time playhead and visitor updates
+  //
+  function connectSSE() {
+    const evtSource = new EventSource('/events');
+
+    evtSource.addEventListener('playhead', function(e) {
+      const data = JSON.parse(e.data);
+      if (!data.head) return;
+
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS (Safari)
+        if (video.src !== data.head) {
+          video.src = data.head;
+          console.log("Video: switching to ", data.head);
+        }
+      } else if (window.hls) {
+        // HLS.js
+        const oldsrc = window.hls.url;
+        const newsrc = data.head;
+        if (newsrc !== oldsrc) {
+          console.log("HLS.js: switching to ", newsrc);
+          window.hls.loadSource(newsrc);
+          video.load();
+          video.play().catch(error => {
+            console.error('HLS.js: Autoplay was prevented:', error);
+          });
+        }
+      }
+    });
+
+    evtSource.addEventListener('visitors', function(e) {
+      const data = JSON.parse(e.data);
+      if (visitorNumber) {
+        visitorNumber.textContent = data.visitors;
+      }
+    });
+
+    evtSource.onerror = function() {
+      console.warn("SSE: connection lost, reconnecting...");
+      // EventSource auto-reconnects, but close explicitly if CLOSED
+      if (evtSource.readyState === EventSource.CLOSED) {
+        evtSource.close();
+        setTimeout(connectSSE, 3000);
+      }
+    };
+  }
 
   //
   // First check for native browser HLS support
   //
   if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    async function fetchInitData() {
-      try {
-        // Fetch data from the API
-        const response = await fetch(playhead_url);
-
-        // Check if the response is successful (status code 200)
-        if (!response.ok) {
-          throw new Error(`Video: HTTP error! Status: ${response.status}`);
-        }
-
-        // Parse JSON from the response
-        const data = await response.json();
-
-        // Now 'data' contains the parsed JSON
-        //console.log("Fetched JSON data:", data);
-
-        video.src = data.head;
-        console.log("Video: switching to ", data.head);
-
-        const player = new Plyr(video, defaultOptions);
-      } catch (error) {
-        console.error("Video: Error fetching data:", error);
-      }
-    }
-    fetchInitData();
+    const player = new Plyr(video, defaultOptions);
+    // SSE will handle setting video.src when playhead event arrives
     //
     // If no native HLS support, check if HLS.js is supported
     //
   } else if (Hls.isSupported()) {
     const hls = new Hls();
-
-    // Function to fetch and process JSON from the API
-    async function fetchData() {
-      try {
-        // Fetch data from the API
-        const response = await fetch(playhead_url);
-
-        // Check if the response is successful (status code 200)
-        if (!response.ok) {
-          throw new Error(`HLS.js: HTTP error! Status: ${response.status}`);
-        }
-
-        // Parse JSON from the response
-        const data = await response.json();
-
-        // Now 'data' contains the parsed JSON
-        // console.log("Fetched JSON data:", data);
-
-        const oldsrc = hls.url;
-        const newsrc = data.head;
-
-        if (newsrc === oldsrc) {
-          console.log("HLS.js: playing from ", newsrc);
-        } else {
-          console.log("HLS.js: switching to ", newsrc);
-          hls.loadSource(newsrc);
-          video.load();  // Reload the video element to apply the new source
-          video.play().catch(error => {
-            console.error('HLS.js: Autoplay was prevented:', error);
-          });
-        }
-      } catch (error) {
-        console.error("HLS.js: Error fetching data:", error);
-      }
-    }
-    fetchData();
-
-    // Set the interval for periodic execution (e.g., every 5 seconds)
-    const interval = 4200; // in milliseconds
-    setInterval(fetchData, interval);
 
     // Attach Hls.js to the video element
     hls.loadSource(source);
@@ -170,31 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   }
+
+  // Start the SSE connection
+  connectSSE();
 });
 
 </script>
               <p class="mt-2 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
-<script>
-(function() {
-  const visitorNumber = document.getElementById('visitor-number');
-  if (!visitorNumber) return;
-
-  async function updateVisitorCount() {
-    try {
-      const response = await fetch('/visitors');
-      if (response.ok) {
-        const data = await response.json();
-        visitorNumber.textContent = data.visitors;
-      }
-    } catch (e) {
-      // silently ignore
-    }
-  }
-
-  updateVisitorCount();
-  setInterval(updateVisitorCount, 10000);
-})();
-</script>
 	        </div>
       </div>
       <div class="col-md-1 d-none d-md-block">
