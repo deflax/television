@@ -15,6 +15,5 @@ echo "hypercorn $APP_MODULE"
 pwd
 hypercorn --bind 0.0.0.0:8080 \
 --workers 1 \
---access-log - \
 "$APP_MODULE()"
 
