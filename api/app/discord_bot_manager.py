@@ -235,11 +235,12 @@ class DiscordBotManager:
                 self.logger.error(f'Could not find Discord channel with ID {self.timecode_channel_id}')
                 return
 
-            message = (
-                f"🔐 **Access Request**\n"
-                f"**Hostname**: `{obfuscated_hostname}`\n"
-                f"**Timecode**: `{timecode}`"
-            )
+            # message = (
+            #     f"🔐 **Access Request**\n"
+            #     f"**Hostname**: `{obfuscated_hostname}`\n"
+            #     f"**Timecode**: `{timecode}`"
+            # )
+            message = f"🔐 `{obfuscated_hostname}` `timecode: {timecode}`"
             await channel.send(message)
             self.logger.info(f'Sent timecode to Discord for {obfuscated_hostname}')
         except Exception as e:
@@ -310,9 +311,9 @@ class DiscordBotManager:
                 return
 
             if connected:
-                message = f"📥 `{obfuscated_ip}` connected (visitors: {visitor_count})"
+                message = f"📥 `{obfuscated_ip}` `visitors: {visitor_count}`"
             else:
-                message = f"📤 `{obfuscated_ip}` disconnected (visitors: {visitor_count})"
+                message = f"📤 `{obfuscated_ip}` `visitors: {visitor_count}`"
 
             await channel.send(message)
         except Exception as e:
