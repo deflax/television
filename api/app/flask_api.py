@@ -58,7 +58,7 @@ class LoggerManager:
         # Configure root logger with a stream handler so all loggers have output
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter('%(asctime)s [%(name)s] %(levelname)s: %(message)s'))
-        logging.basicConfig(handlers=[handler], level=logging.WARNING)
+        logging.basicConfig(handlers=[handler], level=logging.DEBUG)
 
         self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')
