@@ -8,6 +8,7 @@ import discord
 from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from ffmpeg import FFmpeg, Progress
+from obfuscation import obfuscate_hostname
 
 
 class DiscordBotManager:
@@ -243,6 +244,79 @@ class DiscordBotManager:
             self.logger.info(f'Sent timecode to Discord for {obfuscated_hostname}')
         except Exception as e:
             self.logger.error(f'Failed to send timecode message to Discord: {e}')
+
+    def log_visitor_connect(self, ip: str, visitor_count: int) -> bool:
+        """Log visitor connection to Discord channel (thread-safe, sync method).
+
+        Args:
+            ip: The visitor's IP address (will be obfuscated)
+            visitor_count: Current total visitor count
+
+        Returns:
+            True if message was scheduled, False otherwise.
+        """
+        if self.live_channel_id == 0:
+            return False
+
+        if not self.bot.is_ready():
+            self.logger.warning('Discord bot is not ready yet')
+            return False
+
+        obfuscated_ip = obfuscate_hostname(ip, ip)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self._log_visitor_async(obfuscated_ip, visitor_count, connected=True),
+                self.bot.loop
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f'Failed to schedule visitor connect message: {e}')
+            return False
+
+    def log_visitor_disconnect(self, ip: str, visitor_count: int) -> bool:
+        """Log visitor disconnection to Discord channel (thread-safe, sync method).
+
+        Args:
+            ip: The visitor's IP address (will be obfuscated)
+            visitor_count: Current total visitor count
+
+        Returns:
+            True if message was scheduled, False otherwise.
+        """
+        if self.live_channel_id == 0:
+            return False
+
+        if not self.bot.is_ready():
+            self.logger.warning('Discord bot is not ready yet')
+            return False
+
+        obfuscated_ip = obfuscate_hostname(ip, ip)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self._log_visitor_async(obfuscated_ip, visitor_count, connected=False),
+                self.bot.loop
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f'Failed to schedule visitor disconnect message: {e}')
+            return False
+
+    async def _log_visitor_async(self, obfuscated_ip: str, visitor_count: int, connected: bool):
+        """Internal async method to log visitor event to Discord."""
+        try:
+            channel = self.bot.get_channel(int(self.live_channel_id))
+            if channel is None:
+                self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
+                return
+
+            if connected:
+                message = f"📥 `{obfuscated_ip}` connected (visitors: {visitor_count})"
+            else:
+                message = f"📤 `{obfuscated_ip}` disconnected (visitors: {visitor_count})"
+
+            await channel.send(message)
+        except Exception as e:
+            self.logger.error(f'Failed to send visitor log to Discord: {e}')
 
     async def exec_recorder(self, playhead):
         """Execute the recorder to capture a stream."""

@@ -142,8 +142,20 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
 
+    # Create visitor event callbacks for Discord logging
+    def on_visitor_connect(ip: str, count: int) -> None:
+        if discord_bot_manager is not None:
+            discord_bot_manager.log_visitor_connect(ip, count)
+
+    def on_visitor_disconnect(ip: str, count: int) -> None:
+        if discord_bot_manager is not None:
+            discord_bot_manager.log_visitor_disconnect(ip, count)
+
     # Initialize visitor tracker with SSE connection-based tracking
-    visitor_tracker = VisitorTracker()
+    visitor_tracker = VisitorTracker(
+        on_connect=on_visitor_connect,
+        on_disconnect=on_visitor_disconnect
+    )
 
     # Set of active SSE client queues for broadcasting updates
     sse_clients: Set[asyncio.Queue] = set()
