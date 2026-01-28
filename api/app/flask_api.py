@@ -6,7 +6,7 @@ import asyncio
 import threading
 from datetime import datetime
 from typing import Optional
-from flask import Flask
+from quart import Quart
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
 
@@ -32,6 +32,7 @@ class Config:
         self.log_level_job = os.environ.get('API_LOG_LEVEL_JOB', default_log_level).upper()
         self.log_level_content = os.environ.get('API_LOG_LEVEL_CONTENT', default_log_level).upper()
         self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', default_log_level).upper()
+        self.log_level_sse = os.environ.get('API_LOG_LEVEL_SSE', default_log_level).upper()
 
         self.vod_token = os.environ.get('API_VOD_TOKEN')
         self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
@@ -54,15 +55,17 @@ class LoggerManager:
 
     def _setup_loggers(self) -> None:
         """Initialize and configure loggers."""
-        self.api = logging.getLogger('waitress')
+        self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')
         self.content = logging.getLogger('content')
         self.discord = logging.getLogger('discord')
+        self.sse = logging.getLogger('sse')
 
         self.api.setLevel(self.config.log_level_api)
         self.job.setLevel(self.config.log_level_job)
         self.content.setLevel(self.config.log_level_content)
         self.discord.setLevel(self.config.log_level_discord)
+        self.sse.setLevel(self.config.log_level_sse)
 
 
 # Global instances (will be initialized in create_app)
@@ -72,7 +75,7 @@ scheduler = BackgroundScheduler()
 stream_manager: Optional[StreamManager] = None
 client: Optional[Client] = None
 discord_bot_manager: Optional[DiscordBotManager] = None
-app = Flask(__name__)
+app = Quart(__name__)
 
 
 def _initialize_core_client(config: Config, logger: logging.Logger) -> Client:
@@ -135,11 +138,11 @@ def _initialize_discord_bot(config: Config, logger: logging.Logger, stream_manag
         return None
 
 
-def create_app() -> Flask:
-    """Create and configure Flask application."""
+def create_app() -> Quart:
+    """Create and configure Quart application."""
     global stream_manager, client, discord_bot_manager
 
-    # Configure Flask app
+    # Configure Quart app
     app.config['SERVER_NAME'] = config.server_name
     app.config['PREFERRED_URL_SCHEME'] = 'https'
     app.config['SECRET_KEY'] = config.secret_key

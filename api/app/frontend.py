@@ -1,8 +1,10 @@
 import os
+import json
+import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
-from flask import Flask, render_template, jsonify, request, abort, session, redirect, url_for
-from flask.helpers import send_file
+from typing import List, Optional, Set
+from quart import Quart, render_template, jsonify, request, abort, session, redirect, url_for
+from quart.helpers import send_file
 from werkzeug.utils import secure_filename
 from functools import wraps
 
@@ -16,12 +18,13 @@ THUMBNAIL_EXTENSION = '.png'
 DEFAULT_REC_PATH = "/recordings"
 
 
-# Flask route helpers
+# Route helpers
 def get_client_address(req) -> str:
     """Get client IP address, handling proxy headers."""
-    if req.environ.get('HTTP_X_FORWARDED_FOR') is None:
-        return req.environ['REMOTE_ADDR']
-    return req.environ['HTTP_X_FORWARDED_FOR']
+    forwarded_for = req.headers.get('X-Forwarded-For')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    return req.remote_addr or '0.0.0.0'
 
 
 def get_client_hostname(req) -> str:
@@ -60,7 +63,7 @@ def send_timecode_to_discord(discord_bot_manager, obfuscated_hostname: str, time
 def requires_auth(f):
     """Decorator to require timecode authentication."""
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    async def decorated_function(*args, **kwargs):
         # Check if user is authenticated
         if not session.get('authenticated', False):
             # Store the URL user was trying to access
@@ -95,7 +98,7 @@ def requires_auth(f):
                 session.clear()
                 return redirect(url_for('root_route'))
         
-        return f(*args, **kwargs)
+        return await f(*args, **kwargs)
     return decorated_function
 
 
@@ -133,27 +136,30 @@ def get_sorted_thumbnails(rec_path: str) -> List[str]:
     return [os.path.basename(file) for file in sorted_thumbnails_paths]
 
 
-def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_manager=None) -> None:
-    """Register all Flask routes for the frontend."""
+def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_manager=None) -> None:
+    """Register all Quart routes for the frontend."""
 
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
 
-    # Initialize visitor tracker (30s timeout, matching ~7x the 4.2s poll interval)
-    visitor_tracker = VisitorTracker(timeout=30)
+    # Initialize visitor tracker with SSE connection-based tracking
+    visitor_tracker = VisitorTracker()
+
+    # Set of active SSE client queues for broadcasting updates
+    sse_clients: Set[asyncio.Queue] = set()
     
     @app.route('/', methods=['GET'])
-    def root_route():
+    async def root_route():
         """Frontend index page - public live stream."""
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] index /')
-        return render_template(
+        return await render_template(
             'index.html',
             now=datetime.now(timezone.utc)
         )
     
     @app.route('/archive', methods=['GET', 'POST'])
-    def archive_route():
+    async def archive_route():
         """Archive page with timecode authentication."""
         client_ip = get_client_address(request)
         client_hostname = get_client_hostname(request)
@@ -166,7 +172,8 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
 
         # Handle POST (timecode submission)
         if request.method == 'POST':
-            submitted_timecode = request.form.get('timecode', '').strip()
+            form = await request.form
+            submitted_timecode = form.get('timecode', '').strip()
 
             if timecode_manager.validate_timecode(identifier, submitted_timecode):
                 # Valid timecode - create session
@@ -185,7 +192,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             else:
                 # Invalid timecode
                 loggers.content.warning(f'[{client_ip}] invalid timecode attempt from {identifier}')
-                return render_template(
+                return await render_template(
                     'archive.html',
                     now=datetime.now(timezone.utc),
                     video_files=[],
@@ -210,7 +217,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
                             video_files = get_video_files(config.rec_path)
                             sorted_thumbnails = get_sorted_thumbnails(config.rec_path)
                             loggers.content.info(f'[{client_ip}] archive (authenticated)')
-                            return render_template(
+                            return await render_template(
                                 'archive.html',
                                 now=datetime.now(timezone.utc),
                                 video_files=video_files,
@@ -225,7 +232,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
 
         # Not authenticated - show timecode form
         loggers.content.info(f'[{client_ip}] archive (not authenticated)')
-        return render_template(
+        return await render_template(
             'archive.html',
             now=datetime.now(timezone.utc),
             video_files=[],
@@ -234,7 +241,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         )
 
     @app.route('/request-timecode', methods=['POST'])
-    def request_timecode_route():
+    async def request_timecode_route():
         """Request a timecode for the current hostname."""
         client_ip = get_client_address(request)
         client_hostname = get_client_hostname(request)
@@ -267,25 +274,107 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
             'obfuscated_hostname': obfuscated_hostname
         })
     
-    @app.route('/playhead', methods=['GET'])
-    def playhead_route():
-        """Get current playhead information."""
-        # Register visitor heartbeat
+    @app.route('/events', methods=['GET'])
+    async def sse_stream():
+        """Server-Sent Events endpoint for real-time playhead and visitor updates.
+
+        Replaces the polling-based /playhead and /visitors endpoints.
+        Each connected client is an active visitor - no heartbeat polling needed.
+        """
         client_ip = get_client_address(request)
-        visitor_tracker.heartbeat(client_ip)
+        loggers.sse.info(f'[{client_ip}] SSE client connected')
 
+        queue: asyncio.Queue = asyncio.Queue()
+        sse_clients.add(queue)
+        visitor_tracker.connect(client_ip)
+
+        # Notify all clients about the updated visitor count
+        await _broadcast_visitors()
+
+        async def send_events():
+            try:
+                # Send initial playhead state immediately
+                if stream_manager is not None:
+                    initial_data = json.dumps(stream_manager.playhead)
+                    yield f"event: playhead\ndata: {initial_data}\n\n"
+
+                # Send initial visitor count
+                yield f"event: visitors\ndata: {json.dumps({'visitors': visitor_tracker.count})}\n\n"
+
+                while True:
+                    try:
+                        # Wait for new events with a 15s timeout for keepalive
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        yield f"event: {event['type']}\ndata: {event['data']}\n\n"
+                    except asyncio.TimeoutError:
+                        # Send keepalive comment to prevent connection timeout
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                sse_clients.discard(queue)
+                visitor_tracker.disconnect(client_ip)
+                loggers.sse.info(f'[{client_ip}] SSE client disconnected')
+                # Notify remaining clients about updated visitor count
+                await _broadcast_visitors()
+
+        response = await app.make_response(
+            send_events(),
+            {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+            },
+        )
+        response.timeout = None  # Disable response timeout for SSE
+        return response
+
+    async def _broadcast_visitors():
+        """Broadcast current visitor count to all SSE clients."""
+        event = {
+            'type': 'visitors',
+            'data': json.dumps({'visitors': visitor_tracker.count})
+        }
+        for q in list(sse_clients):
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
+
+    async def _broadcast_playhead():
+        """Broadcast current playhead state to all SSE clients."""
         if stream_manager is None:
-            return jsonify({}), 503
-        return jsonify(stream_manager.playhead)
+            return
+        event = {
+            'type': 'playhead',
+            'data': json.dumps(stream_manager.playhead)
+        }
+        for q in list(sse_clients):
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
 
-    @app.route('/visitors', methods=['GET'])
-    def visitors_route():
-        """Get current number of active visitors."""
-        return jsonify({'visitors': visitor_tracker.count})
+    # Background task: monitor playhead changes and broadcast to SSE clients
+    @app.before_serving
+    async def start_playhead_monitor():
+        """Start a background task that monitors playhead changes."""
+        async def monitor_playhead():
+            last_playhead = None
+            while True:
+                await asyncio.sleep(1)  # Check every second
+                if stream_manager is not None:
+                    current = stream_manager.playhead
+                    if current != last_playhead:
+                        last_playhead = current.copy() if current else None
+                        await _broadcast_playhead()
+
+        app.add_background_task(monitor_playhead)
 
     @app.route("/thumb/<thumb_file>", methods=['GET'])
     @requires_auth
-    def thumb_route(thumb_file: str):
+    async def thumb_route(thumb_file: str):
         """Serve thumbnail images."""
         thumb_path = os.path.join(config.rec_path, 'thumb', thumb_file)
         if not os.path.exists(thumb_path):
@@ -293,10 +382,10 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] thumb {thumb_path}')
-        return send_file(thumb_path, mimetype='image/png')
+        return await send_file(thumb_path, mimetype='image/png')
     
     @app.route('/video', methods=['POST'])
-    def video_upload():
+    async def video_upload():
         """Handle video file uploads."""
         token = request.headers.get("Authorization")
         if token != f"Bearer {config.vod_token}":
@@ -306,20 +395,21 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         if not os.path.exists(upload_path):
             abort(404)
         
-        if 'file' not in request.files:
+        files = await request.files
+        if 'file' not in files:
             return 'No file provided', 400
         
-        file = request.files['file']
+        file = files['file']
         if file.filename == '':
             return 'No file selected', 400
         
         filename = secure_filename(file.filename)
-        file.save(os.path.join(upload_path, filename))
+        await file.save(os.path.join(upload_path, filename))
         return "File uploaded successfully", 200
     
     @app.route("/video/<video_file>", methods=['GET'])
     @requires_auth
-    def video_route(video_file: str):
+    async def video_route(video_file: str):
         """Stream video files."""
         video_path = os.path.join(config.rec_path, 'vod', video_file)
         if not os.path.exists(video_path):
@@ -327,11 +417,11 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] stream {video_path}')
-        return send_file(video_path, mimetype='video/mp4')
+        return await send_file(video_path, mimetype='video/mp4')
     
     @app.route("/video/download/<video_file>", methods=['GET'])
     @requires_auth
-    def video_download_route(video_file: str):
+    async def video_download_route(video_file: str):
         """Download video files."""
         video_path = os.path.join(config.rec_path, 'vod', video_file)
         if not os.path.exists(video_path):
@@ -339,7 +429,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] download {video_path}')
-        return send_file(
+        return await send_file(
             video_path,
             as_attachment=True,
             download_name=video_file
@@ -347,7 +437,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
     
     @app.route("/video/watch/<video_file_no_extension>", methods=['GET'])
     @requires_auth
-    def video_watch_route(video_file_no_extension: str):
+    async def video_watch_route(video_file_no_extension: str):
         """Video player page."""
         video_file = f'{video_file_no_extension}.mp4'
         thumb_file = f'{video_file_no_extension}.png'
@@ -362,7 +452,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
 
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] player {video_path}')
-        return render_template(
+        return await render_template(
             'watch.html',
             now=datetime.now(timezone.utc),
             video_file=video_file,
@@ -370,7 +460,7 @@ def register_routes(app: Flask, stream_manager, config, loggers, discord_bot_man
         )
 
     @app.route('/logout', methods=['GET'])
-    def logout_route():
+    async def logout_route():
         """Clear session and logout user."""
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] logout')
