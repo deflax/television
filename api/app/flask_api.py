@@ -55,6 +55,11 @@ class LoggerManager:
 
     def _setup_loggers(self) -> None:
         """Initialize and configure loggers."""
+        # Configure root logger with a stream handler so all loggers have output
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s [%(name)s] %(levelname)s: %(message)s'))
+        logging.basicConfig(handlers=[handler], level=logging.WARNING)
+
         self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')
         self.content = logging.getLogger('content')
