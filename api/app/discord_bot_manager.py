@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import json
+from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 import discord
@@ -47,6 +48,10 @@ class DiscordBotManager:
         self.database = {}
         self.rec_path = "/recordings"
         self.recorder = False
+
+        # Track bot messages per channel (keep last N message IDs)
+        self.max_channel_messages = 5
+        self._channel_messages = {}  # channel_id -> deque of discord.Message
 
         # Setup bot commands and events
         self._setup_bot_events()
@@ -145,6 +150,30 @@ class DiscordBotManager:
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
+    async def _send_and_prune(self, channel, content=None, embed=None):
+        """Send a message to a channel and delete oldest messages beyond the limit.
+
+        Keeps only the last `self.max_channel_messages` bot messages per channel.
+        Returns the sent message.
+        """
+        channel_id = channel.id
+        if channel_id not in self._channel_messages:
+            self._channel_messages[channel_id] = deque()
+
+        # Send the new message
+        msg = await channel.send(content=content, embed=embed)
+        self._channel_messages[channel_id].append(msg)
+
+        # Delete old messages beyond the limit
+        while len(self._channel_messages[channel_id]) > self.max_channel_messages:
+            old_msg = self._channel_messages[channel_id].popleft()
+            try:
+                await old_msg.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                self.logger.warning(f'Failed to delete old message {old_msg.id}: {e}')
+
+        return msg
+
     async def query_playhead(self):
         """Query the playhead from stream_manager."""
         # Get playhead directly from stream_manager
@@ -197,7 +226,7 @@ class DiscordBotManager:
         """Announce live stream to Discord channel."""
         if self.live_channel_id != 0:
             live_channel = self.bot.get_channel(int(self.live_channel_id))
-            await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
+            await self._send_and_prune(live_channel, content=f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
     def send_timecode_message(self, obfuscated_hostname: str, timecode: str) -> bool:
@@ -241,7 +270,7 @@ class DiscordBotManager:
             #     f"**Timecode**: `{timecode}`"
             # )
             message = f"🔐 `{obfuscated_hostname}` `timecode: {timecode}`"
-            await channel.send(message)
+            await self._send_and_prune(channel, content=message)
             self.logger.info(f'Sent timecode to Discord for {obfuscated_hostname}')
         except Exception as e:
             self.logger.error(f'Failed to send timecode message to Discord: {e}')
@@ -315,7 +344,7 @@ class DiscordBotManager:
             else:
                 message = f"📤 `{obfuscated_ip}` `visitors: {visitor_count}`"
 
-            await channel.send(message)
+            await self._send_and_prune(channel, content=message)
         except Exception as e:
             self.logger.error(f'Failed to send visitor log to Discord: {e}')
 
