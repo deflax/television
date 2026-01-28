@@ -340,9 +340,9 @@ class DiscordBotManager:
                 return
 
             if connected:
-                message = f"📥 `{obfuscated_ip}` `visitors: {visitor_count}`"
+                message = f"📥 `{obfuscated_ip}` `👽 {visitor_count}`"
             else:
-                message = f"📤 `{obfuscated_ip}` `visitors: {visitor_count}`"
+                message = f"📤 `{obfuscated_ip}` `👽 {visitor_count}`"
 
             await self._send_and_prune(channel, content=message)
         except Exception as e:
