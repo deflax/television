@@ -55,10 +55,13 @@ class LoggerManager:
 
     def _setup_loggers(self) -> None:
         """Initialize and configure loggers."""
-        # Configure root logger with a stream handler so all loggers have output
+        # Create a shared handler and formatter
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter('%(asctime)s [%(name)s] %(levelname)s: %(message)s'))
-        logging.basicConfig(handlers=[handler], level=logging.DEBUG)
+        handler.setLevel(logging.DEBUG)
+
+        # Set root logger to WARNING to suppress noisy third-party logs (httpcore, etc.)
+        logging.basicConfig(level=logging.WARNING)
 
         self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')
@@ -66,11 +69,18 @@ class LoggerManager:
         self.discord = logging.getLogger('discord')
         self.sse = logging.getLogger('sse')
 
-        self.api.setLevel(self.config.log_level_api)
-        self.job.setLevel(self.config.log_level_job)
-        self.content.setLevel(self.config.log_level_content)
-        self.discord.setLevel(self.config.log_level_discord)
-        self.sse.setLevel(self.config.log_level_sse)
+        # Add handler directly to each logger and disable propagation
+        # so they're not filtered by root logger level
+        for logger, level in [
+            (self.api, self.config.log_level_api),
+            (self.job, self.config.log_level_job),
+            (self.content, self.config.log_level_content),
+            (self.discord, self.config.log_level_discord),
+            (self.sse, self.config.log_level_sse),
+        ]:
+            logger.addHandler(handler)
+            logger.setLevel(level)
+            logger.propagate = False
 
 
 # Global instances (will be initialized in create_app)
