@@ -50,7 +50,7 @@ class DiscordBotManager:
         self.recorder = False
 
         # Track bot messages per channel (keep last N message IDs)
-        self.max_channel_messages = 5
+        self.max_channel_messages = 10
         self._channel_messages = {}  # channel_id -> deque of discord.Message
 
         # Setup bot commands and events
