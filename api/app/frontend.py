@@ -318,15 +318,11 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                 # Notify remaining clients about updated visitor count
                 await _broadcast_visitors()
 
-        response = await app.make_response(
-            send_events(),
-            {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'X-Accel-Buffering': 'no',
-            },
-        )
+        response = await app.make_response(send_events())
+        response.headers['Content-Type'] = 'text/event-stream'
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['Connection'] = 'keep-alive'
+        response.headers['X-Accel-Buffering'] = 'no'
         response.timeout = None  # Disable response timeout for SSE
         return response
 
