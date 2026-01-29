@@ -9,6 +9,7 @@ No transcoding — video and audio are copied as-is to preserve original quality
 import glob
 import logging
 import os
+import random
 import signal
 import subprocess
 import threading
@@ -22,6 +23,7 @@ HLS_DIR = "/tmp/hls"
 HTTP_PORT = int(os.environ.get("REPLAY_HTTP_PORT", "8090"))
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi")
 SCAN_INTERVAL = int(os.environ.get("REPLAY_SCAN_INTERVAL", "60"))
+SHUFFLE = os.environ.get("REPLAY_SHUFFLE", "true") == "true"
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -34,11 +36,14 @@ shutdown_event = threading.Event()
 
 
 def discover_videos() -> list[str]:
-    """Return a sorted list of video file paths found in the recordings dir."""
+    """Return a list of video file paths found in the recordings dir."""
     videos = []
     for ext in VIDEO_EXTENSIONS:
         videos.extend(glob.glob(os.path.join(RECORDINGS_DIR, f"*{ext}")))
-    videos.sort()
+    if SHUFFLE:
+        random.shuffle(videos)
+    else:
+        videos.sort()
     return videos
 
 
@@ -49,6 +54,8 @@ def write_concat_playlist(videos: list[str], path: str) -> None:
             escaped = v.replace("'", "'\\''")
             f.write(f"file '{escaped}'\n")
     log.info("Wrote concat playlist with %d videos to %s", len(videos), path)
+    for i, v in enumerate(videos, 1):
+        log.info("  [%d] %s", i, os.path.basename(v))
 
 
 def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
@@ -56,7 +63,7 @@ def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
     cmd = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "warning",
+        "-loglevel", "info",
         "-stream_loop", "-1",
         "-f", "concat",
         "-safe", "0",
@@ -88,12 +95,27 @@ def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
 
 
 def ffmpeg_stderr_logger(proc: subprocess.Popen) -> None:
-    """Read FFmpeg stderr in a thread and log it."""
+    """Read FFmpeg stderr in a thread and log it, highlighting video transitions."""
     assert proc.stderr is not None
+    video_index = 0
     for line in iter(proc.stderr.readline, b""):
         decoded = line.decode("utf-8", errors="replace").rstrip()
-        if decoded:
+        if not decoded:
+            continue
+        # Concat demuxer logs "Opening 'path'" when it starts reading a new file
+        if "Opening '" in decoded and RECORDINGS_DIR in decoded:
+            # Extract the filename from the line
+            try:
+                file_path = decoded.split("Opening '")[1].split("'")[0]
+                file_name = os.path.basename(file_path)
+                video_index += 1
+                log.info("Now playing [%d]: %s", video_index, file_name)
+            except (IndexError, ValueError):
+                log.info("ffmpeg: %s", decoded)
+        elif "error" in decoded.lower() or "warning" in decoded.lower():
             log.warning("ffmpeg: %s", decoded)
+        else:
+            log.debug("ffmpeg: %s", decoded)
 
 
 class CORSRequestHandler(SimpleHTTPRequestHandler):
@@ -147,8 +169,8 @@ def ffmpeg_loop():
             shutdown_event.wait(SCAN_INTERVAL)
             continue
 
-        # If the video list changed, restart FFmpeg with the new playlist
-        if videos != current_videos:
+        # If the video set changed, restart FFmpeg with the new playlist
+        if set(videos) != set(current_videos):
             if ffmpeg_process and ffmpeg_process.poll() is None:
                 log.info("Video list changed, restarting FFmpeg...")
                 ffmpeg_process.terminate()
@@ -194,6 +216,7 @@ def main():
     log.info("Recordings dir: %s", RECORDINGS_DIR)
     log.info("HLS output dir: %s", HLS_DIR)
     log.info("HTTP port: %d", HTTP_PORT)
+    log.info("Shuffle: %s", SHUFFLE)
 
     http_server = run_http_server()
 
