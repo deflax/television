@@ -270,4 +270,132 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
+
+<!-- Weather Modal Overlay -->
+<div class="modal fade" id="weatherModal" tabindex="-1" aria-labelledby="weatherModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="weatherModalLabel">Weather</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe
+          id="weatherIframe"
+          src=""
+          style="width: 100%; height: 100%; border: none;"
+          allowfullscreen
+          loading="lazy"
+          referrerpolicy="no-referrer">
+        </iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Archive Modal Overlay -->
+<div class="modal fade" id="archiveModal" tabindex="-1" aria-labelledby="archiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="archiveModalLabel">Archive</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="archiveModalBody">
+        <div class="text-center p-5">
+          <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const weatherSrc = 'https://earth.nullschool.net/#current/wind/surface/level/overlay=temp/orthographic=16.78,46.84,2310/loc=24.738,42.213';
+
+  // Intercept nav links to open modals instead of navigating
+  const weatherLink = document.querySelector('a.nav-link[href="/weather"]');
+  const archiveLink = document.querySelector('a.nav-link[href="/archive"]');
+
+  if (weatherLink) {
+    weatherLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const iframe = document.getElementById('weatherIframe');
+      if (!iframe.src || iframe.src === '' || iframe.src === window.location.href) {
+        iframe.src = weatherSrc;
+      }
+      const modal = new bootstrap.Modal(document.getElementById('weatherModal'));
+      modal.show();
+    });
+  }
+
+  if (archiveLink) {
+    archiveLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const modalBody = document.getElementById('archiveModalBody');
+      modalBody.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+      const modal = new bootstrap.Modal(document.getElementById('archiveModal'));
+      modal.show();
+
+      fetch('/archive', { credentials: 'same-origin' })
+        .then(r => r.text())
+        .then(html => {
+          // Parse the full page and extract just the content block
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const content = doc.querySelector('.content-container');
+          if (content) {
+            modalBody.innerHTML = content.innerHTML;
+            // Execute any scripts in the loaded content
+            const scripts = modalBody.querySelectorAll('script');
+            scripts.forEach(oldScript => {
+              const newScript = document.createElement('script');
+              newScript.textContent = oldScript.textContent;
+              oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+            // Fix form action to submit via fetch instead of navigation
+            const form = modalBody.querySelector('#timecodeForm');
+            if (form) {
+              form.addEventListener('submit', async (evt) => {
+                evt.preventDefault();
+                const formData = new FormData(form);
+                const response = await fetch('/archive', {
+                  method: 'POST',
+                  body: formData,
+                  credentials: 'same-origin'
+                });
+                const responseHtml = await response.text();
+                const respDoc = new DOMParser().parseFromString(responseHtml, 'text/html');
+                const respContent = respDoc.querySelector('.content-container');
+                if (respContent) {
+                  modalBody.innerHTML = respContent.innerHTML;
+                  // Re-execute scripts
+                  const newScripts = modalBody.querySelectorAll('script');
+                  newScripts.forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                  });
+                }
+              });
+            }
+          } else {
+            modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
+          }
+        })
+        .catch(() => {
+          modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
+        });
+    });
+  }
+
+  // Cleanup weather iframe when modal is closed to save resources
+  document.getElementById('weatherModal').addEventListener('hidden.bs.modal', () => {
+    document.getElementById('weatherIframe').src = '';
+  });
+});
+</script>
 {% endblock %}

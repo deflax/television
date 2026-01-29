@@ -114,3 +114,27 @@ video {
     text-decoration: none;
     color: inherit;
 }
+
+/* Fullscreen modal overlays */
+.modal-fullscreen .modal-content {
+    border: none;
+    border-radius: 0;
+}
+
+.modal-fullscreen .modal-header {
+    border-bottom: 1px solid #495057;
+    padding: 0.5rem 1rem;
+}
+
+.modal-fullscreen .modal-body {
+    overflow-y: auto;
+}
+
+#weatherModal .modal-body {
+    padding: 0;
+    overflow: hidden;
+}
+
+#archiveModal .modal-body .gallery {
+    padding: 1rem;
+}
