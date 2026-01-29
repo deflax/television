@@ -313,6 +313,10 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                 # Send initial visitor count
                 yield f"event: visitors\ndata: {json.dumps({'visitors': visitor_tracker.count})}\n\n"
 
+                # Send initial EPG state
+                if stream_manager is not None:
+                    yield f"event: epg\ndata: {json.dumps(stream_manager.database)}\n\n"
+
                 while True:
                     try:
                         # Wait for new events with a 15s timeout for keepalive
@@ -364,10 +368,24 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
             except asyncio.QueueFull:
                 pass
 
-    # Background task: monitor playhead changes and broadcast to SSE clients
+    async def _broadcast_epg():
+        """Broadcast current EPG (stream database) to all SSE clients."""
+        if stream_manager is None:
+            return
+        event = {
+            'type': 'epg',
+            'data': json.dumps(stream_manager.database)
+        }
+        for q in list(sse_clients):
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
+
+    # Background task: monitor playhead and EPG changes and broadcast to SSE clients
     @app.before_serving
     async def start_playhead_monitor():
-        """Start a background task that monitors playhead changes."""
+        """Start background tasks that monitor playhead and EPG changes."""
         async def monitor_playhead():
             last_playhead = None
             while True:
@@ -378,7 +396,18 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                         last_playhead = current.copy() if current else None
                         await _broadcast_playhead()
 
+        async def monitor_epg():
+            last_database = None
+            while True:
+                await asyncio.sleep(5)  # Check every 5 seconds
+                if stream_manager is not None:
+                    current_db = stream_manager.database.copy()
+                    if current_db != last_database:
+                        last_database = current_db
+                        await _broadcast_epg()
+
         app.add_background_task(monitor_playhead)
+        app.add_background_task(monitor_epg)
 
     @app.route("/thumb/<thumb_file>", methods=['GET'])
     @requires_auth
