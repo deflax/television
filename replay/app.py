@@ -102,6 +102,13 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=HLS_DIR, **kwargs)
 
+    def handle(self):
+        """Suppress broken-pipe / connection-reset errors from disconnecting clients."""
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError):
+            log.debug("Client disconnected during response")
+
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
