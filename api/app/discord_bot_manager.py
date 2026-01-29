@@ -101,7 +101,12 @@ class DiscordBotManager:
                     item_name = value['name']
                     item_start = value['start_at']
                     if item_start != 'now' and item_start != 'never':
-                        scheduled_list += f'- {item_name} starts at {item_start}:00 UTC\n'
+                        item_str = str(item_start).strip()
+                        if len(item_str) <= 2:
+                            display_time = item_str.zfill(2) + ':00'
+                        else:
+                            display_time = item_str[:-2].zfill(2) + ':' + item_str[-2:]
+                        scheduled_list += f'- {item_name} starts at {display_time} UTC\n'
                     else:
                         live_list += f'- {item_name} is LIVE\n'
                 await ctx.channel.send(f'```{scheduled_list}```')
@@ -226,7 +231,7 @@ class DiscordBotManager:
         """Announce live stream to Discord channel."""
         if self.live_channel_id != 0:
             live_channel = self.bot.get_channel(int(self.live_channel_id))
-            await self._send_and_prune(live_channel, content=f'{stream_name} is live! :satellite_orbital: {stream_details}')
+            await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
     def send_timecode_message(self, obfuscated_hostname: str, timecode: str) -> bool:
@@ -264,13 +269,8 @@ class DiscordBotManager:
                 self.logger.error(f'Could not find Discord channel with ID {self.timecode_channel_id}')
                 return
 
-            # message = (
-            #     f"🔐 **Access Request**\n"
-            #     f"**Hostname**: `{obfuscated_hostname}`\n"
-            #     f"**Timecode**: `{timecode}`"
-            # )
             message = f"🔐 `{obfuscated_hostname}` `timecode: {timecode}`"
-            await self._send_and_prune(channel, content=message)
+            await channel.send(message)
             self.logger.info(f'Sent timecode to Discord for {obfuscated_hostname}')
         except Exception as e:
             self.logger.error(f'Failed to send timecode message to Discord: {e}')

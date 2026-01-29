@@ -14,6 +14,19 @@ STREAM_ACCESS_RETRY_INTERVAL = 6
 FALLBACK_JOB_ID = 'fallback'
 
 
+def parse_military_time(time_str: str) -> tuple:
+    """Parse a military time string (e.g. '1745') into (hour, minute).
+    
+    Also supports legacy hour-only format (e.g. '14') for backwards compatibility.
+    """
+    time_str = str(time_str).strip()
+    if len(time_str) <= 2:
+        # Legacy hour-only format: '0' to '23'
+        return int(time_str), 0
+    # Military time format: '0030', '1745', '2359'
+    return int(time_str[:-2]), int(time_str[-2:])
+
+
 class StreamManager:
     """Manages stream state, database, and scheduling logic."""
     
@@ -72,10 +85,12 @@ class StreamManager:
                 args=(stream_id, stream_name, stream_prio, stream_hls_url)
             )
         else:
+            cron_hour, cron_minute = parse_military_time(stream_start)
             self.scheduler.add_job(
                 func=self.exec_stream, 
                 trigger='cron', 
-                hour=stream_start, 
+                hour=cron_hour,
+                minute=cron_minute,
                 jitter=60,
                 id=stream_id, 
                 args=(stream_id, stream_name, stream_prio, stream_hls_url)
@@ -162,20 +177,22 @@ class StreamManager:
     def fallback_search(self) -> Dict[str, str]:
         """Search for a fallback stream based on current time."""
         self.logger.warning('Searching for a fallback job.')
-        current_hour = int(datetime.now().hour)
-        scheduled_hours = []
+        now = datetime.now()
+        current_minutes = now.hour * 60 + now.minute
+        scheduled_times = []
         
-        # Collect scheduled hours from database
+        # Collect scheduled times (in total minutes) from database
         for key, value in self.database.items():
             if value['start_at'] in ("now", "never"):
                 # Do not use non-time scheduled streams as fallbacks
                 continue
             try:
-                scheduled_hours.append(int(value['start_at']))
+                h, m = parse_military_time(value['start_at'])
+                scheduled_times.append(h * 60 + m)
             except (ValueError, TypeError):
                 continue
         
-        if not scheduled_hours:
+        if not scheduled_times:
             # No scheduled streams available, return first available stream
             if self.database:
                 first_key = next(iter(self.database))
@@ -188,21 +205,27 @@ class StreamManager:
             # No streams at all
             raise ValueError("No streams available for fallback")
         
-        # Convert the scheduled hours to a circular list
-        scheduled_hours = scheduled_hours + [h + 24 for h in scheduled_hours]
+        # Convert the scheduled times to a circular list (wrap around midnight)
+        scheduled_times = scheduled_times + [t + 1440 for t in scheduled_times]
         
-        # Find the closest scheduled hour
-        closest_hour = min(scheduled_hours, key=lambda x: abs(x - current_hour))
-        target_hour = str(closest_hour % 24)
+        # Find the closest scheduled time
+        closest_minutes = min(scheduled_times, key=lambda x: abs(x - current_minutes))
+        target_minutes = closest_minutes % 1440
         
-        # Find stream matching the closest hour
+        # Find stream matching the closest time
         for key, value in self.database.items():
-            if value['start_at'] == target_hour:
-                return {
-                    "stream_id": key,
-                    "stream_name": value['name'],
-                    "stream_hls_url": value['src']
-                }
+            if value['start_at'] in ("now", "never"):
+                continue
+            try:
+                h, m = parse_military_time(value['start_at'])
+                if h * 60 + m == target_minutes:
+                    return {
+                        "stream_id": key,
+                        "stream_name": value['name'],
+                        "stream_hls_url": value['src']
+                    }
+            except (ValueError, TypeError):
+                continue
         
         # Fallback to first available stream if no match found
         if self.database:

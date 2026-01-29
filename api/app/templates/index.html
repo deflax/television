@@ -63,14 +63,28 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const [key, entry] of Object.entries(database)) {
       const startAt = entry.start_at;
       if (startAt !== 'now' && startAt !== 'never') {
-        scheduled.push({id: key, name: entry.name, hour: startAt, details: entry.details || ''});
+        scheduled.push({id: key, name: entry.name, startAt: startAt, details: entry.details || ''});
       } else if (startAt === 'now') {
         live.push({id: key, name: entry.name, details: entry.details || ''});
       }
     }
 
-    // Sort scheduled by hour
-    scheduled.sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+    // Parse military time (e.g. '1745') or legacy hour (e.g. '14') and convert UTC to local
+    for (const s of scheduled) {
+      const raw = String(s.startAt).trim();
+      let utcH, utcM;
+      if (raw.length <= 2) {
+        utcH = parseInt(raw); utcM = 0;
+      } else {
+        utcH = parseInt(raw.slice(0, -2)); utcM = parseInt(raw.slice(-2));
+      }
+      const utcDate = new Date();
+      utcDate.setUTCHours(utcH, utcM, 0, 0);
+      s.localHour = utcDate.getHours();
+      s.localMinute = utcDate.getMinutes();
+      s.localTotal = s.localHour * 60 + s.localMinute;
+    }
+    scheduled.sort((a, b) => a.localTotal - b.localTotal);
 
     let html = '';
     if (scheduled.length === 0 && live.length === 0) {
@@ -83,7 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const cls = isActive ? 'text-success' : 'text-secondary';
           const icon = isActive ? '<i class="fa fa-volume-up"></i> ' : '';
           const detail = s.details ? ` <small class="text-muted">- ${s.details}</small>` : '';
-          html += `<li class="${cls}">${icon}<strong>${s.hour}:00</strong> ${s.name}${detail}</li>`;
+          const localStr = s.localHour.toString().padStart(2, '0') + ':' + s.localMinute.toString().padStart(2, '0');
+          html += `<li class="${cls}">${icon}<strong>${localStr}</strong> ${s.name}${detail}</li>`;
         }
         html += '</ul>';
       }
