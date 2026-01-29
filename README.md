@@ -155,12 +155,12 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 2. Create channels and configure them with JSON metadata in the Description field:
 
    ```json
-   { "start_at": "21", "prio": 0, "details": "Evening show" }
+   { "start_at": "2100", "prio": 0, "details": "Evening show" }
    ```
 
    | Field | Description |
    |-------|-------------|
-   | `start_at` | Hour (0-23), `"now"` for immediate, or `"never"` to disable |
+   | `start_at` | Military time e.g. `"1745"` (HH:MM), `"now"` for immediate, or `"never"` to disable |
    | `prio` | Priority level (higher takes precedence) |
    | `details` | Optional description for Discord announcements |
 
