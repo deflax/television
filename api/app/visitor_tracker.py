@@ -66,3 +66,9 @@ class VisitorTracker:
         """Return the number of currently active visitors."""
         with self._lock:
             return len(self._visitors)
+
+    @property
+    def visitors(self) -> dict[str, int]:
+        """Return a snapshot of currently active visitors (ip -> connection count)."""
+        with self._lock:
+            return self._visitors.copy()

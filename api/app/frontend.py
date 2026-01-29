@@ -157,6 +157,10 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         on_disconnect=on_visitor_disconnect
     )
 
+    # Share visitor tracker with Discord bot manager
+    if discord_bot_manager is not None:
+        discord_bot_manager.visitor_tracker = visitor_tracker
+
     # Set of active SSE client queues for broadcasting updates
     sse_clients: Set[asyncio.Queue] = set()
     

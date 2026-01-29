@@ -48,6 +48,7 @@ class DiscordBotManager:
         self.database = {}
         self.rec_path = "/recordings"
         self.recorder = False
+        self.visitor_tracker = None
 
         # Track bot messages per channel (keep last N message IDs)
         self.max_channel_messages = 1
@@ -114,6 +115,32 @@ class DiscordBotManager:
                     await ctx.channel.send(f'```{live_list}```')
             else:
                 await ctx.channel.send('```Empty.```')
+
+        @self.bot.command(name='watchers', help='Lists all current watcher hostnames')
+        @has_role(self.boss_role_name)
+        async def watchers(ctx):
+            if self.visitor_tracker is None:
+                await ctx.channel.send('```Visitor tracker not available.```')
+                return
+            current_visitors = self.visitor_tracker.visitors
+            if not current_visitors:
+                await ctx.channel.send('```No watchers connected.```')
+                return
+            watcher_list = ""
+            for ip in current_visitors:
+                hostname = obfuscate_hostname(ip, ip)
+                connections = current_visitors[ip]
+                if connections > 1:
+                    watcher_list += f'- {hostname} ({connections} connections)\n'
+                else:
+                    watcher_list += f'- {hostname}\n'
+            total = len(current_visitors)
+            await ctx.channel.send(f'```Watchers ({total}):\n{watcher_list}```')
+
+        @watchers.error
+        async def watchers_error(ctx, error):
+            if isinstance(error, CheckFailure):
+                await ctx.channel.send('Access denied!')
 
         @self.bot.command(name='now', help='Displays whats playing right now')
         async def now(ctx):
