@@ -17,6 +17,7 @@ services:
     depends_on:
       - "restreamer"
       - "api"
+      - "replay"
     restart: unless-stopped
     networks:
       - net
@@ -65,6 +66,19 @@ services:
       - net
     labels:
       - meta.role=api
+
+  replay:
+    build: ./replay
+    image: tv-replay:latest
+    env_file:
+      - "variables.env"
+    volumes:
+      - "./data/recorder:/recordings:ro"
+    restart: unless-stopped
+    networks:
+      - net
+    labels:
+      - meta.role=replay
 
 #  icecast:
 #    depends_on:
