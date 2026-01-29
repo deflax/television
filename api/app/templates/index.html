@@ -27,20 +27,74 @@
           <div class="content">
               <video controls crossorigin playsinline muted poster="static/images/poster.png">
               </video>
+              <div class="d-flex justify-content-between align-items-center mt-1 mb-2">
+                <p class="mb-0 text-secondary" id="epg-now-playing" style="display:none;">
+                  <i class="fa fa-play-circle" aria-hidden="true"></i> Now: <span id="epg-now-name"></span>
+                </p>
+                <p class="mb-0 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
+              </div>
+              <div id="epg-schedule">
+                <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
+              </div>
+	        </div>
+      </div>
+      <div class="col-md-1 d-none d-md-block">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Weather Modal Overlay -->
+<div class="modal fade" id="weatherModal" tabindex="-1" aria-labelledby="weatherModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="weatherModalLabel">Weather</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe
+          id="weatherIframe"
+          src=""
+          style="width: 100%; height: 100%; border: none;"
+          allowfullscreen
+          loading="lazy"
+          referrerpolicy="no-referrer">
+        </iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Archive Modal Overlay -->
+<div class="modal fade" id="archiveModal" tabindex="-1" aria-labelledby="archiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="archiveModalLabel">Archive</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="archiveModalBody">
+        <div class="text-center p-5">
+          <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const video = document.querySelector("video");
-  const source = 'https://stream.deflax.net/memfs/f2844c7c-e86c-4f0a-afb6-a1b0e25a5071.m3u8';
-  const visitorNumber = document.getElementById('visitor-number');
+
+  // ---------------------------------------------------------------------------
+  //  EPG - Electronic Program Guide rendering
+  // ---------------------------------------------------------------------------
+
   let currentPlayheadId = null;
   let currentEpgDatabase = {};
 
-  // For more options, see: https://github.com/sampotts/plyr/#options
-  const defaultOptions = {};
-
-  //
-  // EPG rendering
-  //
   function renderEpg(database, playheadId) {
     const nowPlaying = document.getElementById('epg-now-playing');
     const nowName = document.getElementById('epg-now-name');
@@ -114,9 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleDiv.innerHTML = html;
   }
 
-  //
-  // SSE connection for real-time playhead, visitor, and EPG updates
-  //
+  // ---------------------------------------------------------------------------
+  //  SSE - Server-Sent Events for real-time updates
+  // ---------------------------------------------------------------------------
+
+  const video = document.querySelector("video");
+  const visitorNumber = document.getElementById('visitor-number');
+
   function connectSSE() {
     const evtSource = new EventSource('/events');
 
@@ -178,63 +236,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  //
-  // First check for native browser HLS support
-  //
-  if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    const player = new Plyr(video, defaultOptions);
-    // SSE will handle setting video.src when playhead event arrives
-    //
-    // If no native HLS support, check if HLS.js is supported
-    //
-  } else if (Hls.isSupported()) {
-    const hls = new Hls();
+  // ---------------------------------------------------------------------------
+  //  HLS - Video player setup (Plyr + HLS.js)
+  // ---------------------------------------------------------------------------
 
-    // Attach Hls.js to the video element
-    hls.loadSource(source);
-    hls.attachMedia(video);
-
-    // From the m3u8 playlist, hls parses the manifest and returns
-    // all available video qualities. This is important; in this approach,
-    // we will have one source on the Plyr player.
-    hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-      console.log("HLS.js: manifest parsed");
-
-      // Transform available levels into an array of integers (height values).
-      const availableQualities = hls.levels.map((l) => l.height)
-      availableQualities.unshift(0); //prepend 0 to quality array
-
-      // Add new qualities to option
-      defaultOptions.quality = {
-        default: 0, //Default - AUTO
-        options: availableQualities,
-        forced: true,
-        onChange: (e) => updateQuality(e),
-      }
-
-      // Add Auto Label 
-      defaultOptions.i18n = {
-        qualityLabel: {
-          0: 'Auto',
-        },
-      }
-
-      hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-        console.log("HLS.js: level switched");
-        var span = document.querySelector(".plyr__menu__container [data-plyr='quality'][value='0'] span")
-        if (hls.autoLevelEnabled) {
-          span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`
-        } else {
-          span.innerHTML = `AUTO`
-        }
-      });
-
-      // Initialize new Plyr player with quality options
-      const player = new Plyr(video, defaultOptions);
-    });
-
-    window.hls = hls;
-  }
+  const hlsSource = 'https://stream.deflax.net/memfs/f2844c7c-e86c-4f0a-afb6-a1b0e25a5071.m3u8';
+  const defaultOptions = {};
 
   function updateQuality(newQuality) {
     if (newQuality === 0) {
@@ -249,153 +256,213 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Start the SSE connection
-  connectSSE();
-});
+  function initPlayer() {
+    // For more options, see: https://github.com/sampotts/plyr/#options
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS (Safari) - SSE will handle setting video.src when playhead event arrives
+      const player = new Plyr(video, defaultOptions);
+    } else if (Hls.isSupported()) {
+      const hls = new Hls();
 
-</script>
-              <div class="d-flex justify-content-between align-items-center mt-1 mb-2">
-                <p class="mb-0 text-secondary" id="epg-now-playing" style="display:none;">
-                  <i class="fa fa-play-circle" aria-hidden="true"></i> Now: <span id="epg-now-name"></span>
-                </p>
-                <p class="mb-0 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
-              </div>
-              <div id="epg-schedule">
-                <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
-              </div>
-	        </div>
-      </div>
-      <div class="col-md-1 d-none d-md-block">
-      </div>
-    </div>
-  </div>
-</div>
+      hls.loadSource(hlsSource);
+      hls.attachMedia(video);
 
-<!-- Weather Modal Overlay -->
-<div class="modal fade" id="weatherModal" tabindex="-1" aria-labelledby="weatherModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen">
-    <div class="modal-content bg-dark text-white">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title" id="weatherModalLabel">Weather</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body p-0">
-        <iframe
-          id="weatherIframe"
-          src=""
-          style="width: 100%; height: 100%; border: none;"
-          allowfullscreen
-          loading="lazy"
-          referrerpolicy="no-referrer">
-        </iframe>
-      </div>
-    </div>
-  </div>
-</div>
+      // From the m3u8 playlist, hls parses the manifest and returns
+      // all available video qualities.
+      hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+        console.log("HLS.js: manifest parsed");
 
-<!-- Archive Modal Overlay -->
-<div class="modal fade" id="archiveModal" tabindex="-1" aria-labelledby="archiveModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen">
-    <div class="modal-content bg-dark text-white">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title" id="archiveModalLabel">Archive</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="archiveModalBody">
-        <div class="text-center p-5">
-          <div class="spinner-border text-light" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+        // Transform available levels into an array of integers (height values).
+        const availableQualities = hls.levels.map((l) => l.height);
+        availableQualities.unshift(0); //prepend 0 to quality array
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const weatherSrc = 'https://earth.nullschool.net/#current/wind/surface/level/overlay=temp/orthographic=16.78,46.84,2310/loc=24.738,42.213';
+        defaultOptions.quality = {
+          default: 0, //Default - AUTO
+          options: availableQualities,
+          forced: true,
+          onChange: (e) => updateQuality(e),
+        };
 
-  // Intercept nav links to open modals instead of navigating
-  const weatherLink = document.querySelector('a.nav-link[href="/weather"]');
-  const archiveLink = document.querySelector('a.nav-link[href="/archive"]');
+        defaultOptions.i18n = {
+          qualityLabel: {
+            0: 'Auto',
+          },
+        };
 
-  if (weatherLink) {
-    weatherLink.addEventListener('click', (e) => {
+        hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+          console.log("HLS.js: level switched");
+          var span = document.querySelector(".plyr__menu__container [data-plyr='quality'][value='0'] span");
+          if (hls.autoLevelEnabled) {
+            span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
+          } else {
+            span.innerHTML = `AUTO`;
+          }
+        });
+
+        const player = new Plyr(video, defaultOptions);
+      });
+
+      window.hls = hls;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  Modal overlays - Weather & Archive (keep video playing underneath)
+  // ---------------------------------------------------------------------------
+
+  const WEATHER_SRC = 'https://earth.nullschool.net/#current/wind/surface/level/overlay=temp/orthographic=16.78,46.84,2310/loc=24.738,42.213';
+
+  // -- Weather modal --
+
+  function initWeatherModal() {
+    const link = document.querySelector('a.nav-link[href="/weather"]');
+    if (!link) return;
+
+    link.addEventListener('click', (e) => {
       e.preventDefault();
       const iframe = document.getElementById('weatherIframe');
       if (!iframe.src || iframe.src === '' || iframe.src === window.location.href) {
-        iframe.src = weatherSrc;
+        iframe.src = WEATHER_SRC;
       }
       const modal = new bootstrap.Modal(document.getElementById('weatherModal'));
       modal.show();
     });
+
+    // Cleanup iframe when modal is closed to save resources
+    document.getElementById('weatherModal').addEventListener('hidden.bs.modal', () => {
+      document.getElementById('weatherIframe').src = '';
+    });
   }
 
-  if (archiveLink) {
-    archiveLink.addEventListener('click', (e) => {
+  // -- Archive modal --
+
+  function loadArchiveContent(modalBody) {
+    fetch('/archive', { credentials: 'same-origin' })
+      .then(r => r.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const content = doc.querySelector('.content-container');
+        if (content) {
+          modalBody.innerHTML = content.innerHTML;
+          modalBody.querySelectorAll('script').forEach(s => s.remove());
+          bindArchiveInteractions(modalBody);
+        } else {
+          modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
+        }
+      })
+      .catch(() => {
+        modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
+      });
+  }
+
+  function bindArchiveInteractions(modalBody) {
+    const form = modalBody.querySelector('#timecodeForm');
+    const requestBtn = modalBody.querySelector('#requestTimecodeBtn');
+    const statusDiv = modalBody.querySelector('#timecodeRequestStatus');
+
+    // Timecode submission form
+    if (form) {
+      form.addEventListener('submit', async (evt) => {
+        evt.preventDefault();
+        const formData = new FormData(form);
+        const response = await fetch('/archive', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin'
+        });
+        const responseHtml = await response.text();
+        const respDoc = new DOMParser().parseFromString(responseHtml, 'text/html');
+        const respContent = respDoc.querySelector('.content-container');
+        if (respContent) {
+          modalBody.innerHTML = respContent.innerHTML;
+          modalBody.querySelectorAll('script').forEach(s => s.remove());
+          bindArchiveInteractions(modalBody);
+        }
+      });
+    }
+
+    // Request timecode button with cooldown
+    if (requestBtn && statusDiv) {
+      let cooldownRemaining = 0;
+      let cooldownInterval = null;
+
+      function updateCooldownText() {
+        requestBtn.textContent = `Wait ${cooldownRemaining}s`;
+      }
+
+      function startCooldown() {
+        cooldownRemaining = 60;
+        requestBtn.disabled = true;
+        updateCooldownText();
+        cooldownInterval = setInterval(() => {
+          cooldownRemaining--;
+          if (cooldownRemaining <= 0) {
+            clearInterval(cooldownInterval);
+            cooldownInterval = null;
+            requestBtn.disabled = false;
+            requestBtn.textContent = 'Request Timecode';
+          } else {
+            updateCooldownText();
+          }
+        }, 1000);
+      }
+
+      requestBtn.addEventListener('click', async () => {
+        if (cooldownRemaining > 0) return;
+        requestBtn.disabled = true;
+        requestBtn.textContent = 'Requesting...';
+        statusDiv.style.display = 'block';
+        statusDiv.innerHTML = '<div class="alert alert-info">Requesting timecode...</div>';
+
+        try {
+          const response = await fetch('/request-timecode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await response.json();
+          if (data.success) {
+            statusDiv.innerHTML = `<div class="alert alert-success">
+              <strong>Success!</strong> Timecode has been sent to Discord channel.<br>
+              <small>Hostname: ${data.obfuscated_hostname}</small>
+            </div>`;
+            startCooldown();
+          } else {
+            statusDiv.innerHTML = '<div class="alert alert-danger">Failed to request timecode. Please try again.</div>';
+            requestBtn.disabled = false;
+            requestBtn.textContent = 'Request Timecode';
+          }
+        } catch (error) {
+          statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
+          requestBtn.disabled = false;
+          requestBtn.textContent = 'Request Timecode';
+        }
+      });
+    }
+  }
+
+  function initArchiveModal() {
+    const link = document.querySelector('a.nav-link[href="/archive"]');
+    if (!link) return;
+
+    link.addEventListener('click', (e) => {
       e.preventDefault();
       const modalBody = document.getElementById('archiveModalBody');
       modalBody.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div></div>';
       const modal = new bootstrap.Modal(document.getElementById('archiveModal'));
       modal.show();
-
-      fetch('/archive', { credentials: 'same-origin' })
-        .then(r => r.text())
-        .then(html => {
-          // Parse the full page and extract just the content block
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          const content = doc.querySelector('.content-container');
-          if (content) {
-            modalBody.innerHTML = content.innerHTML;
-            // Execute any scripts in the loaded content
-            const scripts = modalBody.querySelectorAll('script');
-            scripts.forEach(oldScript => {
-              const newScript = document.createElement('script');
-              newScript.textContent = oldScript.textContent;
-              oldScript.parentNode.replaceChild(newScript, oldScript);
-            });
-            // Fix form action to submit via fetch instead of navigation
-            const form = modalBody.querySelector('#timecodeForm');
-            if (form) {
-              form.addEventListener('submit', async (evt) => {
-                evt.preventDefault();
-                const formData = new FormData(form);
-                const response = await fetch('/archive', {
-                  method: 'POST',
-                  body: formData,
-                  credentials: 'same-origin'
-                });
-                const responseHtml = await response.text();
-                const respDoc = new DOMParser().parseFromString(responseHtml, 'text/html');
-                const respContent = respDoc.querySelector('.content-container');
-                if (respContent) {
-                  modalBody.innerHTML = respContent.innerHTML;
-                  // Re-execute scripts
-                  const newScripts = modalBody.querySelectorAll('script');
-                  newScripts.forEach(oldScript => {
-                    const newScript = document.createElement('script');
-                    newScript.textContent = oldScript.textContent;
-                    oldScript.parentNode.replaceChild(newScript, oldScript);
-                  });
-                }
-              });
-            }
-          } else {
-            modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
-          }
-        })
-        .catch(() => {
-          modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
-        });
+      loadArchiveContent(modalBody);
     });
   }
 
-  // Cleanup weather iframe when modal is closed to save resources
-  document.getElementById('weatherModal').addEventListener('hidden.bs.modal', () => {
-    document.getElementById('weatherIframe').src = '';
-  });
+  // ---------------------------------------------------------------------------
+  //  Initialize everything
+  // ---------------------------------------------------------------------------
+
+  initPlayer();
+  connectSSE();
+  initWeatherModal();
+  initArchiveModal();
+
 });
 </script>
 {% endblock %}
