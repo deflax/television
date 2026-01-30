@@ -139,6 +139,12 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `CORE_API_HOSTNAME` | Restreamer hostname (e.g., `stream.example.com`) |
 | `CORE_API_AUTH_USERNAME` | Restreamer admin username |
 | `CORE_API_AUTH_PASSWORD` | Restreamer admin password |
+| `API_LOG_LEVEL_API` | Log level for Hypercorn/API (default: `INFO`) |
+| `API_LOG_LEVEL_JOB` | Log level for APScheduler (default: `WARN`) |
+| `API_LOG_LEVEL_STREAM` | Log level for stream manager (default: `INFO`) |
+| `API_LOG_LEVEL_CONTENT` | Log level for content/routes (default: `INFO`) |
+| `API_LOG_LEVEL_DISCORD` | Log level for Discord bot (default: `INFO`) |
+| `API_LOG_LEVEL_SSE` | Log level for SSE events (default: `WARN`) |
 | `API_VOD_TOKEN` | Bearer token for video upload API |
 | `FLASK_SECRET_KEY` | Flask session encryption key |
 | `TIMECODE_SECRET_KEY` | HMAC key for archive timecodes |

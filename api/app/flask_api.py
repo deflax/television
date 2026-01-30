@@ -26,14 +26,13 @@ class Config:
     """Application configuration loaded from environment variables."""
 
     def __init__(self):
-        # Log levels for each component (fallback to API_LOG_LEVEL, then INFO)
-        default_log_level = os.environ.get('API_LOG_LEVEL', 'INFO').upper()
-        self.log_level_api = os.environ.get('API_LOG_LEVEL_API', default_log_level).upper()
-        self.log_level_job = os.environ.get('API_LOG_LEVEL_JOB', default_log_level).upper()
-        self.log_level_content = os.environ.get('API_LOG_LEVEL_CONTENT', default_log_level).upper()
-        self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', default_log_level).upper()
-        self.log_level_sse = os.environ.get('API_LOG_LEVEL_SSE', default_log_level).upper()
-        self.log_level_stream = os.environ.get('API_LOG_LEVEL_STREAM', default_log_level).upper()
+        # Log levels for each component
+        self.log_level_api = os.environ.get('API_LOG_LEVEL_API', 'INFO').upper()
+        self.log_level_job = os.environ.get('API_LOG_LEVEL_JOB', 'WARN').upper()
+        self.log_level_stream = os.environ.get('API_LOG_LEVEL_STREAM', 'INFO').upper()
+        self.log_level_content = os.environ.get('API_LOG_LEVEL_CONTENT', 'INFO').upper()
+        self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', 'INFO').upper()
+        self.log_level_sse = os.environ.get('API_LOG_LEVEL_SSE', 'WARN').upper()
 
         self.vod_token = os.environ.get('API_VOD_TOKEN')
         self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
