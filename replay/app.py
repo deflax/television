@@ -64,7 +64,7 @@ def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
     cmd = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "info",
+        "-loglevel", "verbose",
         "-stream_loop", "-1",
         "-f", "concat",
         "-safe", "0",
