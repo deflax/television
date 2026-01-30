@@ -69,7 +69,7 @@ class StreamManager:
             self.logger.debug(f'Failed to parse stream description for {stream_id}: {e}')
             return
         
-        self.logger.info(f'{stream_id} ({stream_name}) found. {api_settings}')
+        self.logger.info(f'{stream_id} ({stream_name}) discovered. {api_settings}')
         
         # Check whether we have stream details
         stream_details = api_settings.get('details', "")
@@ -102,6 +102,7 @@ class StreamManager:
             'details': stream_details, 
             'src': stream_hls_url
         }
+        self.logger.info(f'{stream_id} ({stream_name}) added to database.')
         
         # Bootstrap the playhead if it's still empty
         if not self.playhead:

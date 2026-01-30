@@ -1,4 +1,5 @@
 import os
+import copy
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta
@@ -405,7 +406,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
             while True:
                 await asyncio.sleep(5)  # Check every 5 seconds
                 if stream_manager is not None:
-                    current_db = stream_manager.database.copy()
+                    current_db = copy.deepcopy(stream_manager.database)
                     if current_db != last_database:
                         last_database = current_db
                         await _broadcast_epg()
