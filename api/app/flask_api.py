@@ -33,6 +33,7 @@ class Config:
         self.log_level_content = os.environ.get('API_LOG_LEVEL_CONTENT', default_log_level).upper()
         self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', default_log_level).upper()
         self.log_level_sse = os.environ.get('API_LOG_LEVEL_SSE', default_log_level).upper()
+        self.log_level_stream = os.environ.get('API_LOG_LEVEL_STREAM', default_log_level).upper()
 
         self.vod_token = os.environ.get('API_VOD_TOKEN')
         self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
@@ -65,6 +66,7 @@ class LoggerManager:
 
         self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')
+        self.stream = logging.getLogger('stream')
         self.content = logging.getLogger('content')
         self.discord = logging.getLogger('discord')
         self.sse = logging.getLogger('sse')
@@ -74,6 +76,7 @@ class LoggerManager:
         for logger, level in [
             (self.api, self.config.log_level_api),
             (self.job, self.config.log_level_job),
+            (self.stream, self.config.log_level_stream),
             (self.content, self.config.log_level_content),
             (self.discord, self.config.log_level_discord),
             (self.sse, self.config.log_level_sse),
@@ -167,7 +170,7 @@ def create_app() -> Quart:
     client = _initialize_core_client(config, loggers.api)
 
     # Initialize stream manager
-    stream_manager = StreamManager(scheduler, client, config, loggers.job)
+    stream_manager = StreamManager(scheduler, client, config, loggers.stream)
 
     # Setup scheduler
     _setup_scheduler(stream_manager, config)
