@@ -24,6 +24,7 @@ HTTP_PORT = int(os.environ.get("REPLAY_HTTP_PORT", "8090"))
 VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi")
 SCAN_INTERVAL = int(os.environ.get("REPLAY_SCAN_INTERVAL", "60"))
 SHUFFLE = os.environ.get("REPLAY_SHUFFLE", "true") == "true"
+STALL_TIMEOUT = int(os.environ.get("REPLAY_STALL_TIMEOUT", "30"))  # seconds with no m3u8 update
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -69,9 +70,14 @@ def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
         "-safe", "0",
         "-re",
         "-i", playlist_path,
+        # Regenerate timestamps to avoid PTS/DTS discontinuities between files
+        "-fflags", "+genpts+discardcorrupt",
+        "-avoid_negative_ts", "make_zero",
         # Copy codecs — no transcoding
         "-c:v", "copy",
         "-c:a", "copy",
+        # Prevent muxer stalls when streams have different interleaving
+        "-max_muxing_queue_size", "4096",
         # HLS output
         "-f", "hls",
         "-hls_time", "4",
@@ -85,7 +91,7 @@ def start_ffmpeg(playlist_path: str) -> subprocess.Popen | None:
     try:
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
         return proc
@@ -155,10 +161,37 @@ def run_http_server() -> HTTPServer:
     return server
 
 
+def _kill_ffmpeg(reason: str) -> None:
+    """Terminate the running FFmpeg process with logging."""
+    global ffmpeg_process
+    if ffmpeg_process and ffmpeg_process.poll() is None:
+        log.warning("Killing FFmpeg: %s", reason)
+        ffmpeg_process.terminate()
+        try:
+            ffmpeg_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            ffmpeg_process.kill()
+    ffmpeg_process = None
+
+
+def _is_stalled(m3u8_path: str) -> bool:
+    """Check if the HLS manifest has not been updated within the stall timeout."""
+    try:
+        mtime = os.path.getmtime(m3u8_path)
+        age = time.time() - mtime
+        if age > STALL_TIMEOUT:
+            log.warning("HLS manifest stale for %.0fs (threshold: %ds)", age, STALL_TIMEOUT)
+            return True
+    except FileNotFoundError:
+        pass
+    return False
+
+
 def ffmpeg_loop():
     """Main loop: discover videos, start ffmpeg, restart if it dies or videos change."""
     global ffmpeg_process
     playlist_path = os.path.join(HLS_DIR, "playlist.txt")
+    m3u8_path = os.path.join(HLS_DIR, "stream.m3u8")
     current_videos: list[str] = []
 
     while not shutdown_event.is_set():
@@ -171,14 +204,7 @@ def ffmpeg_loop():
 
         # If the video set changed, restart FFmpeg with the new playlist
         if set(videos) != set(current_videos):
-            if ffmpeg_process and ffmpeg_process.poll() is None:
-                log.info("Video list changed, restarting FFmpeg...")
-                ffmpeg_process.terminate()
-                try:
-                    ffmpeg_process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    ffmpeg_process.kill()
-                ffmpeg_process = None
+            _kill_ffmpeg("Video list changed")
 
             write_concat_playlist(videos, playlist_path)
             current_videos = videos
@@ -195,6 +221,12 @@ def ffmpeg_loop():
         if ffmpeg_process and ffmpeg_process.poll() is not None:
             log.warning("FFmpeg exited with code %d — restarting...", ffmpeg_process.returncode)
             ffmpeg_process = None
+            current_videos = []  # Force re-discovery
+            continue
+
+        # Check if FFmpeg is alive but stalled (no new HLS segments)
+        if ffmpeg_process and ffmpeg_process.poll() is None and _is_stalled(m3u8_path):
+            _kill_ffmpeg("HLS output stalled — no new segments")
             current_videos = []  # Force re-discovery
             continue
 
@@ -224,12 +256,7 @@ def main():
         ffmpeg_loop()
     finally:
         log.info("Shutting down...")
-        if ffmpeg_process and ffmpeg_process.poll() is None:
-            ffmpeg_process.terminate()
-            try:
-                ffmpeg_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                ffmpeg_process.kill()
+        _kill_ffmpeg("Service shutting down")
         http_server.shutdown()
         log.info("Replay service stopped")
 
