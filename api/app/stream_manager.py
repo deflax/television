@@ -69,8 +69,6 @@ class StreamManager:
             self.logger.debug(f'Failed to parse stream description for {stream_id}: {e}')
             return
         
-        self.logger.info(f'{stream_id} ({stream_name}) discovered. {api_settings}')
-        
         # Check whether we have stream details
         stream_details = api_settings.get('details', "")
         if stream_details:
@@ -102,7 +100,17 @@ class StreamManager:
             'details': stream_details, 
             'src': stream_hls_url
         }
-        self.logger.info(f'{stream_id} ({stream_name}) added to database.')
+        self.logger.info(f'{stream_id} ({stream_name}) added to database. Config: {api_settings}')
+
+        # Preempt: if this stream outranks the current playhead, execute immediately
+        if self.playhead and stream_prio > self.playhead.get('prio', 0):
+            self.logger.info(
+                f'{stream_id} ({stream_name}) has higher priority ({stream_prio}) '
+                f'than current playhead ({self.playhead.get("prio", 0)}). Preempting.'
+            )
+            if self._wait_for_stream_access(stream_hls_url, stream_name):
+                self.exec_stream(stream_id, stream_name, stream_prio, stream_hls_url)
+            return
         
         # Bootstrap the playhead if it's still empty
         if not self.playhead:
