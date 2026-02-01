@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 from quart import Quart
 from apscheduler.schedulers.background import BackgroundScheduler
-from core_client import Client
+from core_api import CoreAPIClient
 
 from stream_manager import StreamManager
 from frontend import register_routes
@@ -90,18 +90,19 @@ config = Config()
 loggers = LoggerManager(config)
 scheduler = BackgroundScheduler()
 stream_manager: Optional[StreamManager] = None
-client: Optional[Client] = None
+client: Optional[CoreAPIClient] = None
 discord_bot_manager: Optional[DiscordBotManager] = None
 app = Quart(__name__)
 
 
-def _initialize_core_client(config: Config, logger: logging.Logger) -> Client:
+def _initialize_core_client(config: Config, logger: logging.Logger) -> CoreAPIClient:
     """Initialize and authenticate Core API client."""
     try:
-        client = Client(
+        client = CoreAPIClient(
             base_url=f'https://{config.core_hostname}',
             username=config.core_username,
-            password=config.core_password
+            password=config.core_password,
+            logger=logger,
         )
         logger.info(f'Logging in to Datarhei Core API {config.core_username}@{config.core_hostname}')
         client.login()
