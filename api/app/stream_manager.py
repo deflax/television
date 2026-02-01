@@ -1,6 +1,7 @@
 import time
 import ast
 import logging
+import httpx
 import requests
 from datetime import datetime
 from typing import Dict, Optional, Any
@@ -85,7 +86,12 @@ class StreamManager:
             return {'success': False, 'message': f'Invalid command. Must be one of: {", ".join(valid_commands)}'}
 
         try:
-            self.client.v3_process_put_command(id=process_id, command={"command": command})
+            # Bypass core_client's v3_process_put_command due to a bug in its
+            # @validate_arguments decorator conflicting with its .dict() call.
+            headers = self.client._get_headers()
+            url = f'{self.client.base_url}/api/v3/process/{process_id}/command'
+            response = httpx.put(url, headers=headers, json={"command": command}, timeout=self.client.timeout)
+            response.raise_for_status()
             self.logger.info(f'Sent "{command}" command to process {process_id}')
             return {'success': True, 'message': f'Process {process_id} command "{command}" sent successfully.'}
         except Exception as e:
