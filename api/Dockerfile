@@ -1,4 +1,4 @@
-FROM python:3.13-trixie
+FROM python:3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 ffmpeg \
@@ -8,10 +8,6 @@ rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
-
-COPY requirements-pydantic-pin.txt requirements-pydantic-pin.txt
-RUN pip3 install -r requirements-pydantic-pin.txt
-RUN pip3 install https://github.com/datarhei/core-client-python/archive/refs/tags/1.1.0.tar.gz
 
 COPY ./scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

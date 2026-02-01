@@ -1,12 +1,11 @@
 import time
 import ast
 import logging
-import httpx
 import requests
 from datetime import datetime
 from typing import Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
-from core_client import Client
+from core_api import CoreAPIClient
 
 
 
@@ -32,7 +31,7 @@ def parse_military_time(time_str: str) -> tuple:
 class StreamManager:
     """Manages stream state, database, and scheduling logic."""
     
-    def __init__(self, scheduler: BackgroundScheduler, client: Client, config, logger: logging.Logger):
+    def __init__(self, scheduler: BackgroundScheduler, client: CoreAPIClient, config, logger: logging.Logger):
         self.scheduler = scheduler
         self.client = client
         self.config = config
@@ -86,12 +85,7 @@ class StreamManager:
             return {'success': False, 'message': f'Invalid command. Must be one of: {", ".join(valid_commands)}'}
 
         try:
-            # Bypass core_client's v3_process_put_command due to a bug in its
-            # @validate_arguments decorator conflicting with its .dict() call.
-            headers = self.client._get_headers()
-            url = f'{self.client.base_url}/api/v3/process/{process_id}/command'
-            response = httpx.put(url, headers=headers, json={"command": command}, timeout=self.client.timeout)
-            response.raise_for_status()
+            self.client.v3_process_put_command(id=process_id, command=command)
             self.logger.info(f'Sent "{command}" command to process {process_id}')
             return {'success': True, 'message': f'Process {process_id} command "{command}" sent successfully.'}
         except Exception as e:
