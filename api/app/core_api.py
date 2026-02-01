@@ -8,19 +8,9 @@ import json
 import base64
 import logging
 from datetime import datetime
-from types import SimpleNamespace
 from typing import Optional
 
 import httpx
-
-
-def _to_namespace(obj):
-    """Recursively convert dicts to SimpleNamespace for dot-access."""
-    if isinstance(obj, dict):
-        return SimpleNamespace(**{k: _to_namespace(v) for k, v in obj.items()})
-    if isinstance(obj, list):
-        return [_to_namespace(item) for item in obj]
-    return obj
 
 
 class CoreAPIClient:
@@ -134,14 +124,14 @@ class CoreAPIClient:
     # ------------------------------------------------------------------
 
     def v3_process_get_list(self) -> list:
-        """GET /api/v3/process — returns list of process namespace objects."""
+        """GET /api/v3/process — returns list of process dicts."""
         resp = self._request('GET', '/api/v3/process')
-        return [_to_namespace(p) for p in resp.json()]
+        return resp.json()
 
-    def v3_process_get(self, id: str):
-        """GET /api/v3/process/{id} — returns a process namespace object."""
+    def v3_process_get(self, id: str) -> dict:
+        """GET /api/v3/process/{id} — returns a process dict."""
         resp = self._request('GET', f'/api/v3/process/{id}')
-        return _to_namespace(resp.json())
+        return resp.json()
 
     def v3_process_put_command(self, id: str, command: str) -> dict:
         """PUT /api/v3/process/{id}/command — send start/stop/restart/reload."""

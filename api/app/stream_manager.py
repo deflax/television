@@ -51,22 +51,23 @@ class StreamManager:
 
         for process in process_list:
             try:
-                details = self.get_core_process_details(process.id)
+                details = self.get_core_process_details(process['id'])
                 if not details:
                     continue
-                meta = details.metadata
+                meta = details.get('metadata')
                 if meta is None or meta.get('restreamer-ui', {}).get('meta') is None:
                     continue
                 stream_name = meta['restreamer-ui']['meta']['name']
-                state_exec = details.state.exec if details.state else 'unknown'
+                state = details.get('state')
+                state_exec = state['exec'] if state else 'unknown'
                 processes.append({
-                    'id': process.id,
-                    'reference': details.reference,
+                    'id': process['id'],
+                    'reference': details['reference'],
                     'name': stream_name,
                     'state': state_exec,
                 })
             except Exception as e:
-                self.logger.debug(f'Error processing stream for list: {process.id}, {e}')
+                self.logger.debug(f'Error processing stream for list: {process.get("id")}, {e}')
                 continue
         return processes
 
@@ -92,7 +93,7 @@ class StreamManager:
             self.logger.error(f'Failed to send "{command}" to process {process_id}: {e}')
             return {'success': False, 'message': f'Failed to send command: {e}'}
 
-    def get_core_process_details(self, process_id: str) -> Optional[Any]:
+    def get_core_process_details(self, process_id: str) -> Optional[dict]:
         """Get process details from Core API."""
         try:
             return self.client.v3_process_get(id=process_id)
@@ -212,7 +213,7 @@ class StreamManager:
         if stream_id not in self.database:
             return
         
-        self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state.exec}')
+        self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state["exec"]}')
         self.database.pop(stream_id)
         
         try:
@@ -348,13 +349,13 @@ class StreamManager:
         
         for process in process_list:
             try:
-                get_process = self.get_core_process_details(process.id)
+                get_process = self.get_core_process_details(process['id'])
                 if not get_process:
                     continue
                 
-                stream_id = get_process.reference
-                meta = get_process.metadata
-                state = get_process.state
+                stream_id = get_process['reference']
+                meta = get_process.get('metadata')
+                state = get_process.get('state')
             except Exception as e:
                 self.logger.debug(f'Error processing stream: {process}, {e}')
                 continue
@@ -369,7 +370,7 @@ class StreamManager:
             stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
             stream_hls_url = f'https://{self.config.core_hostname}/{stream_storage_type}/{stream_id}.m3u8'
             
-            if state.exec == "running":
+            if state and state['exec'] == "running":
                 self.process_running_channel(
                     stream_id, stream_name, stream_description, stream_hls_url
                 )
