@@ -13,7 +13,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
-from quart import Quart, send_file, abort
+from quart import Quart, send_file, abort, Response, make_response
 
 # Configure logging
 logging.basicConfig(
@@ -24,11 +24,24 @@ logger = logging.getLogger(__name__)
 
 app = Quart(__name__)
 
+
+@app.after_request
+async def add_hls_headers(response: Response) -> Response:
+    """Add headers to prevent HTTP/2 stream issues with HLS clients like VLC."""
+    # CORS - allow any player to access the stream
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = '*'
+    # Prevent HTTP/2 push which causes stream cancellation in some clients
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+
 # Configuration
 RECORDINGS_DIR = os.environ.get('RECORDINGS_DIR', '/recordings')
 HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
-HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '10'))
+HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 VIDEO_BITRATE = os.environ.get('VIDEO_BITRATE', '4000k')
 AUDIO_BITRATE = os.environ.get('AUDIO_BITRATE', '128k')
 PORT = int(os.environ.get('REPLAY_PORT', '8090'))
@@ -132,7 +145,7 @@ def start_ffmpeg_stream():
             '-f', 'hls',
             '-hls_time', str(HLS_SEGMENT_TIME),
             '-hls_list_size', str(HLS_LIST_SIZE),
-            '-hls_flags', 'delete_segments+append_list+omit_endlist',
+            '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
             '-hls_segment_type', 'mpegts',
             '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
             f'{HLS_OUTPUT_DIR}/playlist.m3u8'
@@ -200,26 +213,40 @@ async def serve_playlist():
         logger.warning("Playlist not ready yet")
         abort(503, "Stream not ready yet")
     
-    return await send_file(
+    response = await send_file(
         playlist_path,
         mimetype='application/vnd.apple.mpegurl',
-        cache_timeout=1
+        cache_timeout=0
     )
+    # Live HLS playlists must never be cached - stale playlists cause
+    # clients to request segments that have already been deleted
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/segment_<int:segment_id>.ts')
 async def serve_segment(segment_id: int):
-    """Serve HLS segments."""
+    """Serve HLS segments with retry for race conditions."""
     segment_path = Path(HLS_OUTPUT_DIR) / f'segment_{segment_id:05d}.ts'
     
+    # If segment doesn't exist yet, wait briefly — it may be mid-write
+    # or the playlist was read just before the segment was flushed
     if not segment_path.exists():
+        await asyncio.sleep(0.5)
+    
+    if not segment_path.exists():
+        logger.warning(f"Segment not found: segment_{segment_id:05d}.ts")
         abort(404, "Segment not found")
     
-    return await send_file(
+    response = await send_file(
         segment_path,
         mimetype='video/mp2t',
         cache_timeout=3600  # Segments are immutable, can cache longer
     )
+    response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
+    return response
 
 
 @app.route('/<path:filename>')
