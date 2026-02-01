@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
+from core_client.base.models.v3.process_command import ProcessCommand
 
 
 # Constants
@@ -39,6 +40,59 @@ class StreamManager:
         self.playhead: Dict[str, Any] = {}
         self.priority = 0
     
+    def get_core_process_list(self) -> list:
+        """Get all processes from Core API with their names and states."""
+        processes = []
+        try:
+            process_list = self.client.v3_process_get_list()
+        except Exception as e:
+            self.logger.error(f'Error getting process list: {e}')
+            return processes
+
+        for process in process_list:
+            try:
+                details = self.get_core_process_details(process.id)
+                if not details:
+                    continue
+                meta = details.metadata
+                if meta is None or meta.get('restreamer-ui', {}).get('meta') is None:
+                    continue
+                stream_name = meta['restreamer-ui']['meta']['name']
+                state_exec = details.state.exec if details.state else 'unknown'
+                processes.append({
+                    'id': process.id,
+                    'reference': details.reference,
+                    'name': stream_name,
+                    'state': state_exec,
+                })
+            except Exception as e:
+                self.logger.debug(f'Error processing stream for list: {process.id}, {e}')
+                continue
+        return processes
+
+    def process_command(self, process_id: str, command: str) -> dict:
+        """Send a command (start/stop/restart/reload) to a Restreamer process.
+
+        Args:
+            process_id: The process ID to send the command to.
+            command: One of 'start', 'stop', 'restart', 'reload'.
+
+        Returns:
+            A dict with 'success' (bool) and 'message' (str).
+        """
+        valid_commands = ('start', 'stop', 'restart', 'reload')
+        if command not in valid_commands:
+            return {'success': False, 'message': f'Invalid command. Must be one of: {", ".join(valid_commands)}'}
+
+        try:
+            cmd = ProcessCommand(command=command)
+            self.client.v3_process_put_command(id=process_id, command=cmd)
+            self.logger.info(f'Sent "{command}" command to process {process_id}')
+            return {'success': True, 'message': f'Process {process_id} command "{command}" sent successfully.'}
+        except Exception as e:
+            self.logger.error(f'Failed to send "{command}" to process {process_id}: {e}')
+            return {'success': False, 'message': f'Failed to send command: {e}'}
+
     def get_core_process_details(self, process_id: str) -> Optional[Any]:
         """Get process details from Core API."""
         try:
