@@ -192,16 +192,16 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `.epg` | - | Show stream schedule |
 | `.now` | - | Current stream info |
 | `.streams` | bosmang | List all Restreamer processes and their states |
-| `.connect <id>` | bosmang | Start (connect) a Restreamer process |
-| `.disconnect <id>` | bosmang | Stop (disconnect) a Restreamer process |
+| `.start <id>` | bosmang | Start a Restreamer process |
+| `.stop <id>` | bosmang | Stop a Restreamer process |
 | `.rec` | bosmang | Start recording current stream |
-| `.stop` | bosmang | Stop recording |
+| `.recstop` | bosmang | Stop recording |
 
 #### Stream Control Workflow
 
 1. Use `.streams` to list all available Restreamer processes with their IDs and current state (running/stopped)
-2. Use `.connect <process_id>` to start a specific process
-3. Use `.disconnect <process_id>` to stop it
+2. Use `.start <process_id>` to start a specific process
+3. Use `.stop <process_id>` to stop it
 
 ### API Endpoints
 

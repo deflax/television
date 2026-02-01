@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_client import Client
-from core_client.base.models.v3.process_command import ProcessCommand
+from core_client.base.models.v3.process_command import ProcessCommand, ProcessCommandAction
 
 
 # Constants
@@ -85,7 +85,8 @@ class StreamManager:
             return {'success': False, 'message': f'Invalid command. Must be one of: {", ".join(valid_commands)}'}
 
         try:
-            cmd = ProcessCommand(command=command)
+            action = ProcessCommandAction(command)
+            cmd = ProcessCommand(command=action)
             self.client.v3_process_put_command(id=process_id, command=cmd)
             self.logger.info(f'Sent "{command}" command to process {process_id}')
             return {'success': True, 'message': f'Process {process_id} command "{command}" sent successfully.'}

@@ -96,39 +96,39 @@ class DiscordBotManager:
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='connect', help='Start a Restreamer process. Usage: .connect <process_id>')
+        @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <process_id>')
         @has_role(self.boss_role_name)
-        async def connect(ctx, process_id: str = None):
+        async def start(ctx, process_id: str = None):
             if not process_id:
-                await ctx.channel.send('Usage: `.connect <process_id>`\nUse `.streams` to list available process IDs.')
+                await ctx.channel.send('Usage: `.start <process_id>`\nUse `.streams` to list available process IDs.')
                 return
-            await ctx.channel.send(f'Connecting `{process_id}`...')
+            await ctx.channel.send(f'Starting `{process_id}`...')
             result = self.stream_manager.process_command(process_id, 'start')
             if result['success']:
-                await ctx.channel.send(f':green_circle: `{process_id}` connected.')
+                await ctx.channel.send(f':green_circle: `{process_id}` started.')
             else:
-                await ctx.channel.send(f':red_circle: Failed to connect `{process_id}`: {result["message"]}')
+                await ctx.channel.send(f':red_circle: Failed to start `{process_id}`: {result["message"]}')
 
-        @connect.error
-        async def connect_error(ctx, error):
+        @start.error
+        async def start_error(ctx, error):
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='disconnect', help='Stop a Restreamer process. Usage: .disconnect <process_id>')
+        @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <process_id>')
         @has_role(self.boss_role_name)
-        async def disconnect(ctx, process_id: str = None):
+        async def stop(ctx, process_id: str = None):
             if not process_id:
-                await ctx.channel.send('Usage: `.disconnect <process_id>`\nUse `.streams` to list available process IDs.')
+                await ctx.channel.send('Usage: `.stop <process_id>`\nUse `.streams` to list available process IDs.')
                 return
-            await ctx.channel.send(f'Disconnecting `{process_id}`...')
+            await ctx.channel.send(f'Stopping `{process_id}`...')
             result = self.stream_manager.process_command(process_id, 'stop')
             if result['success']:
-                await ctx.channel.send(f':red_circle: `{process_id}` disconnected.')
+                await ctx.channel.send(f':red_circle: `{process_id}` stopped.')
             else:
-                await ctx.channel.send(f':warning: Failed to disconnect `{process_id}`: {result["message"]}')
+                await ctx.channel.send(f':warning: Failed to stop `{process_id}`: {result["message"]}')
 
-        @disconnect.error
-        async def disconnect_error(ctx, error):
+        @stop.error
+        async def stop_error(ctx, error):
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
@@ -220,9 +220,9 @@ class DiscordBotManager:
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='stop', help='Stop the recorder')
+        @self.bot.command(name='recstop', help='Stop the recorder')
         @has_role(self.boss_role_name)
-        async def stop(ctx):
+        async def recstop(ctx):
             # Check if the recorder job already exists
             if self.recorder:
                 await ctx.channel.send(f'Shutting down recorder...')
@@ -231,8 +231,8 @@ class DiscordBotManager:
             else:
                 await ctx.channel.send(f'Recorder is already stopped.')
 
-        @stop.error
-        async def stop_error(ctx, error):
+        @recstop.error
+        async def recstop_error(ctx, error):
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
