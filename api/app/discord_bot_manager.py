@@ -58,6 +58,24 @@ class DiscordBotManager:
         self._setup_bot_events()
         self._setup_bot_commands()
 
+    def _resolve_process(self, identifier: str) -> Optional[dict]:
+        """Resolve a stream name or process ID to a process dict.
+
+        Tries an exact process ID match first, then a case-insensitive
+        name match against the live process list from Restreamer.
+        """
+        process_list = self.stream_manager.get_core_process_list()
+        # Exact ID match
+        for p in process_list:
+            if p['id'] == identifier:
+                return p
+        # Case-insensitive name match
+        identifier_lower = identifier.lower()
+        for p in process_list:
+            if p['name'].lower() == identifier_lower:
+                return p
+        return None
+
     def _setup_bot_events(self):
         """Setup Discord bot events."""
 
@@ -96,36 +114,48 @@ class DiscordBotManager:
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <process_id>')
+        @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
         @has_role(self.boss_role_name)
-        async def start(ctx, process_id: str = None):
-            if not process_id:
-                await ctx.channel.send('Usage: `.start <process_id>`\nUse `.streams` to list available process IDs.')
+        async def start(ctx, *, identifier: str = None):
+            if not identifier:
+                await ctx.channel.send('Usage: `.start <name or process_id>`\nUse `.streams` to list available streams.')
                 return
-            await ctx.channel.send(f'Starting `{process_id}`...')
+            process = self._resolve_process(identifier)
+            if not process:
+                await ctx.channel.send(f':warning: No stream found matching `{identifier}`.\nUse `.streams` to list available streams.')
+                return
+            process_id = process['id']
+            display_name = process['name']
+            await ctx.channel.send(f'Starting `{display_name}`...')
             result = self.stream_manager.process_command(process_id, 'start')
             if result['success']:
-                await ctx.channel.send(f':green_circle: `{process_id}` started.')
+                await ctx.channel.send(f':green_circle: `{display_name}` started.')
             else:
-                await ctx.channel.send(f':red_circle: Failed to start `{process_id}`: {result["message"]}')
+                await ctx.channel.send(f':red_circle: Failed to start `{display_name}`: {result["message"]}')
 
         @start.error
         async def start_error(ctx, error):
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <process_id>')
+        @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <name or process_id>')
         @has_role(self.boss_role_name)
-        async def stop(ctx, process_id: str = None):
-            if not process_id:
-                await ctx.channel.send('Usage: `.stop <process_id>`\nUse `.streams` to list available process IDs.')
+        async def stop(ctx, *, identifier: str = None):
+            if not identifier:
+                await ctx.channel.send('Usage: `.stop <name or process_id>`\nUse `.streams` to list available streams.')
                 return
-            await ctx.channel.send(f'Stopping `{process_id}`...')
+            process = self._resolve_process(identifier)
+            if not process:
+                await ctx.channel.send(f':warning: No stream found matching `{identifier}`.\nUse `.streams` to list available streams.')
+                return
+            process_id = process['id']
+            display_name = process['name']
+            await ctx.channel.send(f'Stopping `{display_name}`...')
             result = self.stream_manager.process_command(process_id, 'stop')
             if result['success']:
-                await ctx.channel.send(f':red_circle: `{process_id}` stopped.')
+                await ctx.channel.send(f':red_circle: `{display_name}` stopped.')
             else:
-                await ctx.channel.send(f':warning: Failed to stop `{process_id}`: {result["message"]}')
+                await ctx.channel.send(f':warning: Failed to stop `{display_name}`: {result["message"]}')
 
         @stop.error
         async def stop_error(ctx, error):
