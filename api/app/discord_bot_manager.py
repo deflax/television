@@ -78,6 +78,60 @@ class DiscordBotManager:
     def _setup_bot_commands(self):
         """Setup Discord bot commands."""
 
+        @self.bot.command(name='streams', help='List all Restreamer processes and their states')
+        @has_role(self.boss_role_name)
+        async def streams(ctx):
+            process_list = self.stream_manager.get_core_process_list()
+            if not process_list:
+                await ctx.channel.send('```No processes found.```')
+                return
+            lines = ""
+            for p in process_list:
+                state_icon = ':green_circle:' if p['state'] == 'running' else ':red_circle:'
+                lines += f'{state_icon} `{p["id"]}` {p["name"]} ({p["state"]})\n'
+            await ctx.channel.send(lines)
+
+        @streams.error
+        async def streams_error(ctx, error):
+            if isinstance(error, CheckFailure):
+                await ctx.channel.send('Access denied!')
+
+        @self.bot.command(name='connect', help='Start a Restreamer process. Usage: .connect <process_id>')
+        @has_role(self.boss_role_name)
+        async def connect(ctx, process_id: str = None):
+            if not process_id:
+                await ctx.channel.send('Usage: `.connect <process_id>`\nUse `.streams` to list available process IDs.')
+                return
+            await ctx.channel.send(f'Connecting `{process_id}`...')
+            result = self.stream_manager.process_command(process_id, 'start')
+            if result['success']:
+                await ctx.channel.send(f':green_circle: `{process_id}` connected.')
+            else:
+                await ctx.channel.send(f':red_circle: Failed to connect `{process_id}`: {result["message"]}')
+
+        @connect.error
+        async def connect_error(ctx, error):
+            if isinstance(error, CheckFailure):
+                await ctx.channel.send('Access denied!')
+
+        @self.bot.command(name='disconnect', help='Stop a Restreamer process. Usage: .disconnect <process_id>')
+        @has_role(self.boss_role_name)
+        async def disconnect(ctx, process_id: str = None):
+            if not process_id:
+                await ctx.channel.send('Usage: `.disconnect <process_id>`\nUse `.streams` to list available process IDs.')
+                return
+            await ctx.channel.send(f'Disconnecting `{process_id}`...')
+            result = self.stream_manager.process_command(process_id, 'stop')
+            if result['success']:
+                await ctx.channel.send(f':red_circle: `{process_id}` disconnected.')
+            else:
+                await ctx.channel.send(f':warning: Failed to disconnect `{process_id}`: {result["message"]}')
+
+        @disconnect.error
+        async def disconnect_error(ctx, error):
+            if isinstance(error, CheckFailure):
+                await ctx.channel.send('Access denied!')
+
         @self.bot.command(name='hello', help='Say hello to the bot')
         @has_role(self.worshipper_role_name)
         async def hello(ctx):
