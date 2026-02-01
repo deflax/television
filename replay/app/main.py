@@ -2,6 +2,7 @@
 Replay Service - Serves MP4 files as HLS streams with endless shuffled repeat.
 """
 
+import asyncio
 import os
 import random
 import subprocess
@@ -12,7 +13,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
-from flask import Flask, Response, send_file, abort, request
+from quart import Quart, send_file, abort
 
 # Configure logging
 logging.basicConfig(
@@ -21,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Quart(__name__)
 
 # Configuration
 RECORDINGS_DIR = os.environ.get('RECORDINGS_DIR', '/recordings')
@@ -185,44 +186,44 @@ def stop_ffmpeg():
 
 
 @app.route('/health')
-def health():
+async def health():
     """Health check endpoint."""
     return {'status': 'ok', 'files_count': len(shuffled_files)}
 
 
 @app.route('/playlist.m3u8')
-def serve_playlist():
+async def serve_playlist():
     """Serve the HLS master playlist."""
     playlist_path = Path(HLS_OUTPUT_DIR) / 'playlist.m3u8'
     
     if not playlist_path.exists():
         logger.warning("Playlist not ready yet")
-        abort(503, description="Stream not ready yet")
+        abort(503, "Stream not ready yet")
     
-    return send_file(
+    return await send_file(
         playlist_path,
         mimetype='application/vnd.apple.mpegurl',
-        max_age=1
+        cache_timeout=1
     )
 
 
 @app.route('/segment_<int:segment_id>.ts')
-def serve_segment(segment_id: int):
+async def serve_segment(segment_id: int):
     """Serve HLS segments."""
     segment_path = Path(HLS_OUTPUT_DIR) / f'segment_{segment_id:05d}.ts'
     
     if not segment_path.exists():
-        abort(404, description="Segment not found")
+        abort(404, "Segment not found")
     
-    return send_file(
+    return await send_file(
         segment_path,
         mimetype='video/mp2t',
-        max_age=3600  # Segments are immutable, can cache longer
+        cache_timeout=3600  # Segments are immutable, can cache longer
     )
 
 
 @app.route('/<path:filename>')
-def serve_file(filename: str):
+async def serve_file(filename: str):
     """Generic file serving for any HLS files."""
     # Security: prevent path traversal
     if '..' in filename or filename.startswith('/'):
@@ -236,19 +237,19 @@ def serve_file(filename: str):
     # Determine mimetype
     if filename.endswith('.m3u8'):
         mimetype = 'application/vnd.apple.mpegurl'
-        max_age = 1
+        cache_timeout = 1
     elif filename.endswith('.ts'):
         mimetype = 'video/mp2t'
-        max_age = 3600
+        cache_timeout = 3600
     else:
         mimetype = 'application/octet-stream'
-        max_age = 0
+        cache_timeout = 0
     
-    return send_file(file_path, mimetype=mimetype, max_age=max_age)
+    return await send_file(file_path, mimetype=mimetype, cache_timeout=cache_timeout)
 
 
 @app.route('/')
-def index():
+async def index():
     """Root endpoint with service info."""
     return {
         'service': 'replay',
@@ -262,31 +263,33 @@ def index():
     }
 
 
-def signal_handler(sig, frame):
-    """Handle shutdown signals."""
-    logger.info(f"Received signal {sig}, shutting down...")
-    stop_ffmpeg()
-    sys.exit(0)
-
-
-def main():
-    """Main entry point."""
-    # Register signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    # Start ffmpeg in background thread
+def start_ffmpeg_background():
+    """Start ffmpeg in a background thread."""
     ffmpeg_thread = threading.Thread(target=start_ffmpeg_stream, daemon=True)
     ffmpeg_thread.start()
-    
-    # Give ffmpeg time to start generating segments
+    logger.info("FFmpeg background thread started")
+
+
+@app.before_serving
+async def startup():
+    """Initialize ffmpeg stream on startup."""
+    start_ffmpeg_background()
     logger.info("Waiting for ffmpeg to generate initial segments...")
-    time.sleep(3)
-    
-    # Start Flask server
-    logger.info(f"Starting replay service on port {PORT}")
-    app.run(host='0.0.0.0', port=PORT, threaded=True)
+    await asyncio.sleep(3)
+
+
+@app.after_serving
+async def shutdown():
+    """Cleanup on shutdown."""
+    logger.info("Shutting down...")
+    stop_ffmpeg()
+
+
+def create_app():
+    """Application factory for Hypercorn."""
+    return app
 
 
 if __name__ == '__main__':
-    main()
+    # Direct execution (development only)
+    app.run(host='0.0.0.0', port=PORT)
