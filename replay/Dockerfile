@@ -1,12 +1,24 @@
-FROM python:3.13-slim
+FROM python:3.11-slim
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-COPY app.py .
+COPY requirements.txt requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY ./scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+COPY ./scripts/run.sh /run.sh
+RUN chmod +x /run.sh
+
+COPY ./app /app
+WORKDIR /app/
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8090
 
-CMD ["python", "-u", "app.py"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/run.sh"]

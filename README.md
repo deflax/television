@@ -9,6 +9,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 - **Discord Bot Integration** - Live notifications, EPG commands, and remote recording control
 - **Protected Video Archive** - HMAC-based timecode authentication for secure access
 - **Live Recording** - Record streams with automatic thumbnail generation
+- **Replay Service** - Endless shuffled HLS playback of recorded videos
 - **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player
 - **Automated SSL** - Let's Encrypt certificates via acme.sh
 - **Cloudflare Compatible** - Proper handling of CF-Connecting-IP headers
@@ -16,26 +17,28 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 ## Architecture
 
 ```
-                    ┌─────────────────┐
-                    │    Internet     │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │    HAProxy      │  :80, :443
-                    │  (SSL, Routing) │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-     ┌────────▼───────┐ ┌────▼─────┐ ┌──────▼──────┐
-     │   Flask API    │ │Restreamer│ │   Icecast   │
-     │    (:8080)     │ │ (:8080)  │ │   (:8000)   │
-     │                │ │ (:1935)  │ │  (optional) │
-     │ - Web UI       │ │ (:6000)  │ └─────────────┘
-     │ - Stream Mgmt  │ └──────────┘
-     │ - Discord Bot  │
-     │ - Archive      │
-     └────────────────┘
+                      ┌─────────────────┐
+                      │    Internet     │
+                      └────────┬────────┘
+                               │
+                      ┌────────▼────────┐
+                      │    HAProxy      │  :80, :443
+                      │  (SSL, Routing) │
+                      └────────┬────────┘
+                               │
+       ┌───────────┬───────────┼───────────┬───────────┐
+       │           │           │           │           │
+┌──────▼─────┐ ┌───▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
+│ Flask API  │ │ Replay │ │Restreamer│ │ Icecast │ │ acme.sh │
+│  (:8080)   │ │ (:8090)│ │ (:8080) │ │ (:8000) │ │  (SSL)  │
+│            │ │        │ │ (:1935) │ │(optional│ └─────────┘
+│ - Web UI   │ │- HLS   │ │ (:6000) │ └─────────┘
+│ - Streams  │ │- Loop  │ └─────────┘
+│ - Discord  │ │- Shuffle│
+│ - Archive  │ └────────┘
+└──────┬─────┘      │
+       │            │
+       └────────────┴──── /recordings (shared volume)
 ```
 
 ## Tech Stack
@@ -45,6 +48,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Backend | Python 3.13, Flask 3.1 |
 | Frontend | Bootstrap 5, Plyr.js, HLS.js |
 | Streaming | Datarhei Restreamer 2.12 |
+| Replay | FFmpeg HLS transcoding |
 | Proxy | HAProxy |
 | Containerization | Docker Compose |
 | SSL | acme.sh (Let's Encrypt) |
@@ -152,6 +156,17 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `DISCORDBOT_GUILD_ID` | Discord server ID |
 | `DISCORDBOT_CHANNEL_ID` | Channel for bot messages |
 
+#### Replay Service Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RECORDINGS_DIR` | `/recordings` | Path to MP4 files |
+| `HLS_SEGMENT_TIME` | `4` | HLS segment duration (seconds) |
+| `HLS_LIST_SIZE` | `10` | Number of segments in playlist |
+| `VIDEO_BITRATE` | `4000k` | Video encoding bitrate |
+| `AUDIO_BITRATE` | `128k` | Audio encoding bitrate |
+| `REPLAY_PORT` | `8090` | HTTP server port |
+
 ## Usage
 
 ### Setting Up Streams
@@ -212,6 +227,8 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `/request-timecode` | POST | Public | Request archive access |
 | `/playhead` | GET | Public | Current stream info (JSON) |
 | `/video` | POST | Bearer | Upload video files |
+| `/replay/playlist.m3u8` | GET | Public | HLS replay stream |
+| `/replay/health` | GET | Public | Replay service health check |
 
 ## Project Structure
 
@@ -228,6 +245,14 @@ television/
 │   │   └── timecode_manager.py
 │   ├── Dockerfile
 │   └── requirements.txt
+├── replay/
+│   ├── app/
+│   │   └── main.py              # HLS streaming service
+│   ├── scripts/
+│   │   ├── entrypoint.sh
+│   │   └── run.sh
+│   ├── Dockerfile
+│   └── requirements.txt
 ├── config/
 │   ├── haproxy/
 │   │   └── haproxy.cfg
@@ -236,7 +261,7 @@ television/
 ├── data/                        # Runtime data (gitignored)
 │   ├── certificates/
 │   ├── restreamer/
-│   └── recorder/
+│   └── recorder/                # Shared recordings volume
 ├── docker-compose.yml
 ├── variables.env.dist
 └── init.sh
