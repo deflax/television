@@ -103,11 +103,30 @@ class DiscordBotManager:
             if not process_list:
                 await ctx.channel.send('```No processes found.```')
                 return
-            lines = ""
-            for p in process_list:
-                state_icon = ':green_circle:' if p['state'] == 'running' else ':red_circle:'
-                lines += f'{state_icon} `{p["id"]}` {p["name"]} ({p["state"]})\n'
-            await ctx.channel.send(lines)
+
+            # Separate running and stopped streams
+            running = [p for p in process_list if p['state'] == 'running']
+            stopped = [p for p in process_list if p['state'] != 'running']
+
+            # Build embed
+            embed = discord.Embed(
+                title='Streams',
+                colour=0x00b0f4 if running else 0x95a5a6,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Running streams
+            if running:
+                running_lines = '\n'.join(f"▶ **{p['name']}**\n`{p['id']}`" for p in running)
+                embed.add_field(name=f'🟢 Running ({len(running)})', value=running_lines, inline=False)
+
+            # Stopped streams
+            if stopped:
+                stopped_lines = '\n'.join(f"⏹ {p['name']}\n`{p['id']}`" for p in stopped)
+                embed.add_field(name=f'🔴 Stopped ({len(stopped)})', value=stopped_lines, inline=False)
+
+            embed.set_footer(text=f'Total: {len(process_list)} streams')
+            await ctx.channel.send(embed=embed)
 
         @streams.error
         async def streams_error(ctx, error):
