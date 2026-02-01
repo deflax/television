@@ -58,6 +58,33 @@ class DiscordBotManager:
         self._setup_bot_events()
         self._setup_bot_commands()
 
+    # Embed color constants
+    COLOR_SUCCESS = 0x2ecc71  # Green
+    COLOR_ERROR = 0xe74c3c    # Red
+    COLOR_WARNING = 0xf39c12  # Orange
+    COLOR_INFO = 0x3498db     # Blue
+    COLOR_NEUTRAL = 0x95a5a6  # Gray
+
+    def _make_embed(self, title: str, description: str = None, color: int = None, 
+                    fields: list = None, footer: str = None) -> discord.Embed:
+        """Create a standardized embed."""
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            colour=color or self.COLOR_INFO,
+            timestamp=datetime.now(timezone.utc)
+        )
+        if fields:
+            for field in fields:
+                embed.add_field(
+                    name=field.get('name', ''),
+                    value=field.get('value', ''),
+                    inline=field.get('inline', False)
+                )
+        if footer:
+            embed.set_footer(text=footer)
+        return embed
+
     def _resolve_process(self, identifier: str) -> Optional[dict]:
         """Resolve a stream name or process ID to a process dict.
 
@@ -137,153 +164,269 @@ class DiscordBotManager:
         @has_role(self.boss_role_name)
         async def start(ctx, *, identifier: str = None):
             if not identifier:
-                await ctx.channel.send('Usage: `.start <name or process_id>`\nUse `.streams` to list available streams.')
+                embed = self._make_embed(
+                    title='⚠️ Usage',
+                    description='`.start <name or process_id>`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
                 return
             process = self._resolve_process(identifier)
             if not process:
-                await ctx.channel.send(f':warning: No stream found matching `{identifier}`.\nUse `.streams` to list available streams.')
+                embed = self._make_embed(
+                    title='⚠️ Not Found',
+                    description=f'No stream found matching `{identifier}`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
                 return
             process_id = process['id']
             display_name = process['name']
-            await ctx.channel.send(f'Starting `{display_name}`...')
             result = self.stream_manager.process_command(process_id, 'start')
             if result['success']:
-                await ctx.channel.send(f':green_circle: `{display_name}` started.')
+                embed = self._make_embed(
+                    title='▶️ Stream Started',
+                    description=f'**{display_name}**',
+                    color=self.COLOR_SUCCESS,
+                    footer=f'ID: {process_id}'
+                )
             else:
-                await ctx.channel.send(f':red_circle: Failed to start `{display_name}`: {result["message"]}')
+                embed = self._make_embed(
+                    title='❌ Start Failed',
+                    description=f'**{display_name}**\n{result["message"]}',
+                    color=self.COLOR_ERROR,
+                    footer=f'ID: {process_id}'
+                )
+            await ctx.channel.send(embed=embed)
 
         @start.error
         async def start_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Access denied!')
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <name or process_id>')
         @has_role(self.boss_role_name)
         async def stop(ctx, *, identifier: str = None):
             if not identifier:
-                await ctx.channel.send('Usage: `.stop <name or process_id>`\nUse `.streams` to list available streams.')
+                embed = self._make_embed(
+                    title='⚠️ Usage',
+                    description='`.stop <name or process_id>`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
                 return
             process = self._resolve_process(identifier)
             if not process:
-                await ctx.channel.send(f':warning: No stream found matching `{identifier}`.\nUse `.streams` to list available streams.')
+                embed = self._make_embed(
+                    title='⚠️ Not Found',
+                    description=f'No stream found matching `{identifier}`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
                 return
             process_id = process['id']
             display_name = process['name']
-            await ctx.channel.send(f'Stopping `{display_name}`...')
             result = self.stream_manager.process_command(process_id, 'stop')
             if result['success']:
-                await ctx.channel.send(f':red_circle: `{display_name}` stopped.')
+                embed = self._make_embed(
+                    title='⏹️ Stream Stopped',
+                    description=f'**{display_name}**',
+                    color=self.COLOR_NEUTRAL,
+                    footer=f'ID: {process_id}'
+                )
             else:
-                await ctx.channel.send(f':warning: Failed to stop `{display_name}`: {result["message"]}')
+                embed = self._make_embed(
+                    title='❌ Stop Failed',
+                    description=f'**{display_name}**\n{result["message"]}',
+                    color=self.COLOR_ERROR,
+                    footer=f'ID: {process_id}'
+                )
+            await ctx.channel.send(embed=embed)
 
         @stop.error
         async def stop_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Access denied!')
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='hello', help='Say hello to the bot')
         @has_role(self.worshipper_role_name)
         async def hello(ctx):
             author_name = ctx.author.name
-            await ctx.channel.send(f'Hi, {author_name} :blush:')
+            embed = self._make_embed(
+                title=f'👋 Hello, {author_name}!',
+                color=self.COLOR_INFO
+            )
+            await ctx.channel.send(embed=embed)
 
         @hello.error
         async def hello_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Do I know you?')
+                embed = self._make_embed(
+                    title='🤔 Do I know you?',
+                    color=self.COLOR_NEUTRAL
+                )
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='time', help='Show current time in UTC')
         async def time(ctx):
-            await ctx.channel.send(f'The Coordinated Universal Time is `{datetime.now(timezone.utc)}`')
+            now = datetime.now(timezone.utc)
+            embed = self._make_embed(
+                title='🕐 Server Time',
+                description=f'`{now.strftime("%Y-%m-%d %H:%M:%S")} UTC`',
+                color=self.COLOR_INFO
+            )
+            await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='epg', help='Lists scheduled streams')
         async def epg(ctx):
-            if self.database != {}:
-                scheduled_list = ""
-                live_list = ""
-                for key, value in self.database.items():
-                    item_name = value['name']
-                    item_start = value['start_at']
-                    if item_start != 'now' and item_start != 'never':
-                        item_str = str(item_start).strip()
-                        if len(item_str) <= 2:
-                            display_time = item_str.zfill(2) + ':00'
-                        else:
-                            display_time = item_str[:-2].zfill(2) + ':' + item_str[-2:]
-                        scheduled_list += f'- {item_name} starts at {display_time} UTC\n'
+            if not self.database:
+                embed = self._make_embed(
+                    title='📺 Schedule',
+                    description='No streams scheduled.',
+                    color=self.COLOR_NEUTRAL
+                )
+                await ctx.channel.send(embed=embed)
+                return
+
+            fields = []
+            live_streams = []
+            scheduled_streams = []
+
+            for key, value in self.database.items():
+                item_name = value['name']
+                item_start = value['start_at']
+                if item_start == 'now':
+                    live_streams.append(f'🔴 **{item_name}**')
+                elif item_start != 'never':
+                    item_str = str(item_start).strip()
+                    if len(item_str) <= 2:
+                        display_time = item_str.zfill(2) + ':00'
                     else:
-                        live_list += f'- {item_name} is LIVE\n'
-                await ctx.channel.send(f'```{scheduled_list}```')
-                if live_list != "":
-                    await ctx.channel.send(f'```{live_list}```')
-            else:
-                await ctx.channel.send('```Empty.```')
+                        display_time = item_str[:-2].zfill(2) + ':' + item_str[-2:]
+                    scheduled_streams.append(f'⏰ {item_name} — `{display_time} UTC`')
+
+            if live_streams:
+                fields.append({'name': 'Live Now', 'value': '\n'.join(live_streams), 'inline': False})
+            if scheduled_streams:
+                fields.append({'name': 'Scheduled', 'value': '\n'.join(scheduled_streams), 'inline': False})
+
+            embed = self._make_embed(
+                title='📺 Schedule',
+                color=self.COLOR_SUCCESS if live_streams else self.COLOR_INFO,
+                fields=fields
+            )
+            await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='watchers', help='Lists all current watcher hostnames')
         @has_role(self.boss_role_name)
         async def watchers(ctx):
             if self.visitor_tracker is None:
-                await ctx.channel.send('```Visitor tracker not available.```')
+                embed = self._make_embed(
+                    title='👁️ Watchers',
+                    description='Visitor tracker not available.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
                 return
+
             current_visitors = self.visitor_tracker.visitors
             if not current_visitors:
-                await ctx.channel.send('```No watchers connected.```')
+                embed = self._make_embed(
+                    title='👁️ Watchers',
+                    description='No watchers connected.',
+                    color=self.COLOR_NEUTRAL
+                )
+                await ctx.channel.send(embed=embed)
                 return
-            watcher_list = ""
+
+            watcher_lines = []
             for ip in current_visitors:
                 hostname = obfuscate_hostname(ip, ip)
                 connections = current_visitors[ip]
                 if connections > 1:
-                    watcher_list += f'- {hostname} ({connections} connections)\n'
+                    watcher_lines.append(f'`{hostname}` ×{connections}')
                 else:
-                    watcher_list += f'- {hostname}\n'
+                    watcher_lines.append(f'`{hostname}`')
+
             total = len(current_visitors)
-            await ctx.channel.send(f'```Watchers ({total}):\n{watcher_list}```')
+            embed = self._make_embed(
+                title=f'👁️ Watchers ({total})',
+                description='\n'.join(watcher_lines),
+                color=self.COLOR_INFO
+            )
+            await ctx.channel.send(embed=embed)
 
         @watchers.error
         async def watchers_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Access denied!')
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='now', help='Displays whats playing right now')
         async def now(ctx):
             playhead = await self.query_playhead()
-            stream_name = playhead['name']
-            await ctx.channel.send(f'Now playing {stream_name}')
+            stream_name = playhead.get('name', 'Unknown')
+            embed = self._make_embed(
+                title='▶️ Now Playing',
+                description=f'**{stream_name}**',
+                color=self.COLOR_SUCCESS
+            )
+            await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='rec', help='Start the recorder')
         @has_role(self.boss_role_name)
         async def rec(ctx):
-            # Check if the recorder job already exists
             if self.recorder:
-                await ctx.channel.send(f'Recorder is busy!')
+                embed = self._make_embed(
+                    title='⚠️ Recorder Busy',
+                    description='A recording is already in progress.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
             else:
                 playhead = await self.query_playhead()
-                stream_name = playhead['name']
+                stream_name = playhead.get('name', 'Unknown')
                 self.recorder = True
-                await ctx.channel.send(f'Recording from {stream_name}...')
+                embed = self._make_embed(
+                    title='⏺️ Recording Started',
+                    description=f'Recording from **{stream_name}**...',
+                    color=self.COLOR_SUCCESS
+                )
+                await ctx.channel.send(embed=embed)
                 await self.exec_recorder(playhead)
 
         @rec.error
         async def rec_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Access denied!')
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='recstop', help='Stop the recorder')
         @has_role(self.boss_role_name)
         async def recstop(ctx):
-            # Check if the recorder job already exists
             if self.recorder:
-                await ctx.channel.send(f'Shutting down recorder...')
                 # TODO: kill any process currently running
                 self.recorder = False
+                embed = self._make_embed(
+                    title='⏹️ Recording Stopped',
+                    description='The recorder has been stopped.',
+                    color=self.COLOR_NEUTRAL
+                )
             else:
-                await ctx.channel.send(f'Recorder is already stopped.')
+                embed = self._make_embed(
+                    title='ℹ️ Recorder Idle',
+                    description='The recorder is not running.',
+                    color=self.COLOR_NEUTRAL
+                )
+            await ctx.channel.send(embed=embed)
 
         @recstop.error
         async def recstop_error(ctx, error):
             if isinstance(error, CheckFailure):
-                await ctx.channel.send('Access denied!')
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
 
     async def _send_and_prune(self, channel, content=None, embed=None):
         """Send a message to a channel and delete oldest messages beyond the limit.
