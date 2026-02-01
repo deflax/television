@@ -4,5 +4,7 @@ set -e
 echo "Starting Replay Service..."
 echo "Recordings directory: ${RECORDINGS_DIR:-/recordings}"
 
-# Run the Python application
-exec python3 /app/main.py
+# Run with Hypercorn (ASGI server)
+exec hypercorn --bind 0.0.0.0:${REPLAY_PORT:-8090} \
+    --workers 1 \
+    "main:create_app()"
