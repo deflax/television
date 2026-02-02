@@ -246,6 +246,42 @@ class StreamManager:
                 self.logger.error(f'Could not find fallback stream after removing {stream_id}: {e}')
                 self.playhead = {}
     
+    def get_next_stream(self) -> Optional[Dict[str, Any]]:
+        """Find the next scheduled stream after the current time."""
+        now = datetime.now()
+        current_minutes = now.hour * 60 + now.minute
+        
+        # Collect scheduled streams
+        scheduled = []
+        for key, value in self.database.items():
+            if value['start_at'] not in ("now", "never"):
+                try:
+                    h, m = parse_military_time(value['start_at'])
+                    scheduled.append({
+                        'id': key,
+                        'name': value['name'],
+                        'src': value['src'],
+                        'prio': value['prio'],
+                        'time': h * 60 + m
+                    })
+                except (ValueError, TypeError):
+                    continue
+        
+        if not scheduled:
+            return None
+        
+        # Sort by time and find next stream
+        scheduled.sort(key=lambda x: x['time'])
+        for s in scheduled:
+            if s['time'] > current_minutes:
+                return {'stream_id': s['id'], 'stream_name': s['name'], 
+                        'stream_hls_url': s['src'], 'stream_prio': s['prio']}
+        
+        # Wrap to first stream
+        s = scheduled[0]
+        return {'stream_id': s['id'], 'stream_name': s['name'], 
+                'stream_hls_url': s['src'], 'stream_prio': s['prio']}
+    
     def fallback_search(self) -> Dict[str, str]:
         """Search for a fallback stream based on current time."""
         self.logger.warning('Searching for a fallback job.')
