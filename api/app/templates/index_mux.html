@@ -249,11 +249,50 @@ document.addEventListener('DOMContentLoaded', () => {
       // Native HLS (Safari)
       video.src = hlsSource;
       const player = new Plyr(video, defaultOptions);
+      
+      // Native HLS error handling
+      video.addEventListener('error', function(e) {
+        console.warn('Video error, attempting reload in 3s...', e);
+        setTimeout(() => {
+          video.load();
+          video.play().catch(() => console.warn('Auto-play blocked'));
+        }, 3000);
+      });
     } else if (Hls.isSupported()) {
-      const hls = new Hls();
+      const hls = new Hls({
+        // Enable more aggressive error recovery
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90
+      });
 
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
+
+      // HLS.js error handling with automatic recovery
+      hls.on(Hls.Events.ERROR, function (event, data) {
+        console.warn('HLS error:', data.type, data.details, data.fatal);
+        
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('HLS: fatal network error, attempting recovery...');
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('HLS: fatal media error, attempting recovery...');
+              hls.recoverMediaError();
+              break;
+            default:
+              console.log('HLS: unrecoverable error, reloading stream in 3s...');
+              setTimeout(() => {
+                hls.destroy();
+                initPlayer();
+              }, 3000);
+              break;
+          }
+        }
+      });
 
       // From the m3u8 playlist, hls parses the manifest and returns
       // all available video qualities.
