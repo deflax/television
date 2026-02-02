@@ -22,6 +22,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class QuietAccessFilter(logging.Filter):
+    """Suppress noisy 200 OK access log lines for health checks, segments and playlists."""
+
+    QUIET_PREFIXES = ('/health', '/segment_', '/playlist.m3u8')
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if '200' in msg and any(p in msg for p in self.QUIET_PREFIXES):
+            return False
+        return True
+
+
+logging.getLogger('uvicorn.access').addFilter(QuietAccessFilter())
+
 app = Quart(__name__)
 
 
@@ -210,6 +225,10 @@ def start_ffmpeg_stream():
                         # Keep only the last 200 lines to bound memory
                         if len(stderr_lines) > 200:
                             del stderr_lines[:100]
+                        # Log track changes from the concat demuxer
+                        if line.startswith('[concat @') and "Opening '" in line:
+                            track = line.split("Opening '", 1)[1].rstrip("'")
+                            logger.info(f"Now playing: {Path(track).name}")
             drain_thread = threading.Thread(target=_drain_stderr, daemon=True)
             drain_thread.start()
             
