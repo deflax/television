@@ -375,6 +375,41 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
+        @self.bot.command(name='next', help='Advance to the next scheduled stream')
+        @has_role(self.boss_role_name)
+        async def next_stream(ctx):
+            next_stream = self.stream_manager.get_next_stream()
+            if not next_stream:
+                embed = self._make_embed(
+                    title='⚠️ No Streams Available',
+                    description='There are no scheduled streams in the database.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
+                return
+            
+            # Execute the stream switch
+            self.stream_manager.exec_stream(
+                next_stream['stream_id'],
+                next_stream['stream_name'],
+                next_stream['stream_prio'],
+                next_stream['stream_hls_url']
+            )
+            
+            embed = self._make_embed(
+                title='⏭️ Stream Advanced',
+                description=f'Now playing: **{next_stream["stream_name"]}**',
+                color=self.COLOR_SUCCESS,
+                footer=f'ID: {next_stream["stream_id"]}'
+            )
+            await ctx.channel.send(embed=embed)
+
+        @next_stream.error
+        async def next_stream_error(ctx, error):
+            if isinstance(error, CheckFailure):
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
+
         @self.bot.command(name='rec', help='Start the recorder')
         @has_role(self.boss_role_name)
         async def rec(ctx):
