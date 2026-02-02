@@ -25,6 +25,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Quiet down httpx logging
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+
 # Configuration
 API_URL = os.environ.get('API_URL', 'http://api:8080')
 HLS_OUTPUT_DIR = '/tmp/hls'
@@ -195,15 +199,19 @@ def start_ffmpeg():
 def wait_for_api():
     """Wait for API to be ready before connecting to SSE."""
     logger.info(f"Waiting for API at {API_URL}...")
+    attempt = 0
     while not stop_event.is_set():
         try:
-            response = httpx.get(f'{API_URL}/health', timeout=5.0)
-            if response.status_code == 200:
-                logger.info("API is ready")
-                return True
+            with httpx.Client() as client:
+                response = client.get(f'{API_URL}/health', timeout=5.0)
+                if response.status_code == 200:
+                    logger.info("API is ready")
+                    return True
         except Exception:
             pass
-        logger.debug("API not ready, retrying in 5s...")
+        attempt += 1
+        if attempt % 6 == 1:  # Log every 30 seconds (6 * 5s)
+            logger.info("Waiting for API to be ready...")
         time.sleep(5)
     return False
 
