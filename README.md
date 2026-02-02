@@ -226,6 +226,22 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 
 Each variant specifies a resolution height (source is capped at this), video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
 
+### Icecast Audio Streaming Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ICECAST_ENABLED` | `true` | Enable audio-only streaming via Icecast |
+| `ICECAST_SOURCE_PASSWORD` | `hackme` | Password for FFmpeg to connect to Icecast |
+| `ICECAST_ADMIN_PASSWORD` | - | Icecast admin interface password |
+| `ICECAST_RELAY_PASSWORD` | - | Icecast relay password |
+| `ICECAST_HOST` | `icecast` | Internal Icecast hostname |
+| `ICECAST_PORT` | `8000` | Icecast server port |
+| `ICECAST_MOUNT` | `/stream.mp3` | Mount point for audio stream |
+| `ICECAST_AUDIO_BITRATE` | `128k` | Audio encoding bitrate |
+| `ICECAST_AUDIO_FORMAT` | `mp3` | Audio format: `mp3` or `aac` |
+
+The mux service automatically extracts audio from the muxed live stream and sends it to Icecast. The audio stream is available at `https://example.com/live/stream.mp3`.
+
 ## Services
 
 ### Replay Service
@@ -388,6 +404,7 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `/video` | POST | Bearer | Upload video files |
 | `/replay/<channel>/playlist.m3u8` | GET | Public | HLS replay stream for channel |
 | `/live/stream.m3u8` | GET | Public | Mux ABR stream (master playlist) |
+| `/live/stream.mp3` | GET | Public | Audio-only stream (Icecast) |
 
 ## Logging and Monitoring
 
