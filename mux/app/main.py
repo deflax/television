@@ -192,9 +192,29 @@ def start_ffmpeg():
     return ffmpeg_process
 
 
+def wait_for_api():
+    """Wait for API to be ready before connecting to SSE."""
+    logger.info(f"Waiting for API at {API_URL}...")
+    while not stop_event.is_set():
+        try:
+            response = httpx.get(f'{API_URL}/health', timeout=5.0)
+            if response.status_code == 200:
+                logger.info("API is ready")
+                return True
+        except Exception:
+            pass
+        logger.debug("API not ready, retrying in 5s...")
+        time.sleep(5)
+    return False
+
+
 def monitor_playhead():
     """Connect to API SSE endpoint and monitor playhead changes."""
     global current_stream_url
+    
+    # Wait for API to be ready first
+    if not wait_for_api():
+        return
     
     logger.info(f"Connecting to API SSE at {API_URL}/events")
     
