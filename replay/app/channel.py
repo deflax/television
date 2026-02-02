@@ -157,17 +157,22 @@ def run_channel_ffmpeg(channel: Channel):
 
     logger.info(f"[{channel.name}] Started (source: {channel.source_dir})")
 
+    waiting_for_files = False
     while not stop_event.is_set():
         channel.shuffle_playlist()
         channel.known_files = set(channel.shuffled_files)
         channel.restart_event.clear()
 
         if not channel.shuffled_files:
-            logger.info(f"[{channel.name}] No video files found. Waiting for files...")
-            # Wait for file watcher to detect new files (or timeout after 30s)
-            channel.restart_event.wait(timeout=30)
+            if not waiting_for_files:
+                logger.info(f"[{channel.name}] No video files found. Waiting for files...")
+                waiting_for_files = True
+            # Wait for file watcher to detect new files
+            channel.restart_event.wait()
             channel.restart_event.clear()
             continue
+        
+        waiting_for_files = False
 
         concat_file = channel.create_concat_file()
 
