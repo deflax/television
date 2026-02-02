@@ -1,5 +1,15 @@
+import ipaddress
 import threading
 from typing import Callable, Optional
+
+
+def _is_private_ip(ip: str) -> bool:
+    """Check if an IP address is private/internal (Docker, LAN, etc.)."""
+    try:
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback
+    except ValueError:
+        return False
 
 
 class VisitorTracker:
@@ -30,7 +40,13 @@ class VisitorTracker:
         self._on_disconnect = on_disconnect
 
     def connect(self, ip: str) -> None:
-        """Register an SSE client connection."""
+        """Register an SSE client connection.
+        
+        Private/internal IPs (Docker, LAN, loopback) are ignored.
+        """
+        if _is_private_ip(ip):
+            return
+        
         is_new_visitor = False
         current_count = 0
         
@@ -45,7 +61,13 @@ class VisitorTracker:
             self._on_connect(ip, current_count)
 
     def disconnect(self, ip: str) -> None:
-        """Unregister an SSE client connection."""
+        """Unregister an SSE client connection.
+        
+        Private/internal IPs (Docker, LAN, loopback) are ignored.
+        """
+        if _is_private_ip(ip):
+            return
+        
         is_fully_disconnected = False
         current_count = 0
         
