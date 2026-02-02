@@ -74,6 +74,7 @@ services:
       - "variables.env"
     volumes:
       - "./data/recorder:/recordings:ro"
+      - "./data/library:/library:ro"
     restart: unless-stopped
     networks:
       - net
