@@ -13,7 +13,7 @@ fi
 # Start Uvicorn (ASGI server for Quart with SSE support)
 echo "uvicorn $APP_MODULE"
 pwd
-exec uvicorn "${MODULE_NAME}:${VARIABLE_NAME}" \
+exec uvicorn "$APP_MODULE" \
     --factory \
     --host 0.0.0.0 \
     --port 8080 \
