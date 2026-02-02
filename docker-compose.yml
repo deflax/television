@@ -4,7 +4,8 @@ networks:
 
 services:
   haproxy:
-    image: haproxy:lts
+    build: ./haproxy
+    image: tv-haproxy:latest
     container_name: haproxy
     env_file:
        - "variables.env"
@@ -13,7 +14,6 @@ services:
       - "443:443"
     volumes:
       - "./data/certificates:/certificates"
-      - "./config/haproxy:/usr/local/etc/haproxy"
     depends_on:
       - "restreamer"
       - "api"
