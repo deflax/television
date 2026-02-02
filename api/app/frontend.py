@@ -165,6 +165,11 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
     # Set of active SSE client queues for broadcasting updates
     sse_clients: Set[asyncio.Queue] = set()
     
+    @app.route('/health', methods=['GET'])
+    async def health_route():
+        """Lightweight health check endpoint for HAProxy."""
+        return 'OK', 200
+
     @app.route('/', methods=['GET'])
     async def root_route():
         """Frontend index page - public live stream."""
