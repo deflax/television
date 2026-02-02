@@ -19,30 +19,56 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 ## Architecture
 
 ```
-                      ┌─────────────────┐
-                      │    Internet     │
-                      └────────┬────────┘
-                               │
-                      ┌────────▼────────┐
-                      │    HAProxy      │  :80, :443 (HTTP/2)
-                      │  (SSL, Routing) │
-                      └────────┬────────┘
-                               │
-       ┌───────────┬───────────┼───────────┬───────────┬───────────┐
-       │           │           │           │           │           │
-┌──────▼─────┐ ┌───▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
-│  Quart API │ │ Replay │ │   Mux   │ │Restreamer│ │ Icecast │ │ acme.sh │
-│  (:8080)   │ │ (:8090)│ │ (:8091) │ │ (:8080) │ │ (:8000) │ │  (SSL)  │
-│            │ │        │ │         │ │ (:1935) │ │(optional│ └─────────┘
-│ - Web UI   │ │- Multi │ │- ABR    │ │ (:6000) │ └─────────┘
-│ - Streams  │ │  channel│ │- Seamless│ └─────────┘
-│ - Discord  │ │- HLS   │ │  switch │
-│ - Archive  │ │- Auto  │ └─────────┘
-└──────┬─────┘ │  discovery│     │
-       │       └────────┘      │
-       │            │          │
-       └────────────┴──────────┴── /recordings, /library (shared volumes)
+                                    ┌──────────────┐
+                                    │   Internet   │
+                                    └──────┬───────┘
+                                           │
+                                    ┌──────▼───────┐
+                                    │   HAProxy    │ :80, :443 (HTTP/2)
+                                    │ SSL/Routing  │
+                                    └──────┬───────┘
+              ┌────────────────────────────┼────────────────────────────┐
+              │                            │                            │
+              │ example.com                │ example.com                │ stream.example.com
+              │ /                          │ /live/*                    │
+              │                            │                            │
+       ┌──────▼──────┐              ┌──────▼──────┐              ┌──────▼──────┐
+       │  Quart API  │◄────SSE──────│     Mux     │              │  Restreamer │
+       │   :8080     │   /events    │    :8091    │              │    :8080    │
+       │             │              │             │              │    :1935    │
+       │ - Web UI    │              │ - ABR HLS   │◄────HLS──────│    :6000    │
+       │ - SSE       │              │ - 1080p/720p│              │             │
+       │ - Schedule  │              │ - Playhead  │              │ - Ingest    │
+       │ - Discord   │              │   switching │              │ - Transcode │
+       │ - Archive   │              │             │              │ - HLS out   │
+       └─────────────┘              └─────────────┘              └──────┬──────┘
+                                                                        │
+                                                                        │ HLS
+                                                                        │ (internal)
+                                                                        │
+                                                                 ┌──────▼──────┐
+                                                                 │   Replay    │
+                                                                 │    :8090    │
+                                                                 │             │
+                                                                 │ - Multi-ch  │
+                                                                 │ - Auto-disc │
+                                                                 │ - Shuffled  │
+                                                                 │   playback  │
+                                                                 └──────┬──────┘
+                                                                        │
+                                                           ┌────────────┴────────────┐
+                                                           │                         │
+                                                     /recordings               /library
+                                                    (data/recorder)        (data/library/*)
 ```
+
+**Data Flow:**
+1. **Ingest** → Streamers push to Restreamer via SRT/RTMP
+2. **Replay** → Serves recorded/library content as endless shuffled HLS channels
+3. **Restreamer** → Ingests live streams + Replay HLS, transcodes, outputs unified HLS
+4. **Scheduling** → API tracks schedule, broadcasts playhead via SSE
+5. **Muxing** → Mux service follows playhead, switches Restreamer HLS inputs, outputs ABR stream
+6. **Delivery** → HAProxy routes requests, terminates SSL, serves to viewers
 
 ## Tech Stack
 
@@ -52,7 +78,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Frontend | Bootstrap 5, Plyr.js, HLS.js |
 | Streaming | Datarhei Restreamer 2.12 |
 | Replay | FFmpeg HLS, multi-channel |
-| Mux | FFmpeg ABR (1080p/720p/576p) |
+| Mux | FFmpeg ABR (1080p + 720p) |
 | Proxy | HAProxy (HTTP/2, health checks) |
 | ASGI Server | Uvicorn |
 | Containerization | Docker Compose |
@@ -213,19 +239,30 @@ Multi-channel HLS streaming service that serves video files as endless shuffled 
 
 ### Mux Service
 
-Seamless stream multiplexer that monitors the API's playhead and outputs a single continuous ABR stream.
+Stream multiplexer that monitors the API's playhead and outputs a continuous stream from Restreamer channels.
 
 **Features:**
 - **SSE monitoring** - Listens to `/events` for playhead changes
-- **Seamless switching** - Uses FIFO pipe for uninterrupted stream switches
-- **Adaptive Bitrate** - 3 quality variants (1080p, 720p, 576p)
-- **No upscaling** - Caps output at source resolution
+- **Playhead switching** - Restarts ffmpeg with new input URL on playhead change
+- **Two modes** - Copy (passthrough) or ABR (adaptive bitrate)
+- **No upscaling** - ABR mode caps output at source resolution
 
-**Output:**
+**Modes** (set via `MUX_MODE` env var):
+
+| Mode | Description |
+|------|-------------|
+| `copy` (default) | Passthrough, no transcoding. Single stream output. |
+| `abr` | Adaptive bitrate with source copy + transcoded variants. |
+
+**Copy mode output:**
+- `/live/stream.m3u8` - Single quality stream (passthrough)
+
+**ABR mode output:**
 - `/live/stream.m3u8` - Master playlist (ABR)
-- `/live/stream_0/` - Source quality (max 1080p, 5000k video, 192k audio)
-- `/live/stream_1/` - 720p (2800k video, 128k audio)
-- `/live/stream_2/` - 576p (1400k video, 96k audio)
+- `/live/stream_0/` - Source (copy, no re-encoding)
+- `/live/stream_1/` - 1080p (5000k video, 192k audio) - only if source > 1080p
+- `/live/stream_2/` - 720p (2800k video, 128k audio) - only if source > 720p
+- `/live/stream_3/` - 576p (1400k video, 96k audio) - only if source > 576p
 
 ### Frontend Modes
 

@@ -35,6 +35,9 @@ HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 
+# Mux mode: 'copy' (passthrough) or 'abr' (adaptive bitrate with source copy)
+MUX_MODE = os.environ.get('MUX_MODE', 'copy').lower()
+
 # Global state
 current_stream_url: Optional[str] = None
 stream_url_lock = threading.Lock()
@@ -46,7 +49,8 @@ ffmpeg_process: Optional[subprocess.Popen] = None
 def setup_output_dir():
     """Ensure output directory exists and create variant subdirs."""
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
-    for i in range(2):
+    # Create enough subdirs for ABR mode (up to 4 variants)
+    for i in range(4):
         os.makedirs(f'{HLS_OUTPUT_DIR}/stream_{i}', exist_ok=True)
 
 
@@ -60,46 +64,89 @@ def cleanup_output_dir():
                 logger.warning(f"Could not remove {f}: {e}")
 
 
-def start_ffmpeg(input_url: str) -> subprocess.Popen:
-    """Start ffmpeg to read HLS input and output ABR HLS (source + 720p)."""
-    global ffmpeg_process
-
-    cmd = [
+def build_copy_cmd(input_url: str) -> list[str]:
+    """Build ffmpeg command for copy/passthrough mode (single stream, no transcoding)."""
+    return [
         'ffmpeg',
         '-y',
         '-re',
         '-i', input_url,
-        # Video filter: split into 2 streams - source quality (max 1080p) and 720p
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-f', 'hls',
+        '-hls_time', str(HLS_SEGMENT_TIME),
+        '-hls_list_size', str(HLS_LIST_SIZE),
+        '-hls_flags', 'append_list+omit_endlist',
+        '-hls_segment_type', 'mpegts',
+        '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
+        f'{HLS_OUTPUT_DIR}/stream.m3u8'
+    ]
+
+
+def build_abr_cmd(input_url: str) -> list[str]:
+    """Build ffmpeg command for ABR mode (source copy + transcoded 720p/576p).
+    
+    Uses smart scaling that only transcodes resolutions below source:
+    - Source is always copied (no re-encoding)
+    - 1080p: only transcode if source > 1080p
+    - 720p: only transcode if source > 720p  
+    - 576p: only transcode if source > 576p
+    """
+    return [
+        'ffmpeg',
+        '-y',
+        '-re',
+        '-i', input_url,
+        # Split video for ABR variants
         '-filter_complex',
-        '[0:v]split=2[v_src_in][v_720_in]; '
-        '[v_src_in]scale=w=-2:h=\'min(1080,ih)\':force_original_aspect_ratio=decrease[v_src]; '
-        '[v_720_in]scale=w=-2:h=\'min(720,ih)\':force_original_aspect_ratio=decrease[v_720]',
-        # Source quality (max 1080p)
+        '[0:v]split=4[v_src][v_1080_in][v_720_in][v_576_in]; '
+        '[v_1080_in]scale=w=-2:h=\'min(1080,ih)\':force_original_aspect_ratio=decrease[v_1080]; '
+        '[v_720_in]scale=w=-2:h=\'min(720,ih)\':force_original_aspect_ratio=decrease[v_720]; '
+        '[v_576_in]scale=w=-2:h=\'min(576,ih)\':force_original_aspect_ratio=decrease[v_576]',
+        # Stream 0: Source (copy)
         '-map', '[v_src]',
-        '-c:v:0', 'libx264',
-        '-preset', 'veryfast',
-        '-b:v:0', '5000k',
-        '-maxrate:v:0', '5350k',
-        '-bufsize:v:0', '7500k',
-        '-g:v:0', '48',
-        '-sc_threshold:v:0', '0',
+        '-c:v:0', 'copy',
         '-map', '0:a',
-        '-c:a:0', 'aac',
-        '-b:a:0', '192k',
-        '-ac:a:0', '2',
-        # 720p variant
-        '-map', '[v_720]',
+        '-c:a:0', 'copy',
+        # Stream 1: 1080p
+        '-map', '[v_1080]',
         '-c:v:1', 'libx264',
         '-preset', 'veryfast',
-        '-b:v:1', '2800k',
-        '-maxrate:v:1', '2996k',
-        '-bufsize:v:1', '4200k',
+        '-b:v:1', '5000k',
+        '-maxrate:v:1', '5350k',
+        '-bufsize:v:1', '7500k',
         '-g:v:1', '48',
         '-sc_threshold:v:1', '0',
         '-map', '0:a',
         '-c:a:1', 'aac',
-        '-b:a:1', '128k',
+        '-b:a:1', '192k',
         '-ac:a:1', '2',
+        # Stream 2: 720p
+        '-map', '[v_720]',
+        '-c:v:2', 'libx264',
+        '-preset', 'veryfast',
+        '-b:v:2', '2800k',
+        '-maxrate:v:2', '2996k',
+        '-bufsize:v:2', '4200k',
+        '-g:v:2', '48',
+        '-sc_threshold:v:2', '0',
+        '-map', '0:a',
+        '-c:a:2', 'aac',
+        '-b:a:2', '128k',
+        '-ac:a:2', '2',
+        # Stream 3: 576p
+        '-map', '[v_576]',
+        '-c:v:3', 'libx264',
+        '-preset', 'veryfast',
+        '-b:v:3', '1400k',
+        '-maxrate:v:3', '1498k',
+        '-bufsize:v:3', '2100k',
+        '-g:v:3', '48',
+        '-sc_threshold:v:3', '0',
+        '-map', '0:a',
+        '-c:a:3', 'aac',
+        '-b:a:3', '96k',
+        '-ac:a:3', '2',
         # HLS output
         '-f', 'hls',
         '-hls_time', str(HLS_SEGMENT_TIME),
@@ -108,11 +155,23 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
         '-hls_segment_type', 'mpegts',
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/stream_%v/segment_%05d.ts',
         '-master_pl_name', 'stream.m3u8',
-        '-var_stream_map', 'v:0,a:0 v:1,a:1',
+        '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3',
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8'
     ]
 
-    logger.info(f"Starting ffmpeg with input: {input_url}")
+
+def start_ffmpeg(input_url: str) -> subprocess.Popen:
+    """Start ffmpeg based on configured MUX_MODE."""
+    global ffmpeg_process
+
+    if MUX_MODE == 'abr':
+        cmd = build_abr_cmd(input_url)
+        mode_desc = "ABR (source copy + 1080p/720p/576p)"
+    else:
+        cmd = build_copy_cmd(input_url)
+        mode_desc = "copy (passthrough)"
+
+    logger.info(f"Starting ffmpeg [{mode_desc}] with input: {input_url}")
 
     ffmpeg_process = subprocess.Popen(
         cmd,
