@@ -87,6 +87,8 @@ services:
       - "api"
     build: ./mux
     image: tv-mux:latest
+    env_file:
+      - "variables.env"
     environment:
       - API_URL=http://api:8080
     restart: unless-stopped
