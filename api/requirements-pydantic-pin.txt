@@ -1,2 +1,0 @@
-pydantic==1.10.2
-pydantic-collections==0.3.0
