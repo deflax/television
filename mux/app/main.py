@@ -46,7 +46,7 @@ ffmpeg_process: Optional[subprocess.Popen] = None
 def setup_output_dir():
     """Ensure output directory exists and create variant subdirs."""
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
-    for i in range(3):
+    for i in range(2):
         os.makedirs(f'{HLS_OUTPUT_DIR}/stream_{i}', exist_ok=True)
 
 
@@ -61,7 +61,7 @@ def cleanup_output_dir():
 
 
 def start_ffmpeg(input_url: str) -> subprocess.Popen:
-    """Start ffmpeg to read HLS input and output ABR HLS."""
+    """Start ffmpeg to read HLS input and output ABR HLS (source + 720p)."""
     global ffmpeg_process
 
     cmd = [
@@ -69,13 +69,12 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
         '-y',
         '-re',
         '-i', input_url,
-        # Video filter: split into 3 streams - source quality (max 1080p), 720p, 576p
+        # Video filter: split into 2 streams - source quality (max 1080p) and 720p
         '-filter_complex',
-        '[0:v]split=3[v_src_in][v_720_in][v_576_in]; '
+        '[0:v]split=2[v_src_in][v_720_in]; '
         '[v_src_in]scale=w=-2:h=\'min(1080,ih)\':force_original_aspect_ratio=decrease[v_src]; '
-        '[v_720_in]scale=w=-2:h=\'min(720,ih)\':force_original_aspect_ratio=decrease[v_720]; '
-        '[v_576_in]scale=w=-2:h=\'min(576,ih)\':force_original_aspect_ratio=decrease[v_576]',
-        # Source quality (1080p)
+        '[v_720_in]scale=w=-2:h=\'min(720,ih)\':force_original_aspect_ratio=decrease[v_720]',
+        # Source quality (max 1080p)
         '-map', '[v_src]',
         '-c:v:0', 'libx264',
         '-preset', 'veryfast',
@@ -101,19 +100,6 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
         '-c:a:1', 'aac',
         '-b:a:1', '128k',
         '-ac:a:1', '2',
-        # 576p variant
-        '-map', '[v_576]',
-        '-c:v:2', 'libx264',
-        '-preset', 'veryfast',
-        '-b:v:2', '1400k',
-        '-maxrate:v:2', '1498k',
-        '-bufsize:v:2', '2100k',
-        '-g:v:2', '48',
-        '-sc_threshold:v:2', '0',
-        '-map', '0:a',
-        '-c:a:2', 'aac',
-        '-b:a:2', '96k',
-        '-ac:a:2', '2',
         # HLS output
         '-f', 'hls',
         '-hls_time', str(HLS_SEGMENT_TIME),
@@ -122,7 +108,7 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
         '-hls_segment_type', 'mpegts',
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/stream_%v/segment_%05d.ts',
         '-master_pl_name', 'stream.m3u8',
-        '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2',
+        '-var_stream_map', 'v:0,a:0 v:1,a:1',
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8'
     ]
 
