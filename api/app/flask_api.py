@@ -64,13 +64,15 @@ class LoggerManager:
         # Set root logger to WARNING to suppress noisy third-party logs (httpcore, etc.)
         logging.basicConfig(level=logging.WARNING)
 
-        # Suppress noisy 200 OK access log lines for health checks
-        class _HealthFilter(logging.Filter):
+        # Suppress noisy 200 OK access log lines for health checks and SSE
+        class _QuietAccessFilter(logging.Filter):
             def filter(self, record: logging.LogRecord) -> bool:
                 msg = record.getMessage()
-                return not ('200' in msg and '/health' in msg)
+                if '200' in msg and ('/health' in msg or '/events' in msg):
+                    return False
+                return True
 
-        logging.getLogger('uvicorn.access').addFilter(_HealthFilter())
+        logging.getLogger('uvicorn.access').addFilter(_QuietAccessFilter())
 
         self.api = logging.getLogger('hypercorn')
         self.job = logging.getLogger('apscheduler')

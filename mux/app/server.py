@@ -1,10 +1,23 @@
 """HTTP server to serve the muxed HLS stream."""
 
 import asyncio
+import logging
 from pathlib import Path
 from quart import Quart, send_file, abort
 
 HLS_OUTPUT_DIR = '/tmp/hls'
+
+
+# Suppress noisy 200 OK access log lines for health checks
+class _QuietAccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if '200' in msg and '/health' in msg:
+            return False
+        return True
+
+
+logging.getLogger('uvicorn.access').addFilter(_QuietAccessFilter())
 
 app = Quart(__name__)
 
