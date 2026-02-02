@@ -1,8 +1,8 @@
 """
-Mux Service - Seamless HLS stream multiplexer.
+Mux Service - HLS stream multiplexer with ABR output.
 
 Monitors the API's playhead via SSE and switches between input streams
-to produce a single continuous output stream at /live/playlist.m3u8.
+to produce a continuous ABR output stream at /live/stream.m3u8.
 """
 
 import os
@@ -34,91 +34,41 @@ API_URL = os.environ.get('API_URL', 'http://api:8080')
 HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
-FIFO_PATH = '/tmp/input.ts'
 
 # Global state
 current_stream_url: Optional[str] = None
 stream_url_lock = threading.Lock()
 stop_event = threading.Event()
+restart_event = threading.Event()
 ffmpeg_process: Optional[subprocess.Popen] = None
-fetcher_process: Optional[subprocess.Popen] = None
 
 
 def setup_output_dir():
-    """Ensure output directory exists and is clean."""
+    """Ensure output directory exists and create variant subdirs."""
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
-    for f in Path(HLS_OUTPUT_DIR).glob('*'):
-        try:
-            f.unlink()
-        except Exception as e:
-            logger.warning(f"Could not remove {f}: {e}")
+    for i in range(3):
+        os.makedirs(f'{HLS_OUTPUT_DIR}/stream_{i}', exist_ok=True)
 
 
-def create_fifo():
-    """Create named pipe for input switching."""
-    try:
-        if os.path.exists(FIFO_PATH):
-            os.unlink(FIFO_PATH)
-        os.mkfifo(FIFO_PATH)
-        logger.info(f"Created FIFO at {FIFO_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to create FIFO: {e}")
-        sys.exit(1)
+def cleanup_output_dir():
+    """Clean old segments from output directory."""
+    for f in Path(HLS_OUTPUT_DIR).rglob('*'):
+        if f.is_file():
+            try:
+                f.unlink()
+            except Exception as e:
+                logger.warning(f"Could not remove {f}: {e}")
 
 
-def fetch_and_write_to_fifo():
-    """Continuously fetch the current stream and write to FIFO.
-    
-    This runs in a separate process to handle seamless input switching.
-    """
-    logger.info("Fetcher process started")
-    
-    while not stop_event.is_set():
-        with stream_url_lock:
-            url = current_stream_url
-        
-        if not url:
-            logger.debug("No stream URL set, waiting...")
-            time.sleep(1)
-            continue
-        
-        logger.info(f"Fetching stream: {url}")
-        
-        try:
-            # Fetch HLS stream and write to FIFO
-            # ffmpeg reads from the FIFO continuously
-            with httpx.stream('GET', url, timeout=30.0, follow_redirects=True) as response:
-                response.raise_for_status()
-                
-                with open(FIFO_PATH, 'wb') as fifo:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        if stop_event.is_set():
-                            break
-                        
-                        # Check if URL changed (playhead switch)
-                        with stream_url_lock:
-                            if current_stream_url != url:
-                                logger.info(f"Stream changed to: {current_stream_url}")
-                                break
-                        
-                        fifo.write(chunk)
-        
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching stream: {e}")
-            time.sleep(2)
-        except Exception as e:
-            logger.error(f"Error fetching stream: {e}")
-            time.sleep(2)
-
-
-def start_ffmpeg():
-    """Start ffmpeg to read from FIFO and output ABR HLS with multiple quality levels."""
+def start_ffmpeg(input_url: str) -> subprocess.Popen:
+    """Start ffmpeg to read HLS input and output ABR HLS."""
     global ffmpeg_process
-    
+
     cmd = [
         'ffmpeg',
+        '-y',
         '-re',
-        '-i', FIFO_PATH,
+        '-i', input_url,
         # Video filter: split into 3 streams - source quality (max 1080p), 720p, 576p
         '-filter_complex',
         '[0:v]split=3[v_src_in][v_720_in][v_576_in]; '
@@ -168,32 +118,85 @@ def start_ffmpeg():
         '-f', 'hls',
         '-hls_time', str(HLS_SEGMENT_TIME),
         '-hls_list_size', str(HLS_LIST_SIZE),
-        '-hls_flags', 'independent_segments+append_list+omit_endlist+delete_segments',
+        '-hls_flags', 'independent_segments+append_list+omit_endlist',
         '-hls_segment_type', 'mpegts',
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/stream_%v/segment_%05d.ts',
         '-master_pl_name', 'stream.m3u8',
         '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2',
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8'
     ]
-    
-    logger.info(f"Starting ffmpeg: {' '.join(cmd)}")
-    
+
+    logger.info(f"Starting ffmpeg with input: {input_url}")
+
     ffmpeg_process = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE
     )
-    
+
     # Monitor ffmpeg stderr in background
     def log_stderr():
         if ffmpeg_process and ffmpeg_process.stderr:
             for line in ffmpeg_process.stderr:
-                logger.debug(f"ffmpeg: {line.decode().rstrip()}")
-    
+                decoded = line.decode().rstrip()
+                if decoded:
+                    logger.debug(f"ffmpeg: {decoded}")
+
     stderr_thread = threading.Thread(target=log_stderr, daemon=True)
     stderr_thread.start()
-    
+
     return ffmpeg_process
+
+
+def stop_ffmpeg():
+    """Stop the current ffmpeg process."""
+    global ffmpeg_process
+    if ffmpeg_process:
+        logger.info("Stopping ffmpeg...")
+        ffmpeg_process.terminate()
+        try:
+            ffmpeg_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            ffmpeg_process.kill()
+        ffmpeg_process = None
+
+
+def run_ffmpeg_loop():
+    """Main loop that runs ffmpeg and restarts on playhead changes."""
+    global ffmpeg_process
+
+    while not stop_event.is_set():
+        # Wait for a stream URL
+        with stream_url_lock:
+            url = current_stream_url
+
+        if not url:
+            logger.info("No stream URL set, waiting...")
+            time.sleep(2)
+            continue
+
+        # Start ffmpeg with current URL
+        ffmpeg_process = start_ffmpeg(url)
+        restart_event.clear()
+
+        # Monitor ffmpeg and wait for restart signal or exit
+        while not stop_event.is_set() and not restart_event.is_set():
+            if ffmpeg_process.poll() is not None:
+                # ffmpeg exited
+                logger.warning(f"ffmpeg exited with code {ffmpeg_process.returncode}")
+                break
+            time.sleep(1)
+
+        # Stop ffmpeg before restarting
+        stop_ffmpeg()
+
+        if restart_event.is_set():
+            logger.info("Restarting ffmpeg with new stream...")
+            restart_event.clear()
+        elif not stop_event.is_set():
+            # ffmpeg crashed, wait before retry
+            logger.info("Restarting ffmpeg in 3 seconds...")
+            time.sleep(3)
 
 
 def wait_for_api():
@@ -219,43 +222,45 @@ def wait_for_api():
 def monitor_playhead():
     """Connect to API SSE endpoint and monitor playhead changes."""
     global current_stream_url
-    
+
     # Wait for API to be ready first
     if not wait_for_api():
         return
-    
+
     logger.info(f"Connecting to API SSE at {API_URL}/events")
-    
+
     while not stop_event.is_set():
         try:
             with httpx.stream('GET', f'{API_URL}/events', timeout=None) as response:
                 response.raise_for_status()
-                
+                logger.info("SSE connection established")
+
                 for line in response.iter_lines():
                     if stop_event.is_set():
                         break
-                    
+
                     if not line:
                         continue
-                    
+
                     # Parse SSE format
-                    if line.startswith('event: playhead'):
+                    if line.startswith('event:'):
                         continue
-                    
+
                     if line.startswith('data: '):
                         data_json = line[6:]  # Strip 'data: ' prefix
                         try:
                             data = json.loads(data_json)
                             new_url = data.get('head')
-                            
+
                             if new_url:
                                 with stream_url_lock:
                                     if current_stream_url != new_url:
                                         logger.info(f"Playhead changed: {data.get('name', 'unknown')}")
                                         current_stream_url = new_url
+                                        restart_event.set()
                         except json.JSONDecodeError:
                             pass
-        
+
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error connecting to API: {e}")
             time.sleep(5)
@@ -266,30 +271,10 @@ def monitor_playhead():
 
 def cleanup():
     """Stop all processes and clean up."""
-    global ffmpeg_process, fetcher_process
-    
     logger.info("Shutting down...")
     stop_event.set()
-    
-    if fetcher_process:
-        logger.info("Stopping fetcher process...")
-        fetcher_process.terminate()
-        try:
-            fetcher_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            fetcher_process.kill()
-    
-    if ffmpeg_process:
-        logger.info("Stopping ffmpeg...")
-        ffmpeg_process.terminate()
-        try:
-            ffmpeg_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            ffmpeg_process.kill()
-    
-    if os.path.exists(FIFO_PATH):
-        os.unlink(FIFO_PATH)
-    
+    restart_event.set()  # Wake up ffmpeg loop
+    stop_ffmpeg()
     logger.info("Shutdown complete")
 
 
@@ -304,23 +289,19 @@ def main():
     """Main entry point."""
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     logger.info("Mux service starting...")
-    
+
     # Setup
     setup_output_dir()
-    create_fifo()
-    
-    # Start ffmpeg
-    start_ffmpeg()
-    
-    # Start fetcher in background thread
-    fetcher_thread = threading.Thread(target=fetch_and_write_to_fifo, daemon=True)
-    fetcher_thread.start()
-    
+
+    # Start ffmpeg loop in background thread
+    ffmpeg_thread = threading.Thread(target=run_ffmpeg_loop, daemon=True)
+    ffmpeg_thread.start()
+
     # Monitor playhead (blocks until stop_event)
     monitor_playhead()
-    
+
     cleanup()
 
 
