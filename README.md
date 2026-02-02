@@ -12,9 +12,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 - **Replay Service** - Multi-channel endless shuffled HLS playback of recorded videos
 - **Mux Service** - Seamless stream multiplexer with adaptive bitrate output and crash recovery
 - **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player and automatic error recovery
-- **Internal Routing** - Direct container-to-container communication bypasses Cloudflare
-- **Smart Access Logs** - Filtered 200 OK responses reduce log noise
-- **Private IP Filtering** - Internal services excluded from visitor tracking
 - **Automated SSL** - Let's Encrypt certificates via acme.sh
 - **Cloudflare Compatible** - Proper handling of CF-Connecting-IP headers
 - **HTTP/2 Support** - ALPN negotiation for modern clients
