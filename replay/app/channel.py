@@ -163,8 +163,10 @@ def run_channel_ffmpeg(channel: Channel):
         channel.restart_event.clear()
 
         if not channel.shuffled_files:
-            logger.warning(f"[{channel.name}] No video files found. Waiting 30 seconds...")
-            time.sleep(30)
+            logger.info(f"[{channel.name}] No video files found. Waiting for files...")
+            # Wait for file watcher to detect new files (or timeout after 30s)
+            channel.restart_event.wait(timeout=30)
+            channel.restart_event.clear()
             continue
 
         concat_file = channel.create_concat_file()
