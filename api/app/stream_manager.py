@@ -151,6 +151,7 @@ class StreamManager:
         self.database[stream_id] = {
             'name': stream_name, 
             'start_at': stream_start, 
+            'prio': stream_prio,
             'details': stream_details, 
             'src': stream_hls_url
         }
@@ -203,6 +204,12 @@ class StreamManager:
                 )
                 return False
     
+    def _recalculate_priority(self) -> int:
+        """Recalculate priority based on the max prio of channels still in the database."""
+        if not self.database:
+            return 0
+        return max(entry.get('prio', 0) for entry in self.database.values())
+
     def remove_channel_from_database(
         self, 
         stream_id: str, 
@@ -221,13 +228,15 @@ class StreamManager:
         except Exception as e:
             self.logger.error(f'Error removing job {stream_id}: {e}')
         
+        # Recalculate priority based on remaining channels in the database
+        self.priority = self._recalculate_priority()
+        self.logger.info(f'Source priority recalculated to: {self.priority}')
+
         # Handle the situation where we remove a stream that is currently playing
         if stream_id == self.playhead.get('id'):
             self.logger.info(f'{stream_id} was playing.')
             try:
                 fallback = self.fallback_search()
-                self.priority = 0
-                self.logger.info('Source priority is reset to 0')
                 self.scheduler.add_job(
                     func=self.exec_stream, 
                     id=FALLBACK_JOB_ID, 
