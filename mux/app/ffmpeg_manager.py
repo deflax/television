@@ -7,7 +7,9 @@ from typing import Optional
 
 from config import (
     HLS_OUTPUT_DIR, HLS_SEGMENT_TIME, HLS_LIST_SIZE,
-    MUX_MODE, ABR_PRESET, ABR_GOP_SIZE, ABR_VARIANTS
+    MUX_MODE, ABR_PRESET, ABR_GOP_SIZE, ABR_VARIANTS,
+    ICECAST_ENABLED, ICECAST_HOST, ICECAST_PORT, ICECAST_SOURCE_PASSWORD,
+    ICECAST_MOUNT, ICECAST_AUDIO_BITRATE, ICECAST_AUDIO_FORMAT
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ def parse_bitrate(bitrate_str: str) -> int:
 
 def build_copy_cmd(input_url: str, start_number: int = 0) -> list[str]:
     """Build ffmpeg command for copy/passthrough mode (single stream, no transcoding)."""
-    return [
+    cmd = [
         'ffmpeg',
         '-y',
         '-re',
@@ -41,6 +43,31 @@ def build_copy_cmd(input_url: str, start_number: int = 0) -> list[str]:
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
         f'{HLS_OUTPUT_DIR}/stream.m3u8'
     ]
+    
+    # Add audio-only output to Icecast if enabled
+    if ICECAST_ENABLED:
+        icecast_url = f'icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}{ICECAST_MOUNT}'
+        
+        if ICECAST_AUDIO_FORMAT == 'aac':
+            cmd.extend([
+                '-map', '0:a',
+                '-c:a', 'aac',
+                '-b:a', ICECAST_AUDIO_BITRATE,
+                '-f', 'adts',
+                '-content_type', 'audio/aac',
+                icecast_url
+            ])
+        else:  # mp3 (default)
+            cmd.extend([
+                '-map', '0:a',
+                '-c:a', 'libmp3lame',
+                '-b:a', ICECAST_AUDIO_BITRATE,
+                '-f', 'mp3',
+                '-content_type', 'audio/mpeg',
+                icecast_url
+            ])
+    
+    return cmd
 
 
 def build_abr_cmd(input_url: str, start_number: int = 0) -> list[str]:
@@ -123,6 +150,29 @@ def build_abr_cmd(input_url: str, start_number: int = 0) -> list[str]:
         '-var_stream_map', var_stream_map,
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8'
     ])
+    
+    # Add audio-only output to Icecast if enabled
+    if ICECAST_ENABLED:
+        icecast_url = f'icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}{ICECAST_MOUNT}'
+        
+        if ICECAST_AUDIO_FORMAT == 'aac':
+            cmd.extend([
+                '-map', '0:a',
+                '-c:a', 'aac',
+                '-b:a', ICECAST_AUDIO_BITRATE,
+                '-f', 'adts',
+                '-content_type', 'audio/aac',
+                icecast_url
+            ])
+        else:  # mp3 (default)
+            cmd.extend([
+                '-map', '0:a',
+                '-c:a', 'libmp3lame',
+                '-b:a', ICECAST_AUDIO_BITRATE,
+                '-f', 'mp3',
+                '-content_type', 'audio/mpeg',
+                icecast_url
+            ])
     
     return cmd
 

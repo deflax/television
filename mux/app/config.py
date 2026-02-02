@@ -50,6 +50,15 @@ def parse_abr_variants() -> list[dict]:
 
 ABR_VARIANTS = parse_abr_variants()
 
+# Icecast audio streaming configuration
+ICECAST_ENABLED = os.environ.get('ICECAST_ENABLED', 'true').lower() in ('true', '1', 'yes')
+ICECAST_HOST = os.environ.get('ICECAST_HOST', 'icecast')
+ICECAST_PORT = int(os.environ.get('ICECAST_PORT', '8000'))
+ICECAST_SOURCE_PASSWORD = os.environ.get('ICECAST_SOURCE_PASSWORD', 'hackme')
+ICECAST_MOUNT = os.environ.get('ICECAST_MOUNT', '/stream.mp3')
+ICECAST_AUDIO_BITRATE = os.environ.get('ICECAST_AUDIO_BITRATE', '128k')
+ICECAST_AUDIO_FORMAT = os.environ.get('ICECAST_AUDIO_FORMAT', 'mp3')  # mp3 or aac
+
 
 def rewrite_stream_url(url: str) -> str:
     """Rewrite public stream URL to use internal restreamer container.
