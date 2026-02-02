@@ -1,19 +1,21 @@
 """
-Replay Service - Serves MP4 files as HLS streams with endless shuffled repeat.
+Replay Service - Serves multiple directories as HLS streams with endless shuffled repeat.
+
+Each channel (directory) gets its own ffmpeg process and HLS output.
+Channels are auto-discovered from the library directory.
 """
 
 import asyncio
 import os
 import random
 import subprocess
-import signal
-import sys
 import threading
 import time
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from quart import Quart, send_file, abort, Response, make_response
+from quart import Quart, send_file, abort, Response
 
 # Configure logging
 logging.basicConfig(
@@ -26,11 +28,11 @@ logger = logging.getLogger(__name__)
 class QuietAccessFilter(logging.Filter):
     """Suppress noisy 200 OK access log lines for health checks, segments and playlists."""
 
-    QUIET_PREFIXES = ('/health', '/segment_', '/playlist.m3u8')
+    QUIET_PATHS = ('/health', '/segment_', '/playlist.m3u8')
 
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
-        if '200' in msg and any(p in msg for p in self.QUIET_PREFIXES):
+        if '200' in msg and any(p in msg for p in self.QUIET_PATHS):
             return False
         return True
 
@@ -42,8 +44,7 @@ app = Quart(__name__)
 
 @app.after_request
 async def add_hls_headers(response: Response) -> Response:
-    """Add headers to prevent HTTP/2 stream issues with HLS clients like VLC."""
-    # CORS - allow any player to access the stream
+    """Add headers to prevent HTTP/2 stream issues with HLS clients."""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = '*'
@@ -53,76 +54,73 @@ async def add_hls_headers(response: Response) -> Response:
 
 # Configuration
 RECORDINGS_DIR = os.environ.get('RECORDINGS_DIR', '/recordings')
-HLS_OUTPUT_DIR = '/tmp/hls'
+LIBRARY_DIR = os.environ.get('LIBRARY_DIR', '/library')
+HLS_BASE_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 VIDEO_BITRATE = os.environ.get('VIDEO_BITRATE', '4000k')
 AUDIO_BITRATE = os.environ.get('AUDIO_BITRATE', '128k')
 PORT = int(os.environ.get('REPLAY_PORT', '8090'))
 SCAN_INTERVAL = int(os.environ.get('REPLAY_SCAN_INTERVAL', '60'))
-
-# Keep segments on disk for 3x the playlist window so slow clients can still
-# fetch them after they've rolled out of the playlist.  This replaces ffmpeg's
-# delete_segments which removes files too aggressively for most HLS clients.
 SEGMENT_RETAIN_SECONDS = HLS_SEGMENT_TIME * HLS_LIST_SIZE * 3
 
+# Reserved channel name (data/recorder is always mounted here)
+RESERVED_CHANNEL = 'recorder'
+
 # Global state
-ffmpeg_process: Optional[subprocess.Popen] = None
-playlist_lock = threading.Lock()
-current_file_index = 0
-shuffled_files: list[str] = []
-known_files: set[str] = set()
 stop_event = threading.Event()
-restart_event = threading.Event()  # Signals ffmpeg to restart with a new playlist
+channels: dict[str, 'Channel'] = {}
+channels_lock = threading.Lock()
 
 
-def get_video_files() -> list[str]:
-    """Recursively find all video files (MP4/MKV) in the recordings directory."""
-    recordings_path = Path(RECORDINGS_DIR)
-    if not recordings_path.exists():
-        logger.warning(f"Recordings directory does not exist: {RECORDINGS_DIR}")
-        return []
-    
-    video_files = [
-        f for f in recordings_path.rglob('*')
-        if f.suffix.lower() in ('.mp4', '.mkv')
-    ]
-    
-    # Convert to strings and sort for consistency before shuffling
-    files = sorted([str(f) for f in video_files])
-    logger.info(f"Found {len(files)} video files in {RECORDINGS_DIR}")
-    return files
+@dataclass
+class Channel:
+    """Represents a single replay channel with its own ffmpeg process."""
+    name: str
+    source_dir: str
+    hls_dir: str
+    ffmpeg_process: Optional[subprocess.Popen] = None
+    shuffled_files: list[str] = field(default_factory=list)
+    known_files: set[str] = field(default_factory=set)
+    restart_event: threading.Event = field(default_factory=threading.Event)
+    thread: Optional[threading.Thread] = None
+
+    def get_video_files(self) -> list[str]:
+        """Find all video files in this channel's source directory."""
+        source_path = Path(self.source_dir)
+        if not source_path.exists():
+            logger.warning(f"[{self.name}] Source directory does not exist: {self.source_dir}")
+            return []
+
+        video_files = [
+            f for f in source_path.rglob('*')
+            if f.suffix.lower() in ('.mp4', '.mkv')
+        ]
+        files = sorted([str(f) for f in video_files])
+        return files
+
+    def shuffle_playlist(self) -> list[str]:
+        """Refresh and shuffle the playlist."""
+        files = self.get_video_files()
+        if files:
+            random.shuffle(files)
+            self.shuffled_files = files
+            logger.info(f"[{self.name}] Shuffled playlist with {len(files)} files")
+        return self.shuffled_files
+
+    def create_concat_file(self) -> str:
+        """Create a concat demuxer file for ffmpeg."""
+        concat_file = f'/tmp/concat_{self.name}.txt'
+        with open(concat_file, 'w') as f:
+            for video_file in self.shuffled_files:
+                escaped = video_file.replace("'", "'\\''")
+                f.write(f"file '{escaped}'\n")
+        return concat_file
 
 
-def shuffle_playlist() -> list[str]:
-    """Get all MP4 files and shuffle them."""
-    global shuffled_files
-    files = get_video_files()
-    if files:
-        random.shuffle(files)
-        shuffled_files = files
-        logger.info(f"Shuffled playlist with {len(files)} files")
-    return shuffled_files
-
-
-def create_concat_file(files: list[str]) -> str:
-    """Create a concat demuxer file for ffmpeg."""
-    concat_file = '/tmp/concat_list.txt'
-    with open(concat_file, 'w') as f:
-        for video_file in files:
-            # Escape special characters for ffmpeg concat
-            escaped = video_file.replace("'", "'\\''")
-            f.write(f"file '{escaped}'\n")
-    return concat_file
-
-
-def cleanup_old_segments():
-    """Periodically remove .ts segments older than SEGMENT_RETAIN_SECONDS.
-
-    This replaces ffmpeg's delete_segments flag which removes files too
-    aggressively — often before slow clients (like VLC) have fetched them.
-    """
-    hls_dir = Path(HLS_OUTPUT_DIR)
+def cleanup_old_segments(channel: Channel):
+    """Periodically remove old .ts segments for a channel."""
+    hls_dir = Path(channel.hls_dir)
     while not stop_event.is_set():
         try:
             now = time.time()
@@ -132,282 +130,316 @@ def cleanup_old_segments():
                     if age > SEGMENT_RETAIN_SECONDS:
                         seg.unlink()
                 except FileNotFoundError:
-                    pass  # Already gone
+                    pass
                 except Exception as e:
-                    logger.warning(f"Could not remove old segment {seg}: {e}")
+                    logger.warning(f"[{channel.name}] Could not remove old segment {seg}: {e}")
         except Exception as e:
-            logger.warning(f"Segment cleanup error: {e}")
-        # Run cleanup every segment duration
+            logger.warning(f"[{channel.name}] Segment cleanup error: {e}")
         stop_event.wait(timeout=HLS_SEGMENT_TIME)
 
 
-def watch_recordings():
-    """Periodically scan recordings directory for added/removed files.
-
-    When the file set changes, signal ffmpeg to restart with an updated
-    concat playlist.
-    """
-    global known_files
+def watch_channel_files(channel: Channel):
+    """Watch for file changes in a channel's source directory."""
     while not stop_event.is_set():
         stop_event.wait(timeout=SCAN_INTERVAL)
         if stop_event.is_set():
             break
-        current_files = set(get_video_files())
-        if current_files == known_files:
+        current_files = set(channel.get_video_files())
+        if current_files == channel.known_files:
             continue
-        added = current_files - known_files
-        removed = known_files - current_files
+        added = current_files - channel.known_files
+        removed = channel.known_files - current_files
         for f in added:
-            logger.info(f"File added: {Path(f).name}")
+            logger.info(f"[{channel.name}] File added: {Path(f).name}")
         for f in removed:
-            logger.info(f"File removed: {Path(f).name}")
-        known_files = current_files
-        restart_event.set()
+            logger.info(f"[{channel.name}] File removed: {Path(f).name}")
+        channel.known_files = current_files
+        channel.restart_event.set()
 
 
-def start_ffmpeg_stream():
-    """Start ffmpeg process to generate HLS stream."""
-    global ffmpeg_process, shuffled_files, current_file_index, known_files
-    
-    # Ensure output directory exists
-    os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
-    
+def run_channel_ffmpeg(channel: Channel):
+    """Run ffmpeg for a single channel."""
+    os.makedirs(channel.hls_dir, exist_ok=True)
+
     # Clean up old segments from previous runs
-    for f in Path(HLS_OUTPUT_DIR).glob('*'):
+    for f in Path(channel.hls_dir).glob('*'):
         try:
             f.unlink()
         except Exception as e:
-            logger.warning(f"Could not remove {f}: {e}")
-    
-    # Start the segment cleanup thread
-    cleanup_thread = threading.Thread(target=cleanup_old_segments, daemon=True)
-    cleanup_thread.start()
-    logger.info(f"Segment cleanup thread started (retain for {SEGMENT_RETAIN_SECONDS}s)")
+            logger.warning(f"[{channel.name}] Could not remove {f}: {e}")
 
-    # Start the file watcher thread
-    watcher_thread = threading.Thread(target=watch_recordings, daemon=True)
+    # Start cleanup thread for this channel
+    cleanup_thread = threading.Thread(
+        target=cleanup_old_segments, args=(channel,), daemon=True
+    )
+    cleanup_thread.start()
+
+    # Start file watcher thread for this channel
+    watcher_thread = threading.Thread(
+        target=watch_channel_files, args=(channel,), daemon=True
+    )
     watcher_thread.start()
-    logger.info(f"File watcher started (scan every {SCAN_INTERVAL}s)")
-    
+
+    logger.info(f"[{channel.name}] Started (source: {channel.source_dir})")
+
     while not stop_event.is_set():
-        # Refresh and shuffle playlist
-        shuffle_playlist()
-        known_files = set(shuffled_files)
-        restart_event.clear()
-        
-        if not shuffled_files:
-            logger.warning("No MP4 files found. Waiting 30 seconds before retry...")
+        channel.shuffle_playlist()
+        channel.known_files = set(channel.shuffled_files)
+        channel.restart_event.clear()
+
+        if not channel.shuffled_files:
+            logger.warning(f"[{channel.name}] No video files found. Waiting 30 seconds...")
             time.sleep(30)
             continue
-        
-        # Create concat file
-        concat_file = create_concat_file(shuffled_files)
-        
-        # Build ffmpeg command for live HLS streaming
-        # NOTE: We do NOT use delete_segments — our cleanup_old_segments thread
-        # handles deletion with a much longer retention window so that slow
-        # clients don't get 404s for segments still referenced in their copy
-        # of the playlist.
+
+        concat_file = channel.create_concat_file()
+
         cmd = [
             'ffmpeg',
-            '-re',  # Read input at native frame rate (important for live streaming)
+            '-re',
             '-f', 'concat',
             '-safe', '0',
-            '-stream_loop', '-1',  # Loop infinitely through the concat file
+            '-stream_loop', '-1',
             '-i', concat_file,
-            # Video encoding
             '-c:v', 'libx264',
             '-preset', 'veryfast',
             '-tune', 'zerolatency',
             '-b:v', VIDEO_BITRATE,
             '-maxrate', VIDEO_BITRATE,
             '-bufsize', str(int(VIDEO_BITRATE.replace('k', '000')) * 2),
-            '-g', '48',  # Keyframe interval
+            '-g', '48',
             '-sc_threshold', '0',
             '-keyint_min', '48',
-            # Audio encoding
             '-c:a', 'aac',
             '-b:a', AUDIO_BITRATE,
             '-ac', '2',
             '-ar', '44100',
-            # HLS output
             '-f', 'hls',
             '-hls_time', str(HLS_SEGMENT_TIME),
             '-hls_list_size', str(HLS_LIST_SIZE),
             '-hls_flags', 'append_list+omit_endlist+temp_file',
             '-hls_segment_type', 'mpegts',
-            '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
-            f'{HLS_OUTPUT_DIR}/playlist.m3u8'
+            '-hls_segment_filename', f'{channel.hls_dir}/segment_%05d.ts',
+            f'{channel.hls_dir}/playlist.m3u8'
         ]
-        
-        logger.info(f"Starting ffmpeg with command: {' '.join(cmd)}")
-        
+
+        logger.info(f"[{channel.name}] Starting ffmpeg")
+
         try:
-            ffmpeg_process = subprocess.Popen(
+            channel.ffmpeg_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
-            
-            # Drain stderr in a background thread so ffmpeg never blocks
-            # on a full pipe buffer (which silently stalls segment production).
+
             stderr_lines: list[str] = []
+
             def _drain_stderr():
-                assert ffmpeg_process.stderr is not None
-                for raw_line in ffmpeg_process.stderr:
+                assert channel.ffmpeg_process is not None
+                assert channel.ffmpeg_process.stderr is not None
+                for raw_line in channel.ffmpeg_process.stderr:
                     line = raw_line.decode(errors='replace').rstrip()
                     if line:
                         stderr_lines.append(line)
-                        # Keep only the last 200 lines to bound memory
                         if len(stderr_lines) > 200:
                             del stderr_lines[:100]
-                        # Log track changes from the concat demuxer
                         if line.startswith('[concat @') and "Opening '" in line:
                             track = line.split("Opening '", 1)[1].rstrip("'")
-                            logger.info(f"Now playing: {Path(track).name}")
+                            logger.info(f"[{channel.name}] Now playing: {Path(track).name}")
+
             drain_thread = threading.Thread(target=_drain_stderr, daemon=True)
             drain_thread.start()
-            
-            # Monitor ffmpeg process — also detect silent stalls by
-            # checking that new segments keep appearing on disk.
+
             last_segment_time = time.time()
-            while ffmpeg_process.poll() is None and not stop_event.is_set():
+            while channel.ffmpeg_process.poll() is None and not stop_event.is_set():
                 time.sleep(2)
 
-                # File watcher detected a change — gracefully restart ffmpeg
-                if restart_event.is_set():
-                    logger.info("Recordings changed, restarting ffmpeg with updated playlist...")
-                    ffmpeg_process.terminate()
+                if channel.restart_event.is_set():
+                    logger.info(f"[{channel.name}] Files changed, restarting ffmpeg...")
+                    channel.ffmpeg_process.terminate()
                     try:
-                        ffmpeg_process.wait(timeout=10)
+                        channel.ffmpeg_process.wait(timeout=10)
                     except subprocess.TimeoutExpired:
-                        ffmpeg_process.kill()
+                        channel.ffmpeg_process.kill()
                     break
 
-                # Check for new segment activity
-                hls_path = Path(HLS_OUTPUT_DIR)
+                hls_path = Path(channel.hls_dir)
                 segments = sorted(hls_path.glob('segment_*.ts'))
                 if segments:
                     newest_mtime = segments[-1].stat().st_mtime
                     if newest_mtime > last_segment_time:
                         last_segment_time = newest_mtime
                     elif time.time() - last_segment_time > HLS_SEGMENT_TIME * 10:
-                        logger.error(
-                            "ffmpeg appears stalled — no new segments for "
-                            f"{time.time() - last_segment_time:.0f}s. Killing."
-                        )
-                        ffmpeg_process.kill()
+                        logger.error(f"[{channel.name}] ffmpeg stalled, killing...")
+                        channel.ffmpeg_process.kill()
                         break
-            
+
             if stop_event.is_set():
                 break
-            
+
             drain_thread.join(timeout=5)
 
-            # If restarted due to file change, loop immediately
-            if restart_event.is_set():
+            if channel.restart_event.is_set():
                 continue
-            
-            # Process ended unexpectedly
-            logger.warning(f"ffmpeg process ended. Return code: {ffmpeg_process.returncode}")
+
+            logger.warning(f"[{channel.name}] ffmpeg ended (code: {channel.ffmpeg_process.returncode})")
             if stderr_lines:
-                logger.warning(f"ffmpeg stderr (last lines):\n" + '\n'.join(stderr_lines[-20:]))
-            
-            # Wait before restarting
-            logger.info("Restarting ffmpeg in 5 seconds...")
+                logger.warning(f"[{channel.name}] ffmpeg stderr:\n" + '\n'.join(stderr_lines[-20:]))
+
+            logger.info(f"[{channel.name}] Restarting ffmpeg in 5 seconds...")
             time.sleep(5)
-            
+
         except Exception as e:
-            logger.error(f"Error running ffmpeg: {e}")
+            logger.error(f"[{channel.name}] Error running ffmpeg: {e}")
             time.sleep(5)
 
 
-def stop_ffmpeg():
-    """Stop the ffmpeg process gracefully."""
-    global ffmpeg_process
-    stop_event.set()
+def discover_library_channels() -> list[str]:
+    """Discover channel directories in the library."""
+    library_path = Path(LIBRARY_DIR)
+    if not library_path.exists():
+        return []
     
-    if ffmpeg_process:
-        logger.info("Stopping ffmpeg process...")
-        ffmpeg_process.terminate()
-        try:
-            ffmpeg_process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            logger.warning("ffmpeg did not terminate, killing...")
-            ffmpeg_process.kill()
-        ffmpeg_process = None
+    channel_names = []
+    for entry in library_path.iterdir():
+        if entry.is_dir():
+            name = entry.name
+            if name == RESERVED_CHANNEL:
+                logger.error(f"CONFLICT: '{LIBRARY_DIR}/{name}' conflicts with reserved channel 'recorder'. Skipping.")
+                continue
+            channel_names.append(name)
+    return sorted(channel_names)
 
+
+def start_channel(name: str, source_dir: str):
+    """Start a new channel."""
+    with channels_lock:
+        if name in channels:
+            logger.warning(f"Channel '{name}' already exists")
+            return
+
+        hls_dir = f'{HLS_BASE_DIR}/{name}'
+        channel = Channel(name=name, source_dir=source_dir, hls_dir=hls_dir)
+        channel.thread = threading.Thread(
+            target=run_channel_ffmpeg, args=(channel,), daemon=True
+        )
+        channel.thread.start()
+        channels[name] = channel
+        logger.info(f"Channel '{name}' started")
+
+
+def stop_channel(name: str):
+    """Stop a channel."""
+    with channels_lock:
+        if name not in channels:
+            return
+        channel = channels[name]
+        if channel.ffmpeg_process:
+            channel.ffmpeg_process.terminate()
+            try:
+                channel.ffmpeg_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                channel.ffmpeg_process.kill()
+        del channels[name]
+        logger.info(f"Channel '{name}' stopped")
+
+
+def watch_library():
+    """Watch for new/removed directories in the library."""
+    known_library_channels: set[str] = set()
+
+    while not stop_event.is_set():
+        current_channels = set(discover_library_channels())
+
+        added = current_channels - known_library_channels
+        removed = known_library_channels - current_channels
+
+        for name in added:
+            source_dir = f'{LIBRARY_DIR}/{name}'
+            logger.info(f"New library channel discovered: {name}")
+            start_channel(name, source_dir)
+
+        for name in removed:
+            logger.info(f"Library channel removed: {name}")
+            stop_channel(name)
+
+        known_library_channels = current_channels
+        stop_event.wait(timeout=SCAN_INTERVAL)
+
+
+def stop_all_channels():
+    """Stop all channels gracefully."""
+    stop_event.set()
+    with channels_lock:
+        for name, channel in list(channels.items()):
+            if channel.ffmpeg_process:
+                logger.info(f"Stopping channel '{name}'...")
+                channel.ffmpeg_process.terminate()
+                try:
+                    channel.ffmpeg_process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    channel.ffmpeg_process.kill()
+        channels.clear()
+
+
+# --- HTTP Routes ---
 
 @app.route('/health')
 async def health():
     """Health check endpoint."""
-    return {'status': 'ok', 'files_count': len(shuffled_files)}
+    with channels_lock:
+        channel_info = {
+            name: {
+                'files_count': len(ch.shuffled_files),
+                'ready': Path(ch.hls_dir, 'playlist.m3u8').exists()
+            }
+            for name, ch in channels.items()
+        }
+    return {'status': 'ok', 'channels': channel_info}
 
 
-@app.route('/playlist.m3u8')
-async def serve_playlist():
-    """Serve the HLS master playlist."""
-    playlist_path = Path(HLS_OUTPUT_DIR) / 'playlist.m3u8'
-    
+@app.route('/<channel>/playlist.m3u8')
+async def serve_playlist(channel: str):
+    """Serve the HLS playlist for a channel."""
+    with channels_lock:
+        if channel not in channels:
+            abort(404, f"Channel '{channel}' not found")
+        hls_dir = channels[channel].hls_dir
+
+    playlist_path = Path(hls_dir) / 'playlist.m3u8'
     if not playlist_path.exists():
-        logger.warning("Playlist not ready yet")
         abort(503, "Stream not ready yet")
-    
+
     response = await send_file(
         playlist_path,
         mimetype='application/vnd.apple.mpegurl',
         cache_timeout=0
     )
-    # Live HLS playlists must never be cached - stale playlists cause
-    # clients to request segments that have already been deleted
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
 
 
-@app.route('/segment_<int:segment_id>.ts')
-async def serve_segment(segment_id: int):
-    """Serve HLS segments with retry for race conditions."""
-    segment_path = Path(HLS_OUTPUT_DIR) / f'segment_{segment_id:05d}.ts'
-    
-    # If segment doesn't exist yet, wait briefly — it may be mid-write
-    # or the playlist was read just before the segment was flushed
-    if not segment_path.exists():
-        await asyncio.sleep(0.5)
-    
-    if not segment_path.exists():
-        logger.warning(f"Segment not found: segment_{segment_id:05d}.ts")
-        abort(404, "Segment not found")
-    
-    response = await send_file(
-        segment_path,
-        mimetype='video/mp2t',
-        cache_timeout=3600  # Segments are immutable, can cache longer
-    )
-    response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
-    return response
-
-
-@app.route('/<path:filename>')
-async def serve_file(filename: str):
-    """Generic file serving for any HLS files."""
-    # Security: prevent path traversal
+@app.route('/<channel>/<path:filename>')
+async def serve_channel_file(channel: str, filename: str):
+    """Serve HLS segments and other files for a channel."""
     if '..' in filename or filename.startswith('/'):
         abort(403)
-    
-    file_path = Path(HLS_OUTPUT_DIR) / filename
-    
-    # For .ts segments, briefly wait if not found — may be mid-write
+
+    with channels_lock:
+        if channel not in channels:
+            abort(404, f"Channel '{channel}' not found")
+        hls_dir = channels[channel].hls_dir
+
+    file_path = Path(hls_dir) / filename
+
     if not file_path.exists() and filename.endswith('.ts'):
         await asyncio.sleep(0.5)
-    
+
     if not file_path.exists():
-        if filename.endswith('.ts'):
-            logger.warning(f"Segment not found via catch-all: {filename}")
         abort(404)
-    
-    # Determine mimetype and cache policy
+
     if filename.endswith('.m3u8'):
         mimetype = 'application/vnd.apple.mpegurl'
         cache_timeout = 0
@@ -417,7 +449,7 @@ async def serve_file(filename: str):
     else:
         mimetype = 'application/octet-stream'
         cache_timeout = 0
-    
+
     response = await send_file(file_path, mimetype=mimetype, cache_timeout=cache_timeout)
     if filename.endswith('.m3u8'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -429,29 +461,31 @@ async def serve_file(filename: str):
 @app.route('/')
 async def index():
     """Root endpoint with service info."""
+    with channels_lock:
+        channel_list = list(channels.keys())
     return {
         'service': 'replay',
-        'description': 'HLS streaming service for recorded videos',
+        'description': 'Multi-channel HLS streaming service',
+        'channels': channel_list,
         'endpoints': {
-            '/playlist.m3u8': 'HLS playlist',
+            '/<channel>/playlist.m3u8': 'HLS playlist for channel',
             '/health': 'Health check'
-        },
-        'files_loaded': len(shuffled_files),
-        'stream_ready': Path(HLS_OUTPUT_DIR, 'playlist.m3u8').exists()
+        }
     }
-
-
-def start_ffmpeg_background():
-    """Start ffmpeg in a background thread."""
-    ffmpeg_thread = threading.Thread(target=start_ffmpeg_stream, daemon=True)
-    ffmpeg_thread.start()
-    logger.info("FFmpeg background thread started")
 
 
 @app.before_serving
 async def startup():
-    """Initialize ffmpeg stream on startup."""
-    start_ffmpeg_background()
+    """Initialize channels on startup."""
+    # Start the recorder channel (always present)
+    start_channel(RESERVED_CHANNEL, RECORDINGS_DIR)
+
+    # Start library watcher in background
+    watcher_thread = threading.Thread(target=watch_library, daemon=True)
+    watcher_thread.start()
+    logger.info(f"Library watcher started (scanning {LIBRARY_DIR} every {SCAN_INTERVAL}s)")
+
+    # Give ffmpeg time to generate initial segments
     logger.info("Waiting for ffmpeg to generate initial segments...")
     await asyncio.sleep(3)
 
@@ -460,7 +494,7 @@ async def startup():
 async def shutdown():
     """Cleanup on shutdown."""
     logger.info("Shutting down...")
-    stop_ffmpeg()
+    stop_all_channels()
 
 
 def create_app():
@@ -469,5 +503,4 @@ def create_app():
 
 
 if __name__ == '__main__':
-    # Direct execution (development only)
     app.run(host='0.0.0.0', port=PORT)

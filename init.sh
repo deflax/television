@@ -15,6 +15,9 @@ mkdir -v -p data/recorder/live
 mkdir -v -p data/recorder/vod
 mkdir -v -p data/recorder/thumb
 
+# replay library
+mkdir -v -p data/library
+
 # icecast
 mkdir -v -p logs/icecast
 touch logs/icecast/access.log
