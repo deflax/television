@@ -10,10 +10,13 @@ else
     echo "There is no prescript $PRE_START_PATH"
 fi
 
-# Start Hypercorn (ASGI server for Quart with SSE support)
-echo "hypercorn $APP_MODULE"
+# Start Uvicorn (ASGI server for Quart with SSE support)
+echo "uvicorn $APP_MODULE"
 pwd
-hypercorn --bind 0.0.0.0:8080 \
---workers 1 \
-"$APP_MODULE()"
+exec uvicorn "${MODULE_NAME}:${VARIABLE_NAME}" \
+    --factory \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --workers 1 \
+    --timeout-keep-alive 30
 
