@@ -44,6 +44,7 @@ class Config:
         self.server_name = os.environ.get('SERVER_NAME')
         self.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
         self.discord_bot_enabled = os.environ.get('DISCORDBOT_ENABLED', 'false').lower() == 'true'
+        self.frontend_mode = os.environ.get('FRONTEND_MODE', 'mux').lower()  # 'mux' or 'legacy'
 
 
 class LoggerManager:

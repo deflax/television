@@ -18,6 +18,7 @@ services:
       - "restreamer"
       - "api"
       - "replay"
+      - "mux"
     restart: unless-stopped
     networks:
       - net
@@ -80,6 +81,19 @@ services:
       - net
     labels:
       - meta.role=replay
+
+  mux:
+    depends_on:
+      - "api"
+    build: ./mux
+    image: tv-mux:latest
+    environment:
+      - API_URL=http://api:8080
+    restart: unless-stopped
+    networks:
+      - net
+    labels:
+      - meta.role=mux
 
 #  icecast:
 #    depends_on:
