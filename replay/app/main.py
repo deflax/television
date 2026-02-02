@@ -362,7 +362,7 @@ async def shutdown():
 
 
 def create_app():
-    """Application factory for Hypercorn."""
+    """Application factory."""
     return app
 
 
