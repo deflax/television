@@ -28,8 +28,8 @@
               <video controls crossorigin playsinline muted poster="static/images/poster.png">
               </video>
               <div class="d-flex justify-content-between align-items-center mt-1 mb-2">
-                <p class="mb-0" id="epg-now-playing" style="display:none; color: rgb(132,4,217);">
-                  Now: <span id="epg-now-name"></span> <i class="fa fa-play-circle" aria-hidden="true"></i>
+                <p class="mb-0 text-secondary" id="epg-now-playing" style="display:none;">
+                  <i class="fa fa-play-circle" aria-hidden="true"></i> Now: <span id="epg-now-name"></span>
                 </p>
                 <p class="mb-0 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
               </div>
@@ -121,11 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<ul class="list-unstyled mb-1">';
         for (const s of scheduled) {
           const isActive = playheadId === s.id;
-          const cls = isActive ? 'text-success' : 'text-secondary';
-          const icon = isActive ? '<i class="fa fa-volume-up"></i> ' : '';
+          const cls = isActive ? '' : 'text-secondary';
+          const style = isActive ? 'style="color: rgb(132,4,217);"' : '';
+          const icon = isActive ? ' <i class="fa fa-volume-up"></i>' : '';
           const detail = s.details ? ` <small class="text-muted">- ${s.details}</small>` : '';
           const localStr = s.localHour.toString().padStart(2, '0') + ':' + s.localMinute.toString().padStart(2, '0');
-          html += `<li class="${cls}">${icon}<strong>${localStr}</strong> ${s.name}${detail}</li>`;
+          html += `<li class="${cls}" ${style}><strong>${localStr}</strong> ${s.name}${icon}${detail}</li>`;
         }
         html += '</ul>';
       }
