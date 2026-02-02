@@ -175,8 +175,12 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         """Frontend index page - public live stream."""
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] index /')
+        
+        # Choose template based on frontend mode
+        template = 'index_mux.html' if config.frontend_mode == 'mux' else 'index_legacy.html'
+        
         return await render_template(
-            'index.html',
+            template,
             now=datetime.now(timezone.utc)
         )
     
