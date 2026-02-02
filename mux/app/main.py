@@ -399,11 +399,9 @@ def run_ffmpeg_loop():
             inject_discontinuity()
             restart_event.clear()
         elif not stop_event.is_set():
-            # ffmpeg crashed - full reset
-            logger.info("ffmpeg crashed, resetting in 3 seconds...")
-            cleanup_output_dir()
-            with segment_counter_lock:
-                segment_counter = 0
+            # ffmpeg crashed - treat like playhead change (seamless restart)
+            logger.warning("ffmpeg crashed, attempting seamless recovery...")
+            inject_discontinuity()
             time.sleep(3)
 
 
