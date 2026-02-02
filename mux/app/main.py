@@ -36,6 +36,10 @@ HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 
+# Internal restreamer URL rewriting (bypass public hostname/Cloudflare)
+RESTREAMER_INTERNAL_URL = os.environ.get('RESTREAMER_INTERNAL_URL', 'http://restreamer:8080')
+RESTREAMER_PUBLIC_HOST = os.environ.get('CORE_API_HOSTNAME', '')
+
 # Mux mode: 'copy' (passthrough) or 'abr' (adaptive bitrate with source copy)
 MUX_MODE = os.environ.get('MUX_MODE', 'copy').lower()
 
@@ -67,6 +71,25 @@ def parse_abr_variants() -> list[dict]:
 
 
 ABR_VARIANTS = parse_abr_variants()
+
+
+def rewrite_stream_url(url: str) -> str:
+    """Rewrite public stream URL to use internal restreamer container.
+    
+    Replaces https://{RESTREAMER_PUBLIC_HOST}/... with {RESTREAMER_INTERNAL_URL}/...
+    to bypass Cloudflare and route directly within Docker network.
+    """
+    if not RESTREAMER_PUBLIC_HOST or not RESTREAMER_INTERNAL_URL:
+        return url
+    
+    public_prefix = f'https://{RESTREAMER_PUBLIC_HOST}/'
+    if url.startswith(public_prefix):
+        internal_url = RESTREAMER_INTERNAL_URL.rstrip('/') + '/' + url[len(public_prefix):]
+        logger.debug(f'Rewrote URL: {url} -> {internal_url}')
+        return internal_url
+    
+    return url
+
 
 # Global state
 current_stream_url: Optional[str] = None
@@ -438,6 +461,8 @@ def monitor_playhead():
                             new_url = data.get('head')
 
                             if new_url:
+                                # Rewrite to internal URL if configured
+                                new_url = rewrite_stream_url(new_url)
                                 with stream_url_lock:
                                     if current_stream_url != new_url:
                                         logger.info(f"Playhead changed: {data.get('name', 'unknown')}")
@@ -480,6 +505,8 @@ def main():
     if MUX_MODE == 'abr':
         variant_desc = ', '.join(f"{v['height']}p@{v['video_bitrate']}" for v in ABR_VARIANTS)
         logger.info(f"ABR variants: source (copy) + {variant_desc} | Preset: {ABR_PRESET} | GOP: {ABR_GOP_SIZE}")
+    if RESTREAMER_PUBLIC_HOST and RESTREAMER_INTERNAL_URL:
+        logger.info(f"URL rewrite: {RESTREAMER_PUBLIC_HOST} -> {RESTREAMER_INTERNAL_URL}")
 
     # Setup
     setup_output_dir()
