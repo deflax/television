@@ -101,6 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const scheduleDiv = document.getElementById('epg-schedule');
     if (!scheduleDiv) return;
 
+    const channelCount = Object.keys(database).length;
+
+    // Hide schedule entirely when there is only a single channel
+    if (channelCount <= 1) {
+      scheduleDiv.innerHTML = '';
+      if (nowPlaying) nowPlaying.style.display = 'none';
+      return;
+    }
+
     // Update "Now Playing" from playhead
     if (nowPlaying && nowName) {
       if (playheadId && database[playheadId]) {
