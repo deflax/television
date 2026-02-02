@@ -13,7 +13,6 @@ RUN chmod +x /entrypoint.sh
 COPY ./scripts/run.sh /run.sh
 RUN chmod +x /run.sh
 
-COPY ./hypercorn.toml /app/hypercorn.toml
 COPY ./app /app
 WORKDIR /app/
 
