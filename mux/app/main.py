@@ -6,6 +6,7 @@ to produce a continuous ABR output stream at /live/stream.m3u8.
 """
 
 import os
+import re
 import sys
 import time
 import json
@@ -74,6 +75,10 @@ stop_event = threading.Event()
 restart_event = threading.Event()
 ffmpeg_process: Optional[subprocess.Popen] = None
 
+# Segment counter for seamless switching (persists across ffmpeg restarts)
+segment_counter: int = 0
+segment_counter_lock = threading.Lock()
+
 
 def setup_output_dir():
     """Ensure output directory exists and create variant subdirs."""
@@ -85,7 +90,7 @@ def setup_output_dir():
 
 
 def cleanup_output_dir():
-    """Clean old segments from output directory."""
+    """Clean all files from output directory."""
     for f in Path(HLS_OUTPUT_DIR).rglob('*'):
         if f.is_file():
             try:
@@ -94,7 +99,74 @@ def cleanup_output_dir():
                 logger.warning(f"Could not remove {f}: {e}")
 
 
-def build_copy_cmd(input_url: str) -> list[str]:
+def get_next_segment_number() -> int:
+    """Scan output directory for highest segment number and return next."""
+    highest = -1
+    for f in Path(HLS_OUTPUT_DIR).rglob('segment_*.ts'):
+        match = re.search(r'segment_(\d+)\.ts$', f.name)
+        if match:
+            num = int(match.group(1))
+            if num > highest:
+                highest = num
+    return highest + 1 if highest >= 0 else 0
+
+
+def inject_discontinuity():
+    """Inject #EXT-X-DISCONTINUITY tag into active playlist(s).
+    
+    Called between stopping old ffmpeg and starting new one on playhead change.
+    Tells HLS players that the next segments may differ in codec/timing.
+    """
+    try:
+        if MUX_MODE == 'abr':
+            # ABR mode: inject into each variant playlist
+            num_streams = len(ABR_VARIANTS) + 1
+            for i in range(num_streams):
+                playlist = Path(HLS_OUTPUT_DIR) / f'stream_{i}' / 'playlist.m3u8'
+                if playlist.exists():
+                    with open(playlist, 'a') as f:
+                        f.write('#EXT-X-DISCONTINUITY\n')
+            logger.debug(f"Injected discontinuity into {num_streams} variant playlists")
+        else:
+            # Copy mode: single playlist
+            playlist = Path(HLS_OUTPUT_DIR) / 'stream.m3u8'
+            if playlist.exists():
+                with open(playlist, 'a') as f:
+                    f.write('#EXT-X-DISCONTINUITY\n')
+            logger.debug("Injected discontinuity into stream playlist")
+    except Exception as e:
+        logger.warning(f"Could not inject discontinuity marker: {e}")
+
+
+def cleanup_stale_segments():
+    """Background thread that removes old .ts segments to prevent disk filling up.
+    
+    Runs every 30 seconds, deletes segments older than 3x the playlist window.
+    """
+    max_age = HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3  # seconds
+    
+    while not stop_event.is_set():
+        stop_event.wait(30)
+        if stop_event.is_set():
+            break
+        
+        now = time.time()
+        deleted = 0
+        try:
+            for f in Path(HLS_OUTPUT_DIR).rglob('segment_*.ts'):
+                if f.is_file() and (now - f.stat().st_mtime) > max_age:
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except Exception:
+                        pass
+            if deleted:
+                logger.debug(f"Cleaned up {deleted} stale segments")
+        except Exception as e:
+            logger.warning(f"Error during stale segment cleanup: {e}")
+
+
+def build_copy_cmd(input_url: str, start_number: int = 0) -> list[str]:
     """Build ffmpeg command for copy/passthrough mode (single stream, no transcoding)."""
     return [
         'ffmpeg',
@@ -108,6 +180,7 @@ def build_copy_cmd(input_url: str) -> list[str]:
         '-hls_list_size', str(HLS_LIST_SIZE),
         '-hls_flags', 'append_list+omit_endlist',
         '-hls_segment_type', 'mpegts',
+        '-start_number', str(start_number),
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
         f'{HLS_OUTPUT_DIR}/stream.m3u8'
     ]
@@ -123,21 +196,22 @@ def parse_bitrate(bitrate_str: str) -> int:
     return int(bitrate_str)
 
 
-def build_abr_cmd(input_url: str) -> list[str]:
-    """Build ffmpeg command for ABR mode (source copy + transcoded variants).
+def build_abr_cmd(input_url: str, start_number: int = 0) -> list[str]:
+    """Build ffmpeg command for ABR mode (source passthrough + transcoded variants).
     
     Uses smart scaling that only transcodes resolutions below source:
-    - Source is always copied (no re-encoding)
-    - Variants are transcoded only if source height > variant height
+    - Source is mapped directly from input (passthrough, no filter graph)
+    - Variants are split and scaled via filter_complex
+    - Variants are capped at source height (no upscaling)
     
     Variants are configurable via ABR_VARIANTS env var.
     """
     num_variants = len(ABR_VARIANTS)
-    total_streams = num_variants + 1  # +1 for source copy
+    total_streams = num_variants + 1  # +1 for source passthrough
     
-    # Build filter_complex for splitting and scaling
-    split_outputs = '[v_src]' + ''.join(f'[v_{i}_in]' for i in range(num_variants))
-    filter_parts = [f'[0:v]split={total_streams}{split_outputs}']
+    # Build filter_complex for splitting and scaling (variants only, not source)
+    split_outputs = ''.join(f'[v_{i}_in]' for i in range(num_variants))
+    filter_parts = [f'[0:v]split={num_variants}{split_outputs}']
     
     for i, variant in enumerate(ABR_VARIANTS):
         height = variant['height']
@@ -153,8 +227,8 @@ def build_abr_cmd(input_url: str) -> list[str]:
         '-re',
         '-i', input_url,
         '-filter_complex', filter_complex,
-        # Stream 0: Source (copy)
-        '-map', '[v_src]',
+        # Stream 0: Source (direct passthrough, not from filter graph)
+        '-map', '0:v',
         '-c:v:0', 'copy',
         '-map', '0:a',
         '-c:a:0', 'copy',
@@ -162,7 +236,7 @@ def build_abr_cmd(input_url: str) -> list[str]:
     
     # Add transcoded variants
     for i, variant in enumerate(ABR_VARIANTS):
-        stream_idx = i + 1  # 0 is source copy
+        stream_idx = i + 1  # 0 is source passthrough
         video_bitrate = variant['video_bitrate']
         audio_bitrate = variant['audio_bitrate']
         
@@ -196,6 +270,7 @@ def build_abr_cmd(input_url: str) -> list[str]:
         '-hls_list_size', str(HLS_LIST_SIZE),
         '-hls_flags', 'independent_segments+append_list+omit_endlist',
         '-hls_segment_type', 'mpegts',
+        '-start_number', str(start_number),
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/stream_%v/segment_%05d.ts',
         '-master_pl_name', 'stream.m3u8',
         '-var_stream_map', var_stream_map,
@@ -209,15 +284,18 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
     """Start ffmpeg based on configured MUX_MODE."""
     global ffmpeg_process
 
+    with segment_counter_lock:
+        start_num = segment_counter
+
     if MUX_MODE == 'abr':
-        cmd = build_abr_cmd(input_url)
+        cmd = build_abr_cmd(input_url, start_number=start_num)
         variant_desc = ', '.join(f"{v['height']}p" for v in ABR_VARIANTS)
         mode_desc = f"ABR (source + {variant_desc})"
     else:
-        cmd = build_copy_cmd(input_url)
+        cmd = build_copy_cmd(input_url, start_number=start_num)
         mode_desc = "copy (passthrough)"
 
-    logger.info(f"Starting ffmpeg [{mode_desc}] with input: {input_url}")
+    logger.info(f"Starting ffmpeg [{mode_desc}] segment={start_num} input={input_url}")
 
     ffmpeg_process = subprocess.Popen(
         cmd,
@@ -240,8 +318,8 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
 
 
 def stop_ffmpeg():
-    """Stop the current ffmpeg process."""
-    global ffmpeg_process
+    """Stop the current ffmpeg process and update segment counter."""
+    global ffmpeg_process, segment_counter
     if ffmpeg_process:
         logger.info("Stopping ffmpeg...")
         ffmpeg_process.terminate()
@@ -250,11 +328,22 @@ def stop_ffmpeg():
         except subprocess.TimeoutExpired:
             ffmpeg_process.kill()
         ffmpeg_process = None
+        
+        # Update segment counter from written files
+        next_num = get_next_segment_number()
+        with segment_counter_lock:
+            segment_counter = next_num
+        logger.debug(f"Segment counter updated to {next_num}")
 
 
 def run_ffmpeg_loop():
-    """Main loop that runs ffmpeg and restarts on playhead changes."""
-    global ffmpeg_process
+    """Main loop that runs ffmpeg and restarts on playhead changes.
+    
+    Seamless switching: on playhead change, segment numbering continues
+    and a #EXT-X-DISCONTINUITY marker is injected into the playlist.
+    On crash, everything is reset (clean slate).
+    """
+    global ffmpeg_process, segment_counter
 
     while not stop_event.is_set():
         # Wait for a stream URL
@@ -278,15 +367,20 @@ def run_ffmpeg_loop():
                 break
             time.sleep(1)
 
-        # Stop ffmpeg before restarting
+        # Stop ffmpeg (also updates segment_counter)
         stop_ffmpeg()
 
         if restart_event.is_set():
-            logger.info("Restarting ffmpeg with new stream...")
+            # Playhead changed - seamless restart
+            logger.info("Playhead changed, seamless restart...")
+            inject_discontinuity()
             restart_event.clear()
         elif not stop_event.is_set():
-            # ffmpeg crashed, wait before retry
-            logger.info("Restarting ffmpeg in 3 seconds...")
+            # ffmpeg crashed - full reset
+            logger.info("ffmpeg crashed, resetting in 3 seconds...")
+            cleanup_output_dir()
+            with segment_counter_lock:
+                segment_counter = 0
             time.sleep(3)
 
 
@@ -382,9 +476,17 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     logger.info("Mux service starting...")
+    logger.info(f"Mode: {MUX_MODE} | Segment time: {HLS_SEGMENT_TIME}s | Playlist size: {HLS_LIST_SIZE}")
+    if MUX_MODE == 'abr':
+        variant_desc = ', '.join(f"{v['height']}p@{v['video_bitrate']}" for v in ABR_VARIANTS)
+        logger.info(f"ABR variants: source (copy) + {variant_desc} | Preset: {ABR_PRESET} | GOP: {ABR_GOP_SIZE}")
 
     # Setup
     setup_output_dir()
+
+    # Start stale segment cleanup thread
+    cleanup_thread = threading.Thread(target=cleanup_stale_segments, daemon=True)
+    cleanup_thread.start()
 
     # Start ffmpeg loop in background thread
     ffmpeg_thread = threading.Thread(target=run_ffmpeg_loop, daemon=True)

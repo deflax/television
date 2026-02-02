@@ -258,26 +258,31 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 
 **Features:**
 - **SSE monitoring** - Listens to `/events` for playhead changes
-- **Playhead switching** - Restarts ffmpeg with new input URL on playhead change
+- **Seamless switching** - Continuous segment numbering with `#EXT-X-DISCONTINUITY` markers across playhead transitions. Players stay connected without reloading.
 - **Two modes** - Copy (passthrough) or ABR (adaptive bitrate)
 - **No upscaling** - ABR mode caps output at source resolution
+- **Stale segment cleanup** - Background cleanup of old `.ts` segments to prevent disk filling
 
 **Modes** (set via `MUX_MODE` env var):
 
 | Mode | Description |
 |------|-------------|
 | `copy` (default) | Passthrough, no transcoding. Single stream output. |
-| `abr` | Adaptive bitrate with source copy + transcoded variants. |
+| `abr` | Adaptive bitrate with source passthrough + transcoded variants. |
 
 **Copy mode output:**
 - `/live/stream.m3u8` - Single quality stream (passthrough)
 
 **ABR mode output:**
 - `/live/stream.m3u8` - Master playlist (ABR)
-- `/live/stream_0/` - Source (copy, no re-encoding)
+- `/live/stream_0/` - Source (passthrough, no re-encoding)
 - `/live/stream_1/` - 1080p (5000k video, 192k audio) - only if source > 1080p
 - `/live/stream_2/` - 720p (2800k video, 128k audio) - only if source > 720p
 - `/live/stream_3/` - 576p (1400k video, 96k audio) - only if source > 576p
+
+**Switching behavior:**
+- On playhead change: segments continue numbering, `#EXT-X-DISCONTINUITY` tag injected, ffmpeg restarts with new input (~4s gap)
+- On crash: full reset, segments start from 0, playlist rebuilt
 
 ### Frontend Modes
 
