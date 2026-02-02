@@ -194,22 +194,54 @@ def start_ffmpeg_stream():
         try:
             ffmpeg_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
             
-            # Monitor ffmpeg process
+            # Drain stderr in a background thread so ffmpeg never blocks
+            # on a full pipe buffer (which silently stalls segment production).
+            stderr_lines: list[str] = []
+            def _drain_stderr():
+                assert ffmpeg_process.stderr is not None
+                for raw_line in ffmpeg_process.stderr:
+                    line = raw_line.decode(errors='replace').rstrip()
+                    if line:
+                        stderr_lines.append(line)
+                        # Keep only the last 200 lines to bound memory
+                        if len(stderr_lines) > 200:
+                            del stderr_lines[:100]
+            drain_thread = threading.Thread(target=_drain_stderr, daemon=True)
+            drain_thread.start()
+            
+            # Monitor ffmpeg process — also detect silent stalls by
+            # checking that new segments keep appearing on disk.
+            last_segment_time = time.time()
             while ffmpeg_process.poll() is None and not stop_event.is_set():
-                time.sleep(1)
+                time.sleep(2)
+                # Check for new segment activity
+                hls_path = Path(HLS_OUTPUT_DIR)
+                segments = sorted(hls_path.glob('segment_*.ts'))
+                if segments:
+                    newest_mtime = segments[-1].stat().st_mtime
+                    if newest_mtime > last_segment_time:
+                        last_segment_time = newest_mtime
+                    elif time.time() - last_segment_time > HLS_SEGMENT_TIME * 10:
+                        logger.error(
+                            "ffmpeg appears stalled — no new segments for "
+                            f"{time.time() - last_segment_time:.0f}s. Killing."
+                        )
+                        ffmpeg_process.kill()
+                        break
             
             if stop_event.is_set():
                 break
-                
+            
+            drain_thread.join(timeout=5)
+            
             # Process ended unexpectedly
-            stderr = ffmpeg_process.stderr.read().decode() if ffmpeg_process.stderr else ''
             logger.warning(f"ffmpeg process ended. Return code: {ffmpeg_process.returncode}")
-            if stderr:
-                logger.warning(f"ffmpeg stderr: {stderr[-1000:]}")  # Last 1000 chars
+            if stderr_lines:
+                logger.warning(f"ffmpeg stderr (last lines):\n" + '\n'.join(stderr_lines[-20:]))
             
             # Wait before restarting
             logger.info("Restarting ffmpeg in 5 seconds...")
