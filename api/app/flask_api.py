@@ -64,11 +64,11 @@ class LoggerManager:
         # Set root logger to WARNING to suppress noisy third-party logs (httpcore, etc.)
         logging.basicConfig(level=logging.WARNING)
 
-        # Suppress all 200 OK access log lines to reduce noise
+        # Suppress 200 OK and 404 Not Found access log lines to reduce noise
         class _QuietAccessFilter(logging.Filter):
             def filter(self, record: logging.LogRecord) -> bool:
                 msg = record.getMessage()
-                if '200' in msg:
+                if '200' in msg or '404' in msg:
                     return False
                 return True
 
