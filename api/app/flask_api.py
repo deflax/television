@@ -170,7 +170,8 @@ def create_app() -> Quart:
     global stream_manager, client, discord_bot_manager
 
     # Configure Quart app
-    app.config['SERVER_NAME'] = config.server_name
+    # Note: SERVER_NAME is not set to allow internal Docker requests (e.g., from mux service)
+    # URL generation will work without it for most cases
     app.config['PREFERRED_URL_SCHEME'] = 'https'
     app.config['SECRET_KEY'] = config.secret_key
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours in seconds
