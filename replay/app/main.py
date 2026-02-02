@@ -59,6 +59,7 @@ HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 VIDEO_BITRATE = os.environ.get('VIDEO_BITRATE', '4000k')
 AUDIO_BITRATE = os.environ.get('AUDIO_BITRATE', '128k')
 PORT = int(os.environ.get('REPLAY_PORT', '8090'))
+SCAN_INTERVAL = int(os.environ.get('REPLAY_SCAN_INTERVAL', '60'))
 
 # Keep segments on disk for 3x the playlist window so slow clients can still
 # fetch them after they've rolled out of the playlist.  This replaces ffmpeg's
@@ -70,29 +71,33 @@ ffmpeg_process: Optional[subprocess.Popen] = None
 playlist_lock = threading.Lock()
 current_file_index = 0
 shuffled_files: list[str] = []
+known_files: set[str] = set()
 stop_event = threading.Event()
+restart_event = threading.Event()  # Signals ffmpeg to restart with a new playlist
 
 
-def get_mp4_files() -> list[str]:
-    """Recursively find all MP4 files in the recordings directory."""
+def get_video_files() -> list[str]:
+    """Recursively find all video files (MP4/MKV) in the recordings directory."""
     recordings_path = Path(RECORDINGS_DIR)
     if not recordings_path.exists():
         logger.warning(f"Recordings directory does not exist: {RECORDINGS_DIR}")
         return []
     
-    mp4_files = list(recordings_path.rglob('*.mp4'))
-    mp4_files.extend(recordings_path.rglob('*.MP4'))
+    video_files = [
+        f for f in recordings_path.rglob('*')
+        if f.suffix.lower() in ('.mp4', '.mkv')
+    ]
     
     # Convert to strings and sort for consistency before shuffling
-    files = sorted([str(f) for f in mp4_files])
-    logger.info(f"Found {len(files)} MP4 files in {RECORDINGS_DIR}")
+    files = sorted([str(f) for f in video_files])
+    logger.info(f"Found {len(files)} video files in {RECORDINGS_DIR}")
     return files
 
 
 def shuffle_playlist() -> list[str]:
     """Get all MP4 files and shuffle them."""
     global shuffled_files
-    files = get_mp4_files()
+    files = get_video_files()
     if files:
         random.shuffle(files)
         shuffled_files = files
@@ -136,9 +141,33 @@ def cleanup_old_segments():
         stop_event.wait(timeout=HLS_SEGMENT_TIME)
 
 
+def watch_recordings():
+    """Periodically scan recordings directory for added/removed files.
+
+    When the file set changes, signal ffmpeg to restart with an updated
+    concat playlist.
+    """
+    global known_files
+    while not stop_event.is_set():
+        stop_event.wait(timeout=SCAN_INTERVAL)
+        if stop_event.is_set():
+            break
+        current_files = set(get_video_files())
+        if current_files == known_files:
+            continue
+        added = current_files - known_files
+        removed = known_files - current_files
+        for f in added:
+            logger.info(f"File added: {Path(f).name}")
+        for f in removed:
+            logger.info(f"File removed: {Path(f).name}")
+        known_files = current_files
+        restart_event.set()
+
+
 def start_ffmpeg_stream():
     """Start ffmpeg process to generate HLS stream."""
-    global ffmpeg_process, shuffled_files, current_file_index
+    global ffmpeg_process, shuffled_files, current_file_index, known_files
     
     # Ensure output directory exists
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
@@ -154,10 +183,17 @@ def start_ffmpeg_stream():
     cleanup_thread = threading.Thread(target=cleanup_old_segments, daemon=True)
     cleanup_thread.start()
     logger.info(f"Segment cleanup thread started (retain for {SEGMENT_RETAIN_SECONDS}s)")
+
+    # Start the file watcher thread
+    watcher_thread = threading.Thread(target=watch_recordings, daemon=True)
+    watcher_thread.start()
+    logger.info(f"File watcher started (scan every {SCAN_INTERVAL}s)")
     
     while not stop_event.is_set():
         # Refresh and shuffle playlist
         shuffle_playlist()
+        known_files = set(shuffled_files)
+        restart_event.clear()
         
         if not shuffled_files:
             logger.warning("No MP4 files found. Waiting 30 seconds before retry...")
@@ -237,6 +273,17 @@ def start_ffmpeg_stream():
             last_segment_time = time.time()
             while ffmpeg_process.poll() is None and not stop_event.is_set():
                 time.sleep(2)
+
+                # File watcher detected a change — gracefully restart ffmpeg
+                if restart_event.is_set():
+                    logger.info("Recordings changed, restarting ffmpeg with updated playlist...")
+                    ffmpeg_process.terminate()
+                    try:
+                        ffmpeg_process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        ffmpeg_process.kill()
+                    break
+
                 # Check for new segment activity
                 hls_path = Path(HLS_OUTPUT_DIR)
                 segments = sorted(hls_path.glob('segment_*.ts'))
@@ -256,6 +303,10 @@ def start_ffmpeg_stream():
                 break
             
             drain_thread.join(timeout=5)
+
+            # If restarted due to file change, loop immediately
+            if restart_event.is_set():
+                continue
             
             # Process ended unexpectedly
             logger.warning(f"ffmpeg process ended. Return code: {ffmpeg_process.returncode}")
