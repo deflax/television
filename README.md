@@ -206,8 +206,23 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_URL` | `http://api:8080` | Internal API URL for SSE connection |
+| `MUX_MODE` | `copy` | Mode: `copy` (passthrough) or `abr` (adaptive bitrate) |
 | `HLS_SEGMENT_TIME` | `4` | HLS segment duration (seconds) |
 | `HLS_LIST_SIZE` | `20` | Number of segments in playlist |
+| `ABR_PRESET` | `veryfast` | x264 encoder preset (ABR mode only) |
+| `ABR_GOP_SIZE` | `48` | Keyframe interval in frames (ABR mode only) |
+| `ABR_VARIANTS` | See below | JSON array of ABR variants (ABR mode only) |
+
+**ABR_VARIANTS format:**
+```json
+[
+  {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
+  {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
+  {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"}
+]
+```
+
+Each variant specifies a resolution height (source is capped at this), video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
 
 ## Services
 

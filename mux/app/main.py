@@ -38,6 +38,35 @@ HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 # Mux mode: 'copy' (passthrough) or 'abr' (adaptive bitrate with source copy)
 MUX_MODE = os.environ.get('MUX_MODE', 'copy').lower()
 
+# ABR encoding settings
+ABR_PRESET = os.environ.get('ABR_PRESET', 'veryfast')  # x264 preset
+ABR_GOP_SIZE = int(os.environ.get('ABR_GOP_SIZE', '48'))  # Keyframe interval
+
+# ABR variants configuration (JSON string or use defaults)
+# Format: [{"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"}, ...]
+DEFAULT_ABR_VARIANTS = [
+    {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
+    {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
+    {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"},
+]
+
+
+def parse_abr_variants() -> list[dict]:
+    """Parse ABR_VARIANTS from environment or use defaults."""
+    variants_json = os.environ.get('ABR_VARIANTS', '')
+    if variants_json:
+        try:
+            variants = json.loads(variants_json)
+            if isinstance(variants, list) and len(variants) > 0:
+                logger.info(f"Using custom ABR variants: {variants}")
+                return variants
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid ABR_VARIANTS JSON, using defaults: {e}")
+    return DEFAULT_ABR_VARIANTS
+
+
+ABR_VARIANTS = parse_abr_variants()
+
 # Global state
 current_stream_url: Optional[str] = None
 stream_url_lock = threading.Lock()
@@ -49,8 +78,9 @@ ffmpeg_process: Optional[subprocess.Popen] = None
 def setup_output_dir():
     """Ensure output directory exists and create variant subdirs."""
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
-    # Create enough subdirs for ABR mode (up to 4 variants)
-    for i in range(4):
+    # Create subdirs for ABR mode (source + configured variants)
+    num_streams = len(ABR_VARIANTS) + 1  # +1 for source copy
+    for i in range(num_streams):
         os.makedirs(f'{HLS_OUTPUT_DIR}/stream_{i}', exist_ok=True)
 
 
@@ -83,70 +113,83 @@ def build_copy_cmd(input_url: str) -> list[str]:
     ]
 
 
+def parse_bitrate(bitrate_str: str) -> int:
+    """Parse bitrate string (e.g., '5000k', '5M') to integer kbps."""
+    bitrate_str = bitrate_str.lower().strip()
+    if bitrate_str.endswith('m'):
+        return int(float(bitrate_str[:-1]) * 1000)
+    elif bitrate_str.endswith('k'):
+        return int(float(bitrate_str[:-1]))
+    return int(bitrate_str)
+
+
 def build_abr_cmd(input_url: str) -> list[str]:
-    """Build ffmpeg command for ABR mode (source copy + transcoded 720p/576p).
+    """Build ffmpeg command for ABR mode (source copy + transcoded variants).
     
     Uses smart scaling that only transcodes resolutions below source:
     - Source is always copied (no re-encoding)
-    - 1080p: only transcode if source > 1080p
-    - 720p: only transcode if source > 720p  
-    - 576p: only transcode if source > 576p
+    - Variants are transcoded only if source height > variant height
+    
+    Variants are configurable via ABR_VARIANTS env var.
     """
-    return [
+    num_variants = len(ABR_VARIANTS)
+    total_streams = num_variants + 1  # +1 for source copy
+    
+    # Build filter_complex for splitting and scaling
+    split_outputs = '[v_src]' + ''.join(f'[v_{i}_in]' for i in range(num_variants))
+    filter_parts = [f'[0:v]split={total_streams}{split_outputs}']
+    
+    for i, variant in enumerate(ABR_VARIANTS):
+        height = variant['height']
+        filter_parts.append(
+            f"[v_{i}_in]scale=w=-2:h='min({height},ih)':force_original_aspect_ratio=decrease[v_{i}]"
+        )
+    
+    filter_complex = '; '.join(filter_parts)
+    
+    cmd = [
         'ffmpeg',
         '-y',
         '-re',
         '-i', input_url,
-        # Split video for ABR variants
-        '-filter_complex',
-        '[0:v]split=4[v_src][v_1080_in][v_720_in][v_576_in]; '
-        '[v_1080_in]scale=w=-2:h=\'min(1080,ih)\':force_original_aspect_ratio=decrease[v_1080]; '
-        '[v_720_in]scale=w=-2:h=\'min(720,ih)\':force_original_aspect_ratio=decrease[v_720]; '
-        '[v_576_in]scale=w=-2:h=\'min(576,ih)\':force_original_aspect_ratio=decrease[v_576]',
+        '-filter_complex', filter_complex,
         # Stream 0: Source (copy)
         '-map', '[v_src]',
         '-c:v:0', 'copy',
         '-map', '0:a',
         '-c:a:0', 'copy',
-        # Stream 1: 1080p
-        '-map', '[v_1080]',
-        '-c:v:1', 'libx264',
-        '-preset', 'veryfast',
-        '-b:v:1', '5000k',
-        '-maxrate:v:1', '5350k',
-        '-bufsize:v:1', '7500k',
-        '-g:v:1', '48',
-        '-sc_threshold:v:1', '0',
-        '-map', '0:a',
-        '-c:a:1', 'aac',
-        '-b:a:1', '192k',
-        '-ac:a:1', '2',
-        # Stream 2: 720p
-        '-map', '[v_720]',
-        '-c:v:2', 'libx264',
-        '-preset', 'veryfast',
-        '-b:v:2', '2800k',
-        '-maxrate:v:2', '2996k',
-        '-bufsize:v:2', '4200k',
-        '-g:v:2', '48',
-        '-sc_threshold:v:2', '0',
-        '-map', '0:a',
-        '-c:a:2', 'aac',
-        '-b:a:2', '128k',
-        '-ac:a:2', '2',
-        # Stream 3: 576p
-        '-map', '[v_576]',
-        '-c:v:3', 'libx264',
-        '-preset', 'veryfast',
-        '-b:v:3', '1400k',
-        '-maxrate:v:3', '1498k',
-        '-bufsize:v:3', '2100k',
-        '-g:v:3', '48',
-        '-sc_threshold:v:3', '0',
-        '-map', '0:a',
-        '-c:a:3', 'aac',
-        '-b:a:3', '96k',
-        '-ac:a:3', '2',
+    ]
+    
+    # Add transcoded variants
+    for i, variant in enumerate(ABR_VARIANTS):
+        stream_idx = i + 1  # 0 is source copy
+        video_bitrate = variant['video_bitrate']
+        audio_bitrate = variant['audio_bitrate']
+        
+        # Calculate maxrate (7% buffer) and bufsize (1.5x bitrate)
+        video_kbps = parse_bitrate(video_bitrate)
+        maxrate = f"{int(video_kbps * 1.07)}k"
+        bufsize = f"{int(video_kbps * 1.5)}k"
+        
+        cmd.extend([
+            '-map', f'[v_{i}]',
+            f'-c:v:{stream_idx}', 'libx264',
+            f'-preset', ABR_PRESET,
+            f'-b:v:{stream_idx}', video_bitrate,
+            f'-maxrate:v:{stream_idx}', maxrate,
+            f'-bufsize:v:{stream_idx}', bufsize,
+            f'-g:v:{stream_idx}', str(ABR_GOP_SIZE),
+            f'-sc_threshold:v:{stream_idx}', '0',
+            '-map', '0:a',
+            f'-c:a:{stream_idx}', 'aac',
+            f'-b:a:{stream_idx}', audio_bitrate,
+            f'-ac:a:{stream_idx}', '2',
+        ])
+    
+    # Build var_stream_map (v:0,a:0 v:1,a:1 ...)
+    var_stream_map = ' '.join(f'v:{i},a:{i}' for i in range(total_streams))
+    
+    cmd.extend([
         # HLS output
         '-f', 'hls',
         '-hls_time', str(HLS_SEGMENT_TIME),
@@ -155,9 +198,11 @@ def build_abr_cmd(input_url: str) -> list[str]:
         '-hls_segment_type', 'mpegts',
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/stream_%v/segment_%05d.ts',
         '-master_pl_name', 'stream.m3u8',
-        '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3',
+        '-var_stream_map', var_stream_map,
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8'
-    ]
+    ])
+    
+    return cmd
 
 
 def start_ffmpeg(input_url: str) -> subprocess.Popen:
@@ -166,7 +211,8 @@ def start_ffmpeg(input_url: str) -> subprocess.Popen:
 
     if MUX_MODE == 'abr':
         cmd = build_abr_cmd(input_url)
-        mode_desc = "ABR (source copy + 1080p/720p/576p)"
+        variant_desc = ', '.join(f"{v['height']}p" for v in ABR_VARIANTS)
+        mode_desc = f"ABR (source + {variant_desc})"
     else:
         cmd = build_copy_cmd(input_url)
         mode_desc = "copy (passthrough)"
