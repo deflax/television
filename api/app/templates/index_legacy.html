@@ -33,8 +33,14 @@
                 </p>
                 <p class="mb-0 text-secondary"><span id="visitor-number">-</span> <i class="fa fa-eye" aria-hidden="true"></i></p>
               </div>
-              <div id="epg-schedule">
-                <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
+              <div class="d-flex justify-content-between align-items-start">
+                <div id="epg-schedule" class="flex-grow-1">
+                  <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
+                </div>
+                <div class="d-flex gap-2 ms-3">
+                  <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-primary" download>live.hls</a>
+                  <a href="/live/stream.mp3" class="btn btn-sm btn-outline-primary" download>live.mp3</a>
+                </div>
               </div>
 	        </div>
       </div>
