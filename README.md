@@ -10,8 +10,11 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 - **Protected Video Archive** - HMAC-based timecode authentication for secure access
 - **Live Recording** - Record streams with automatic thumbnail generation
 - **Replay Service** - Multi-channel endless shuffled HLS playback of recorded videos
-- **Mux Service** - Seamless stream multiplexer with adaptive bitrate output
-- **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player
+- **Mux Service** - Seamless stream multiplexer with adaptive bitrate output and crash recovery
+- **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player and automatic error recovery
+- **Internal Routing** - Direct container-to-container communication bypasses Cloudflare
+- **Smart Access Logs** - Filtered 200 OK responses reduce log noise
+- **Private IP Filtering** - Internal services excluded from visitor tracking
 - **Automated SSL** - Let's Encrypt certificates via acme.sh
 - **Cloudflare Compatible** - Proper handling of CF-Connecting-IP headers
 - **HTTP/2 Support** - ALPN negotiation for modern clients
@@ -206,6 +209,8 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_URL` | `http://api:8080` | Internal API URL for SSE connection |
+| `RESTREAMER_INTERNAL_URL` | `http://restreamer:8080` | Internal restreamer URL (bypasses public hostname) |
+| `CORE_API_HOSTNAME` | - | Public restreamer hostname (for URL rewriting) |
 | `MUX_MODE` | `copy` | Mode: `copy` (passthrough) or `abr` (adaptive bitrate) |
 | `HLS_SEGMENT_TIME` | `4` | HLS segment duration (seconds) |
 | `HLS_LIST_SIZE` | `20` | Number of segments in playlist |
@@ -259,9 +264,12 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 **Features:**
 - **SSE monitoring** - Listens to `/events` for playhead changes
 - **Seamless switching** - Continuous segment numbering with `#EXT-X-DISCONTINUITY` markers across playhead transitions. Players stay connected without reloading.
+- **Crash recovery** - Automatic recovery with discontinuity markers on ffmpeg crashes. No full resets that break clients.
+- **Internal routing** - Direct container-to-container access bypasses Cloudflare for optimal performance
 - **Two modes** - Copy (passthrough) or ABR (adaptive bitrate)
 - **No upscaling** - ABR mode caps output at source resolution
 - **Stale segment cleanup** - Background cleanup of old `.ts` segments to prevent disk filling
+- **Modular architecture** - Separated concerns: config, ffmpeg management, playlist operations, playhead monitoring
 
 **Modes** (set via `MUX_MODE` env var):
 
@@ -282,7 +290,7 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 
 **Switching behavior:**
 - On playhead change: segments continue numbering, `#EXT-X-DISCONTINUITY` tag injected, ffmpeg restarts with new input (~4s gap)
-- On crash: full reset, segments start from 0, playlist rebuilt
+- On crash: seamless recovery with discontinuity marker, segment numbering continues (no viewer disruption)
 
 ### Frontend Modes
 
@@ -292,6 +300,12 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 | `legacy` | `index_legacy.html` | SSE-based client-side stream switching |
 
 Set via `FRONTEND_MODE` environment variable.
+
+**Frontend Features:**
+- **Automatic error recovery** - HLS.js detects network/media errors and automatically recovers
+- **Global modals** - Weather and Archive modals accessible from all pages
+- **SSE real-time updates** - Live visitor count, EPG changes, playhead updates
+- **Responsive design** - Mobile-friendly Bootstrap 5 interface
 
 ## Usage
 
@@ -378,6 +392,37 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `/replay/<channel>/playlist.m3u8` | GET | Public | HLS replay stream for channel |
 | `/live/stream.m3u8` | GET | Public | Mux ABR stream (master playlist) |
 
+## Logging and Monitoring
+
+### Access Log Filtering
+
+To reduce noise in logs, successful (200 OK) responses are filtered from access logs:
+
+**API Service** (`/workspace/api/app/flask_api.py`):
+- All 200 OK responses are hidden from uvicorn/hypercorn access logs
+- Only errors (4xx, 5xx) and other status codes appear in logs
+
+**Mux Service** (`/workspace/mux/app/server.py`):
+- 200 OK responses for `/live/stream*` and `/live/segment_*` are hidden
+- Errors still appear for debugging (404, 503, etc.)
+
+**Visitor Tracking:**
+- Private/internal IP addresses (Docker, LAN, loopback) are excluded from visitor counts
+- Prevents internal services from appearing as watchers
+
+### Log Levels
+
+Configure granular logging via environment variables:
+
+| Variable | Default | Component |
+|----------|---------|-----------|
+| `API_LOG_LEVEL_API` | `INFO` | Uvicorn web server |
+| `API_LOG_LEVEL_JOB` | `WARN` | APScheduler background jobs |
+| `API_LOG_LEVEL_STREAM` | `INFO` | Stream manager operations |
+| `API_LOG_LEVEL_CONTENT` | `INFO` | Route handlers and content |
+| `API_LOG_LEVEL_DISCORD` | `INFO` | Discord bot |
+| `API_LOG_LEVEL_SSE` | `WARN` | Server-sent events |
+
 ## Project Structure
 
 ```
@@ -407,7 +452,11 @@ television/
 │   └── requirements.txt
 ├── mux/
 │   ├── app/
-│   │   ├── main.py              # SSE monitor & ffmpeg muxer
+│   │   ├── main.py              # Application orchestration
+│   │   ├── config.py            # Configuration management
+│   │   ├── ffmpeg_manager.py    # FFmpeg process lifecycle
+│   │   ├── playlist_manager.py  # HLS playlist operations
+│   │   ├── playhead_monitor.py  # SSE monitoring
 │   │   └── server.py            # HTTP server for HLS output
 │   ├── scripts/
 │   │   └── run.sh
