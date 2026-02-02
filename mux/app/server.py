@@ -14,6 +14,8 @@ class _QuietAccessFilter(logging.Filter):
         msg = record.getMessage()
         if '200' in msg and '/health' in msg:
             return False
+        if '200' in msg and ('/live/stream' in msg or '/live/segment_' in msg):
+            return False
         return True
 
 
