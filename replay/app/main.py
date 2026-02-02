@@ -32,7 +32,6 @@ async def add_hls_headers(response: Response) -> Response:
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = '*'
-    # Prevent HTTP/2 push which causes stream cancellation in some clients
     response.headers['Connection'] = 'keep-alive'
     return response
 
@@ -45,6 +44,11 @@ HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 VIDEO_BITRATE = os.environ.get('VIDEO_BITRATE', '4000k')
 AUDIO_BITRATE = os.environ.get('AUDIO_BITRATE', '128k')
 PORT = int(os.environ.get('REPLAY_PORT', '8090'))
+
+# Keep segments on disk for 3x the playlist window so slow clients can still
+# fetch them after they've rolled out of the playlist.  This replaces ffmpeg's
+# delete_segments which removes files too aggressively for most HLS clients.
+SEGMENT_RETAIN_SECONDS = HLS_SEGMENT_TIME * HLS_LIST_SIZE * 3
 
 # Global state
 ffmpeg_process: Optional[subprocess.Popen] = None
@@ -92,6 +96,31 @@ def create_concat_file(files: list[str]) -> str:
     return concat_file
 
 
+def cleanup_old_segments():
+    """Periodically remove .ts segments older than SEGMENT_RETAIN_SECONDS.
+
+    This replaces ffmpeg's delete_segments flag which removes files too
+    aggressively — often before slow clients (like VLC) have fetched them.
+    """
+    hls_dir = Path(HLS_OUTPUT_DIR)
+    while not stop_event.is_set():
+        try:
+            now = time.time()
+            for seg in hls_dir.glob('segment_*.ts'):
+                try:
+                    age = now - seg.stat().st_mtime
+                    if age > SEGMENT_RETAIN_SECONDS:
+                        seg.unlink()
+                except FileNotFoundError:
+                    pass  # Already gone
+                except Exception as e:
+                    logger.warning(f"Could not remove old segment {seg}: {e}")
+        except Exception as e:
+            logger.warning(f"Segment cleanup error: {e}")
+        # Run cleanup every segment duration
+        stop_event.wait(timeout=HLS_SEGMENT_TIME)
+
+
 def start_ffmpeg_stream():
     """Start ffmpeg process to generate HLS stream."""
     global ffmpeg_process, shuffled_files, current_file_index
@@ -99,12 +128,17 @@ def start_ffmpeg_stream():
     # Ensure output directory exists
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)
     
-    # Clean up old segments
+    # Clean up old segments from previous runs
     for f in Path(HLS_OUTPUT_DIR).glob('*'):
         try:
             f.unlink()
         except Exception as e:
             logger.warning(f"Could not remove {f}: {e}")
+    
+    # Start the segment cleanup thread
+    cleanup_thread = threading.Thread(target=cleanup_old_segments, daemon=True)
+    cleanup_thread.start()
+    logger.info(f"Segment cleanup thread started (retain for {SEGMENT_RETAIN_SECONDS}s)")
     
     while not stop_event.is_set():
         # Refresh and shuffle playlist
@@ -119,6 +153,10 @@ def start_ffmpeg_stream():
         concat_file = create_concat_file(shuffled_files)
         
         # Build ffmpeg command for live HLS streaming
+        # NOTE: We do NOT use delete_segments — our cleanup_old_segments thread
+        # handles deletion with a much longer retention window so that slow
+        # clients don't get 404s for segments still referenced in their copy
+        # of the playlist.
         cmd = [
             'ffmpeg',
             '-re',  # Read input at native frame rate (important for live streaming)
@@ -145,7 +183,7 @@ def start_ffmpeg_stream():
             '-f', 'hls',
             '-hls_time', str(HLS_SEGMENT_TIME),
             '-hls_list_size', str(HLS_LIST_SIZE),
-            '-hls_flags', 'delete_segments+append_list+omit_endlist+temp_file',
+            '-hls_flags', 'append_list+omit_endlist+temp_file',
             '-hls_segment_type', 'mpegts',
             '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
             f'{HLS_OUTPUT_DIR}/playlist.m3u8'
@@ -258,13 +296,19 @@ async def serve_file(filename: str):
     
     file_path = Path(HLS_OUTPUT_DIR) / filename
     
+    # For .ts segments, briefly wait if not found — may be mid-write
+    if not file_path.exists() and filename.endswith('.ts'):
+        await asyncio.sleep(0.5)
+    
     if not file_path.exists():
+        if filename.endswith('.ts'):
+            logger.warning(f"Segment not found via catch-all: {filename}")
         abort(404)
     
-    # Determine mimetype
+    # Determine mimetype and cache policy
     if filename.endswith('.m3u8'):
         mimetype = 'application/vnd.apple.mpegurl'
-        cache_timeout = 1
+        cache_timeout = 0
     elif filename.endswith('.ts'):
         mimetype = 'video/mp2t'
         cache_timeout = 3600
@@ -272,7 +316,12 @@ async def serve_file(filename: str):
         mimetype = 'application/octet-stream'
         cache_timeout = 0
     
-    return await send_file(file_path, mimetype=mimetype, cache_timeout=cache_timeout)
+    response = await send_file(file_path, mimetype=mimetype, cache_timeout=cache_timeout)
+    if filename.endswith('.m3u8'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    elif filename.endswith('.ts'):
+        response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
+    return response
 
 
 @app.route('/')
