@@ -375,14 +375,24 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
-        @self.bot.command(name='next', help='Advance to the next scheduled stream')
+        @self.bot.command(name='rnd', help='Switch to a random stream from the database')
         @has_role(self.boss_role_name)
-        async def next_stream(ctx):
+        async def rnd(ctx):
+            # Check if there's only one stream (or none) in the database
+            if len(self.stream_manager.database) <= 1:
+                embed = self._make_embed(
+                    title='⚠️ No Streams Available',
+                    description='There are no other streams in the database to switch to.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
+                return
+
             next_stream = self.stream_manager.get_next_stream()
             if not next_stream:
                 embed = self._make_embed(
                     title='⚠️ No Streams Available',
-                    description='There are no scheduled streams in the database.',
+                    description='There are no other streams in the database to switch to.',
                     color=self.COLOR_WARNING
                 )
                 await ctx.channel.send(embed=embed)
@@ -397,15 +407,15 @@ class DiscordBotManager:
             )
             
             embed = self._make_embed(
-                title='⏭️ Stream Advanced',
+                title='🎲 Random Stream',
                 description=f'Now playing: **{next_stream["stream_name"]}**',
                 color=self.COLOR_SUCCESS,
                 footer=f'ID: {next_stream["stream_id"]}'
             )
             await ctx.channel.send(embed=embed)
 
-        @next_stream.error
-        async def next_stream_error(ctx, error):
+        @rnd.error
+        async def rnd_error(ctx, error):
             if isinstance(error, CheckFailure):
                 embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
                 await ctx.channel.send(embed=embed)

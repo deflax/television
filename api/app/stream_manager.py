@@ -1,5 +1,6 @@
 import time
 import ast
+import random
 import logging
 import requests
 from datetime import datetime
@@ -247,38 +248,28 @@ class StreamManager:
                 self.playhead = {}
     
     def get_next_stream(self) -> Optional[Dict[str, Any]]:
-        """Find the next scheduled stream after the current time."""
-        now = datetime.now()
-        current_minutes = now.hour * 60 + now.minute
+        """Pick a random stream from the database, excluding the currently playing one.
         
-        # Collect scheduled streams
-        scheduled = []
+        Returns None if the database is empty or contains only the current stream.
+        """
+        current_id = self.playhead.get('id')
+        
+        # Collect all streams except the currently playing one
+        candidates = []
         for key, value in self.database.items():
-            if value['start_at'] not in ("now", "never"):
-                try:
-                    h, m = parse_military_time(value['start_at'])
-                    scheduled.append({
-                        'id': key,
-                        'name': value['name'],
-                        'src': value['src'],
-                        'prio': value['prio'],
-                        'time': h * 60 + m
-                    })
-                except (ValueError, TypeError):
-                    continue
+            if key != current_id:
+                candidates.append({
+                    'id': key,
+                    'name': value['name'],
+                    'src': value['src'],
+                    'prio': value['prio'],
+                })
         
-        if not scheduled:
+        if not candidates:
             return None
         
-        # Sort by time and find next stream
-        scheduled.sort(key=lambda x: x['time'])
-        for s in scheduled:
-            if s['time'] > current_minutes:
-                return {'stream_id': s['id'], 'stream_name': s['name'], 
-                        'stream_hls_url': s['src'], 'stream_prio': s['prio']}
-        
-        # Wrap to first stream
-        s = scheduled[0]
+        # Pick a random stream
+        s = random.choice(candidates)
         return {'stream_id': s['id'], 'stream_name': s['name'], 
                 'stream_hls_url': s['src'], 'stream_prio': s['prio']}
     
