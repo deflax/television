@@ -11,6 +11,7 @@ RUN apt-get -qq -y update; \
 RUN useradd radio ;\
   chown -R radio:radio /var/log/icecast2
 
+ADD ./config/icecast.xml.template /etc/icecast2/icecast.xml.template
 ADD ./start.sh /start.sh
 
 CMD ["/start.sh"]
