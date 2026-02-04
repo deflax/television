@@ -59,7 +59,10 @@ class SegmentStore:
         self._lock = asyncio.Lock()
         # segments[variant_index] = list of Segment objects
         self._segments: dict[int, list[Segment]] = {i: [] for i in range(NUM_VARIANTS)}
+        # Playlist sequence - continuous counter for EXT-X-MEDIA-SEQUENCE
         self._next_sequence = 0
+        # FFmpeg file number - tracks highest segment number on disk to avoid collisions
+        self._next_file_number = 0
         self._pending_discontinuity = False
         # Source stream properties (detected via ffprobe)
         self._source_width: int = 1920
@@ -85,17 +88,19 @@ class SegmentStore:
         Returns the created Segment object.
         """
         async with self._lock:
-            # Extract sequence number from filename (segment_00001.ts -> 1)
+            # Use internal sequence counter for playlist ordering
+            # The filename's number is irrelevant - what matters is the logical
+            # position in the playlist. This ensures continuous media sequence
+            # numbers even when FFmpeg restarts with different start_number.
+            seq = self._next_sequence
+            self._next_sequence += 1
+            
+            # Track the highest file number we've seen for FFmpeg start_number
             match = re.search(r'segment_(\d+)\.ts$', filename)
             if match:
-                seq = int(match.group(1))
-            else:
-                # Fallback to internal counter
-                seq = self._next_sequence
-            
-            # Update next_sequence to be at least seq + 1
-            if seq >= self._next_sequence:
-                self._next_sequence = seq + 1
+                file_num = int(match.group(1))
+                if file_num >= self._next_file_number:
+                    self._next_file_number = file_num + 1
             
             # Determine discontinuity - apply to first segment at this sequence
             discontinuity = False
@@ -156,9 +161,14 @@ class SegmentStore:
             return segments.copy()
     
     async def get_next_sequence(self) -> int:
-        """Get the next sequence number that will be assigned."""
+        """Get the next file number for FFmpeg's start_number parameter.
+        
+        This returns the highest segment file number seen + 1, to avoid
+        filename collisions on disk. This is different from the playlist
+        sequence which is a continuous counter.
+        """
         async with self._lock:
-            return self._next_sequence
+            return self._next_file_number
     
     def _delete_segment_file(self, seg: Segment) -> bool:
         """Delete a segment's file from disk. Returns True if deleted."""
