@@ -17,7 +17,8 @@ from utils import wait_for_stable_file
 logger = logging.getLogger(__name__)
 
 # Retry settings for segments that may still be writing
-SEGMENT_RETRY_DELAYS = (0.1, 0.2, 0.3, 0.5, 0.7)
+SEGMENT_WAIT_INTERVAL = 0.2  # seconds between checks
+SEGMENT_MAX_WAIT = 5.0  # maximum total wait time
 
 
 # Silence noisy access logs (health checks and playlist requests only)
@@ -45,6 +46,20 @@ CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type',
 }
 
+# Cache headers for playlists (must not be cached by CDN)
+PLAYLIST_CACHE_HEADERS = {
+    'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0',
+    'CDN-Cache-Control': 'no-store',
+    'Surrogate-Control': 'no-store',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+}
+
+# Cache headers for segments (can be cached, but not too long)
+SEGMENT_CACHE_HEADERS = {
+    'Cache-Control': 'public, max-age=300, stale-while-revalidate=60',
+}
+
 
 @app.route('/live/stream_<int:variant>/<path:path>', methods=['OPTIONS'])
 @app.route('/live/<path:path>', methods=['OPTIONS'])
@@ -56,15 +71,7 @@ async def cors_preflight(**kwargs):
 @app.route('/health')
 async def health():
     """Health check endpoint."""
-    # Check if we have any segments
-    segments = await segment_store.get_segments(0, count=1)
-    stream_ready = len(segments) > 0
-    
-    return {
-        'status': 'ok',
-        'stream_ready': stream_ready,
-        'mode': MUX_MODE,
-    }
+    return {'status': 'ok', 'mode': MUX_MODE}
 
 
 @app.route('/live/stream.m3u8')
@@ -79,10 +86,7 @@ async def master_playlist():
     return Response(
         content,
         mimetype='application/vnd.apple.mpegurl',
-        headers={
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            **CORS_HEADERS,
-        }
+        headers={**PLAYLIST_CACHE_HEADERS, **CORS_HEADERS},
     )
 
 
@@ -97,11 +101,20 @@ async def variant_playlist(variant: int):
     return Response(
         content,
         mimetype='application/vnd.apple.mpegurl',
-        headers={
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            **CORS_HEADERS,
-        }
+        headers={**PLAYLIST_CACHE_HEADERS, **CORS_HEADERS},
     )
+
+
+def _is_safe_path(base_dir: Path, requested_path: Path) -> bool:
+    """Check if requested_path is safely within base_dir (no traversal)."""
+    try:
+        # Resolve to absolute paths to handle symlinks and ..
+        base_resolved = base_dir.resolve()
+        requested_resolved = requested_path.resolve()
+        # Check that the resolved path starts with the base directory
+        return str(requested_resolved).startswith(str(base_resolved) + '/')
+    except (OSError, ValueError):
+        return False
 
 
 @app.route('/live/stream_<int:variant>/<filename>')
@@ -113,21 +126,20 @@ async def variant_segment(variant: int, filename: str):
     if not filename.endswith('.ts'):
         abort(404)
     
-    # Security check
-    if '..' in filename or filename.startswith('/'):
+    base_dir = Path(HLS_OUTPUT_DIR)
+    file_path = base_dir / f'stream_{variant}' / filename
+    
+    # Security check - ensure path doesn't escape output directory
+    if not _is_safe_path(base_dir, file_path):
+        logger.warning(f'Path traversal attempt blocked: {filename}')
         abort(403)
     
-    file_path = Path(HLS_OUTPUT_DIR) / f'stream_{variant}' / filename
     return await _serve_segment(file_path)
 
 
 @app.route('/live/<filename>')
 async def segment(filename: str):
     """Serve a segment file (copy mode) or redirect."""
-    # Security check
-    if '..' in filename or filename.startswith('/'):
-        abort(403)
-    
     if filename.endswith('.m3u8'):
         # Serve playlist dynamically
         if filename == 'stream.m3u8':
@@ -137,32 +149,41 @@ async def segment(filename: str):
     if not filename.endswith('.ts'):
         abort(404)
     
-    file_path = Path(HLS_OUTPUT_DIR) / filename
+    base_dir = Path(HLS_OUTPUT_DIR)
+    file_path = base_dir / filename
+    
+    # Security check - ensure path doesn't escape output directory
+    if not _is_safe_path(base_dir, file_path):
+        logger.warning(f'Path traversal attempt blocked: {filename}')
+        abort(403)
+    
     return await _serve_segment(file_path)
 
 
 async def _serve_segment(file_path: Path) -> Response:
     """Serve a segment file with retry logic for files being written."""
-    # Retry if file doesn't exist yet
-    if not file_path.exists():
-        for delay in SEGMENT_RETRY_DELAYS:
-            await asyncio.sleep(delay)
-            if file_path.exists():
-                break
+    total_wait = 0.0
+    
+    # Wait for file to appear (may still be written by FFmpeg)
+    while not file_path.exists() and total_wait < SEGMENT_MAX_WAIT:
+        await asyncio.sleep(SEGMENT_WAIT_INTERVAL)
+        total_wait += SEGMENT_WAIT_INTERVAL
     
     if not file_path.exists():
-        logger.warning(f'Segment not found: {file_path.name}')
+        logger.warning(f'Segment not found after {total_wait:.1f}s: {file_path.name}')
         abort(404)
     
     # Wait for file to be fully written
-    await wait_for_stable_file(file_path)
+    is_stable = await wait_for_stable_file(file_path, check_delay=0.2, max_attempts=25)
+    if not is_stable:
+        logger.warning(f'Segment not stable, serving anyway: {file_path.name}')
     
     response = await send_file(
         file_path,
         mimetype='video/mp2t',
     )
-    response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
-    for key, value in CORS_HEADERS.items():
+    # Apply cache and CORS headers
+    for key, value in {**SEGMENT_CACHE_HEADERS, **CORS_HEADERS}.items():
         response.headers[key] = value
     return response
 

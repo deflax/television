@@ -18,6 +18,10 @@ from ffmpeg_runner import FFmpegRunner
 
 logger = logging.getLogger(__name__)
 
+# Crash recovery settings
+RECOVERY_BACKOFF_BASE = 2.0  # seconds, doubles each attempt
+RECOVERY_BACKOFF_MAX = 60.0  # maximum backoff cap
+
 
 class StreamState(Enum):
     """State machine for stream manager."""
@@ -44,6 +48,7 @@ class StreamManager:
         self._current_url: Optional[str] = None
         self._lock = asyncio.Lock()
         self._stop_event = asyncio.Event()
+        self._recovery_attempts = 0
     
     @property
     def state(self) -> StreamState:
@@ -66,11 +71,16 @@ class StreamManager:
         Returns True if started successfully.
         """
         async with self._lock:
-            if self._state not in (StreamState.IDLE, StreamState.STOPPING):
-                logger.warning(f'Cannot start in state {self._state}')
-                return False
-            
-            self._state = StreamState.STARTING
+            return await self._start_unlocked(url)
+    
+    async def _start_unlocked(self, url: str) -> bool:
+        """Start streaming (caller must hold lock)."""
+        if self._state not in (StreamState.IDLE, StreamState.STOPPING):
+            logger.warning(f'Cannot start in state {self._state}')
+            return False
+        
+        self._stop_event.clear()
+        self._state = StreamState.STARTING
         
         logger.info(f'Starting stream: {url[:60]}...')
         
@@ -86,6 +96,11 @@ class StreamManager:
         success = await self._ffmpeg.start(url, start_seq)
         
         if success:
+            # Update segment store with detected stream info
+            if self._ffmpeg.stream_info:
+                info = self._ffmpeg.stream_info
+                await segment_store.set_source_info(info.width, info.height, info.bitrate)
+            
             # Wait for first segment
             logger.info('Waiting for first segment...')
             has_segment = await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT)
@@ -93,6 +108,7 @@ class StreamManager:
             if has_segment:
                 self._current_url = url
                 self._state = StreamState.RUNNING
+                self._recovery_attempts = 0  # Reset on successful start
                 logger.info('Stream started successfully')
                 return True
             else:
@@ -108,25 +124,24 @@ class StreamManager:
         This is the core transition logic that ensures clean segment boundaries.
         Returns True if switch was successful.
         """
-        # Check state and decide action
-        should_start_fresh = False
         async with self._lock:
-            if self._state == StreamState.IDLE:
-                should_start_fresh = True
-            elif self._state != StreamState.RUNNING:
-                logger.warning(f'Cannot switch in state {self._state}')
-                return False
-            elif new_url == self._current_url:
-                logger.debug('Same URL, no switch needed')
-                return True
-            else:
-                self._state = StreamState.SWITCHING
+            return await self._switch_unlocked(new_url)
+    
+    async def _switch_unlocked(self, new_url: str) -> bool:
+        """Switch to a new stream URL (caller must hold lock)."""
+        # Check state and decide action
+        if self._state == StreamState.IDLE:
+            return await self._start_unlocked(new_url)
         
-        # If idle, start fresh (lock released)
-        if should_start_fresh:
-            return await self.start(new_url)
+        if self._state != StreamState.RUNNING:
+            logger.warning(f'Cannot switch in state {self._state}')
+            return False
         
-        # Proceed with switch (state is SWITCHING)
+        if new_url == self._current_url:
+            logger.debug('Same URL, no switch needed')
+            return True
+        
+        self._state = StreamState.SWITCHING
         
         logger.info(f'Switching stream to: {new_url[:60]}...')
         
@@ -153,6 +168,11 @@ class StreamManager:
                 self._state = StreamState.IDLE
                 return False
             
+            # Update segment store with detected stream info
+            if self._ffmpeg.stream_info:
+                info = self._ffmpeg.stream_info
+                await segment_store.set_source_info(info.width, info.height, info.bitrate)
+            
             # Step 5: Wait for first segment from new stream
             logger.info('Waiting for new stream segment...')
             has_segment = await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT)
@@ -160,6 +180,7 @@ class StreamManager:
             if has_segment:
                 self._current_url = new_url
                 self._state = StreamState.RUNNING
+                self._recovery_attempts = 0  # Reset on successful switch
                 logger.info('Stream switch completed successfully')
                 return True
             else:
@@ -176,10 +197,14 @@ class StreamManager:
     async def stop(self) -> None:
         """Stop the stream."""
         async with self._lock:
-            if self._state == StreamState.IDLE:
-                return
-            self._state = StreamState.STOPPING
+            await self._stop_unlocked()
+    
+    async def _stop_unlocked(self) -> None:
+        """Stop the stream (caller must hold lock)."""
+        if self._state == StreamState.IDLE:
+            return
         
+        self._state = StreamState.STOPPING
         logger.info('Stopping stream...')
         self._stop_event.set()
         
@@ -198,32 +223,7 @@ class StreamManager:
         """
         while not self._stop_event.is_set():
             try:
-                if self._ffmpeg and self._state == StreamState.RUNNING:
-                    # Check if FFmpeg is still running
-                    if not self._ffmpeg.is_running:
-                        exit_code = await self._ffmpeg.wait()
-                        logger.warning(f'FFmpeg exited unexpectedly with code {exit_code}')
-                        
-                        # Try to restart with same URL
-                        if self._current_url:
-                            logger.info('Attempting crash recovery...')
-                            await segment_store.mark_discontinuity()
-                            
-                            next_seq = await segment_store.get_next_sequence()
-                            self._ffmpeg = FFmpegRunner(on_segment=self._on_segment)
-                            
-                            if await self._ffmpeg.start(self._current_url, next_seq):
-                                # Wait for segment to confirm recovery worked
-                                if await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT):
-                                    logger.info('Crash recovery successful')
-                                else:
-                                    logger.error('Crash recovery: no segment produced')
-                                    await self._ffmpeg.stop()
-                                    self._state = StreamState.IDLE
-                            else:
-                                logger.error('Crash recovery failed')
-                                self._state = StreamState.IDLE
-                
+                await self._check_and_recover()
                 await asyncio.sleep(1.0)
                 
             except asyncio.CancelledError:
@@ -231,6 +231,59 @@ class StreamManager:
             except Exception as e:
                 logger.error(f'Error in stream manager loop: {e}')
                 await asyncio.sleep(1.0)
+    
+    async def _check_and_recover(self) -> None:
+        """Check FFmpeg health and attempt recovery if needed."""
+        async with self._lock:
+            if not self._ffmpeg or self._state != StreamState.RUNNING:
+                return
+            
+            # Check if FFmpeg is still running
+            if self._ffmpeg.is_running:
+                return
+            
+            exit_code = await self._ffmpeg.wait()
+            logger.warning(f'FFmpeg exited unexpectedly with code {exit_code}')
+            
+            # Try to restart with same URL
+            if not self._current_url:
+                self._state = StreamState.IDLE
+                return
+            
+            # Exponential backoff before retry (capped at max)
+            self._recovery_attempts += 1
+            backoff = min(
+                RECOVERY_BACKOFF_BASE * (2 ** (self._recovery_attempts - 1)),
+                RECOVERY_BACKOFF_MAX
+            )
+            logger.info(
+                f'Attempting crash recovery (attempt {self._recovery_attempts}, '
+                f'backoff {backoff:.1f}s)...'
+            )
+            await asyncio.sleep(backoff)
+            
+            await segment_store.mark_discontinuity()
+            
+            next_seq = await segment_store.get_next_sequence()
+            self._ffmpeg = FFmpegRunner(on_segment=self._on_segment)
+            
+            if await self._ffmpeg.start(self._current_url, next_seq):
+                # Update segment store with detected stream info
+                if self._ffmpeg.stream_info:
+                    info = self._ffmpeg.stream_info
+                    await segment_store.set_source_info(info.width, info.height, info.bitrate)
+                
+                # Wait for segment to confirm recovery worked
+                if await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT):
+                    logger.info('Crash recovery successful')
+                    self._recovery_attempts = 0  # Reset on success
+                else:
+                    logger.error('Crash recovery: no segment produced')
+                    await self._ffmpeg.stop()
+                    # Don't set IDLE here, let it retry on next loop iteration
+            else:
+                logger.error('Crash recovery: failed to start FFmpeg')
+                # Don't set IDLE here, let it retry on next loop iteration
     
     async def _on_segment(self, variant: int, filename: str, duration: float) -> None:
         """Callback when FFmpeg produces a new segment."""
