@@ -108,7 +108,7 @@ class CoreAPIClient:
     # ------------------------------------------------------------------
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
-        """Make an authenticated request with retry support."""
+        """Make an authenticated request with retry support and automatic re-auth on 401."""
         url = f'{self.base_url}{path}'
         headers = self._get_headers()
         transport = httpx.HTTPTransport(retries=self.retries)
@@ -116,6 +116,14 @@ class CoreAPIClient:
             resp = client.request(
                 method, url, headers=headers, timeout=self.timeout, **kwargs
             )
+            # If we get 401, try to re-authenticate and retry once
+            if resp.status_code == 401:
+                self.logger.warning('Received 401, attempting re-authentication...')
+                self.login()
+                headers = self._get_headers()
+                resp = client.request(
+                    method, url, headers=headers, timeout=self.timeout, **kwargs
+                )
         resp.raise_for_status()
         return resp
 
