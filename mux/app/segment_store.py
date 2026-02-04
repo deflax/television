@@ -152,7 +152,7 @@ class SegmentStore:
                     self._delete_segment_file(old_seg)
                 logger.debug(f'Trimmed {len(excess)} excess segments from variant {variant}')
             
-            logger.debug(f'Added segment: variant={variant} seq={segment.sequence} file={filename}')
+            logger.info(f'Added segment: variant={variant} seq={segment.sequence} file={filename} next_seq={self._next_sequence}')
             return segment
     
     async def mark_discontinuity(self) -> None:
@@ -177,6 +177,7 @@ class SegmentStore:
         continuous numbering across stream switches.
         """
         async with self._lock:
+            logger.info(f'get_next_sequence called, returning {self._next_sequence}')
             return self._next_sequence
     
     def _delete_segment_file(self, seg: Segment) -> bool:
