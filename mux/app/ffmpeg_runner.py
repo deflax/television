@@ -268,9 +268,6 @@ class FFmpegRunner:
         self._pending_segments: dict[str, int] = {}  # file_key -> retry count
         self._stream_info: Optional[StreamInfo] = None
         self._start_number: int = 0  # Filter to ignore segments below this
-        # For remapping segment numbers when FFmpeg skips ahead (common with HLS input)
-        self._first_segment_seen: Optional[int] = None
-        self._sequence_offset: int = 0
     
     @property
     def stream_info(self) -> Optional[StreamInfo]:
@@ -295,9 +292,6 @@ class FFmpegRunner:
         self._pending_segments.clear()
         # Store start_number to filter out old segments that appear after we start
         self._start_number = start_number
-        # Reset segment remapping - will be calculated when first segment arrives
-        self._first_segment_seen = None
-        self._sequence_offset = 0
         
         # Probe stream to detect resolution/bitrate (non-blocking, best effort)
         self._stream_info = await probe_stream(input_url)
@@ -465,37 +459,11 @@ class FFmpegRunner:
                                 logger.debug(f'Ignoring old segment {ts_file.name} (below start {self._start_number})')
                                 continue
                             
-                            # Calculate offset on first segment (FFmpeg may skip ahead with HLS input)
-                            if self._first_segment_seen is None:
-                                self._first_segment_seen = seg_num
-                                if seg_num > self._start_number:
-                                    self._sequence_offset = seg_num - self._start_number
-                                    logger.info(
-                                        f'FFmpeg started at segment {seg_num} instead of {self._start_number}, '
-                                        f'applying offset of -{self._sequence_offset}'
-                                    )
-                            
                             # Use configured segment time as duration estimate
                             duration = float(HLS_SEGMENT_TIME)
                             
                             if self._on_segment:
-                                # Pass the remapped filename with corrected sequence number
-                                remapped_seq = seg_num - self._sequence_offset
-                                remapped_filename = f'segment_{remapped_seq:05d}.ts'
-                                
-                                # Rename the actual file on disk to match
-                                if self._sequence_offset > 0:
-                                    old_path = ts_file
-                                    new_path = ts_file.parent / remapped_filename
-                                    try:
-                                        old_path.rename(new_path)
-                                        logger.debug(f'Renamed {ts_file.name} -> {remapped_filename}')
-                                    except OSError as e:
-                                        logger.warning(f'Failed to rename segment: {e}')
-                                        # Use original filename if rename fails
-                                        remapped_filename = ts_file.name
-                                
-                                await self._on_segment(variant, remapped_filename, duration)
+                                await self._on_segment(variant, ts_file.name, duration)
                 
             except asyncio.CancelledError:
                 break
