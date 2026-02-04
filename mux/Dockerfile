@@ -19,5 +19,8 @@ COPY scripts/ /scripts/
 # Make run script executable
 RUN chmod +x /scripts/run.sh
 
+# Expose HTTP port
+EXPOSE 8091
+
 # Run the service
 CMD ["/scripts/run.sh"]

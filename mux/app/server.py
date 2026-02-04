@@ -20,11 +20,15 @@ logger = logging.getLogger(__name__)
 SEGMENT_RETRY_DELAYS = (0.1, 0.2, 0.3, 0.5, 0.7)
 
 
-# Silence noisy access logs
+# Silence noisy access logs (health checks and playlist requests only)
 class QuietAccessFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
-        if '200' in msg and ('/health' in msg or '/live/' in msg):
+        # Silence health checks
+        if '200' in msg and '/health' in msg:
+            return False
+        # Silence playlist requests but not segment requests
+        if '200' in msg and '.m3u8' in msg:
             return False
         return True
 
@@ -32,6 +36,21 @@ class QuietAccessFilter(logging.Filter):
 logging.getLogger('uvicorn.access').addFilter(QuietAccessFilter())
 
 app = Quart(__name__)
+
+
+# CORS headers for all responses
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+
+@app.route('/live/stream_<int:variant>/<path:path>', methods=['OPTIONS'])
+@app.route('/live/<path:path>', methods=['OPTIONS'])
+async def cors_preflight(**kwargs):
+    """Handle CORS preflight requests."""
+    return Response('', status=204, headers=CORS_HEADERS)
 
 
 @app.route('/health')
@@ -62,7 +81,7 @@ async def master_playlist():
         mimetype='application/vnd.apple.mpegurl',
         headers={
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Access-Control-Allow-Origin': '*',
+            **CORS_HEADERS,
         }
     )
 
@@ -80,7 +99,7 @@ async def variant_playlist(variant: int):
         mimetype='application/vnd.apple.mpegurl',
         headers={
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Access-Control-Allow-Origin': '*',
+            **CORS_HEADERS,
         }
     )
 
@@ -143,7 +162,8 @@ async def _serve_segment(file_path: Path) -> Response:
         mimetype='video/mp2t',
     )
     response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
-    response.headers['Access-Control-Allow-Origin'] = '*'
+    for key, value in CORS_HEADERS.items():
+        response.headers[key] = value
     return response
 
 

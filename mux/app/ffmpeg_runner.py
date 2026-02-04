@@ -28,9 +28,6 @@ logger = logging.getLogger(__name__)
 SEGMENT_PATTERN = re.compile(r'segment_(\d+)\.ts$')
 
 
-
-
-
 def _build_icecast_output(cmd: list[str]) -> None:
     """Append Icecast audio-only output arguments to cmd."""
     if not ICECAST_ENABLED:
