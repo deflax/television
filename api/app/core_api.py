@@ -137,3 +137,23 @@ class CoreAPIClient:
         """PUT /api/v3/process/{id}/command — send start/stop/restart/reload."""
         resp = self._request('PUT', f'/api/v3/process/{id}/command', json={'command': command})
         return resp.json()
+
+    def v3_process_get_report(self, id: str) -> dict:
+        """GET /api/v3/process/{id}/report — returns detailed process report including I/O stats."""
+        resp = self._request('GET', f'/api/v3/process/{id}/report')
+        return resp.json()
+
+    def v3_process_get_state(self, id: str) -> dict:
+        """GET /api/v3/process/{id}/state — returns detailed process state information."""
+        resp = self._request('GET', f'/api/v3/process/{id}/state')
+        return resp.json()
+
+    def v3_process_get_probe(self, id: str) -> dict:
+        """GET /api/v3/process/{id}/probe — returns FFprobe information about inputs."""
+        resp = self._request('GET', f'/api/v3/process/{id}/probe')
+        return resp.json()
+
+    def v3_process_get_config(self, id: str) -> dict:
+        """GET /api/v3/process/{id}/config — returns process configuration."""
+        resp = self._request('GET', f'/api/v3/process/{id}/config')
+        return resp.json()
