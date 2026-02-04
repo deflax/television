@@ -191,10 +191,6 @@ class StreamManager:
                     self.logger.info(
                         f'{stream_hls_url} accessible after {req_counter} attempts.'
                     )
-                    self.logger.info(
-                        f'Waiting extra {self.config.enable_delay} seconds before we initiate the stream...'
-                    )
-                    time.sleep(self.config.enable_delay)
                     return True
             except Exception as e:
                 self.logger.debug(f'Stream access check failed: {e}')
