@@ -373,73 +373,6 @@ class StreamManager:
                 f'Source with higher priority ({self.priority}) is blocking. Skipping playhead update.'
             )
     
-    def check_for_incoming_connections(
-        self, 
-        process_id: str, 
-        stream_id: str, 
-        stream_name: str,
-        stream_description: str,
-        state: Optional[dict]
-    ) -> bool:
-        """Check if a stopped process with prio=2 has incoming RTMP/SRT connections and auto-start if needed.
-        
-        Returns True if the process was auto-started, False otherwise.
-        """
-        # Only check stopped processes
-        if state and state.get('exec') == "running":
-            return False
-        
-        # Parse priority from description - only check prio=2 channels
-        try:
-            api_settings = ast.literal_eval(stream_description)
-            stream_prio = api_settings.get('prio', 0)
-            
-            if stream_prio != 2:
-                # Only auto-start channels with prio=2
-                return False
-        except Exception as e:
-            self.logger.debug(f'Failed to parse priority for {stream_name}: {e}')
-            return False
-        
-        try:
-            # Get detailed report which includes I/O statistics
-            report = self.client.v3_process_get_report(process_id)
-            
-            # Check for active input connections in the report
-            # The report typically contains input/output stats with connection info
-            if report and 'io' in report:
-                inputs = report['io'].get('input', [])
-                for input_info in inputs:
-                    # Check if input is receiving data or has active connections
-                    # Different input types may have different indicators
-                    state_info = input_info.get('state', '')
-                    
-                    # Common indicators of active connection:
-                    # - state: "connected", "receiving", "active"
-                    # - bytes > 0 and increasing
-                    # - url contains rtmp:// or srt://
-                    if state_info in ('connected', 'receiving', 'active'):
-                        self.logger.info(
-                            f'Detected incoming connection for stopped process {stream_name} '
-                            f'(prio={stream_prio}, state={state_info}). Auto-starting channel.'
-                        )
-                        # Auto-start the channel
-                        result = self.process_command(process_id, 'start')
-                        if result.get('success'):
-                            self.logger.info(f'Successfully auto-started channel {stream_name}')
-                            return True
-                        else:
-                            self.logger.error(
-                                f'Failed to auto-start channel {stream_name}: {result.get("message")}'
-                            )
-                        return False
-                        
-        except Exception as e:
-            # If the report endpoint doesn't exist or returns error, log and continue
-            self.logger.debug(f'Could not check connection status for {stream_name}: {e}')
-        
-        return False
-    
     def core_api_sync(self) -> None:
         """Synchronize with Datarhei CORE API."""
         new_ids = []
@@ -478,16 +411,9 @@ class StreamManager:
                     stream_id, stream_name, stream_description, stream_hls_url
                 )
             else:
-                # Check for incoming connections on stopped processes with prio=2
-                auto_started = self.check_for_incoming_connections(
-                    process['id'], stream_id, stream_name, stream_description, state
-                )
-                
-                # If not auto-started, proceed with normal removal
-                if not auto_started:
-                    self.remove_channel_from_database(stream_id, stream_name, state)
-                    if stream_id in new_ids:
-                        new_ids.remove(stream_id)
+                self.remove_channel_from_database(stream_id, stream_name, state)
+                if stream_id in new_ids:
+                    new_ids.remove(stream_id)
         
         # Cleanup orphaned references
         orphan_keys = [key for key in self.database if key not in new_ids]
