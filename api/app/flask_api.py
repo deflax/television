@@ -17,7 +17,6 @@ from discord_bot_manager import DiscordBotManager
 
 # Constants
 DEFAULT_REC_PATH = "/recordings"
-DEFAULT_ENABLE_DELAY = 24
 DEFAULT_CORE_SYNC_PERIOD = 15
 CORE_API_SYNC_JOB_ID = 'core_api_sync'
 
@@ -40,7 +39,6 @@ class Config:
         self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
         self.core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', DEFAULT_CORE_SYNC_PERIOD))
         self.rec_path = DEFAULT_REC_PATH
-        self.enable_delay = DEFAULT_ENABLE_DELAY
         self.server_name = os.environ.get('SERVER_NAME')
         self.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
         self.discord_bot_enabled = os.environ.get('DISCORDBOT_ENABLED', 'false').lower() == 'true'
