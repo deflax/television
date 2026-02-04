@@ -85,7 +85,7 @@ services:
   mux:
     depends_on:
       - "api"
-      - "icecast"
+      # - "icecast"
     build: ./mux
     image: tv-mux:latest
     env_file:
