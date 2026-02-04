@@ -116,9 +116,7 @@ async def serve_master_playlist():
     response = await send_file(
         playlist_path,
         mimetype='application/vnd.apple.mpegurl',
-        cache_timeout=0,
-        conditional=True,
-        etag=False
+        cache_timeout=0
     )
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -161,9 +159,7 @@ async def serve_file(filename: str):
     response = await send_file(
         file_path,
         mimetype=mimetype,
-        cache_timeout=cache_timeout,
-        conditional=True,
-        etag=False
+        cache_timeout=cache_timeout
     )
     for key, value in _response_headers(filename).items():
         response.headers[key] = value
