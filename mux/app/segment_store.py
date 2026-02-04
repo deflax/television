@@ -11,12 +11,13 @@ relationships. It handles:
 import asyncio
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from config import HLS_OUTPUT_DIR, HLS_LIST_SIZE, HLS_SEGMENT_TIME, MAX_SEGMENT_AGE, NUM_VARIANTS
+from config import HLS_OUTPUT_DIR, HLS_LIST_SIZE, HLS_SEGMENT_TIME, MAX_SEGMENT_AGE, NUM_VARIANTS, parse_bitrate
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,6 @@ class SegmentStore:
         self._segments: dict[int, list[Segment]] = {i: [] for i in range(NUM_VARIANTS)}
         self._next_sequence = 0
         self._pending_discontinuity = False
-        self._current_source: Optional[str] = None
     
     async def add_segment(
         self,
@@ -71,7 +71,6 @@ class SegmentStore:
         """
         async with self._lock:
             # Extract sequence number from filename (segment_00001.ts -> 1)
-            import re
             match = re.search(r'segment_(\d+)\.ts$', filename)
             if match:
                 seq = int(match.group(1))
@@ -87,24 +86,23 @@ class SegmentStore:
             discontinuity = False
             if self._pending_discontinuity:
                 # Check if we already have a segment at this sequence
-                has_segment_at_seq = any(
-                    seg.sequence == seq 
-                    for segs in self._segments.values() 
-                    for seg in segs
-                )
-                if not has_segment_at_seq:
+                existing_seg = None
+                for segs in self._segments.values():
+                    for seg in segs:
+                        if seg.sequence == seq:
+                            existing_seg = seg
+                            break
+                    if existing_seg:
+                        break
+                
+                if existing_seg is None:
+                    # First segment at this sequence gets the discontinuity
                     discontinuity = True
                     logger.info(f'Added discontinuity before segment {seq}')
                     self._pending_discontinuity = False
                 else:
                     # Copy discontinuity flag from existing segment at this sequence
-                    for segs in self._segments.values():
-                        for seg in segs:
-                            if seg.sequence == seq:
-                                discontinuity = seg.discontinuity_before
-                                break
-                        if discontinuity:
-                            break
+                    discontinuity = existing_seg.discontinuity_before
             
             segment = Segment(
                 sequence=seq,
@@ -119,12 +117,10 @@ class SegmentStore:
             logger.debug(f'Added segment: variant={variant} seq={segment.sequence} file={filename}')
             return segment
     
-    async def mark_discontinuity(self, new_source: Optional[str] = None) -> None:
+    async def mark_discontinuity(self) -> None:
         """Mark that the next segment should have a discontinuity tag."""
         async with self._lock:
             self._pending_discontinuity = True
-            if new_source:
-                self._current_source = new_source
             logger.info('Discontinuity marked for next segment')
     
     async def get_segments(self, variant: int, count: Optional[int] = None) -> list[Segment]:
@@ -135,26 +131,10 @@ class SegmentStore:
                 return segments[-count:]
             return segments.copy()
     
-    async def get_media_sequence(self, variant: int) -> int:
-        """Get the media sequence number for the first segment in playlist."""
-        async with self._lock:
-            segments = self._segments.get(variant, [])
-            if not segments:
-                return 0
-            # Return sequence of first segment that would be in playlist
-            start_idx = max(0, len(segments) - HLS_LIST_SIZE)
-            return segments[start_idx].sequence
-    
     async def get_next_sequence(self) -> int:
         """Get the next sequence number that will be assigned."""
         async with self._lock:
             return self._next_sequence
-    
-    async def set_next_sequence(self, value: int) -> None:
-        """Set the next sequence number (used for initialization)."""
-        async with self._lock:
-            self._next_sequence = value
-            logger.debug(f'Segment sequence set to {value}')
     
     async def cleanup_old_segments(self) -> int:
         """Remove segments older than MAX_SEGMENT_AGE.
@@ -191,38 +171,42 @@ class SegmentStore:
     async def generate_playlist(self, variant: int) -> str:
         """Generate an HLS playlist for the given variant."""
         async with self._lock:
-            segments = self._segments.get(variant, [])
-            
-            # Get most recent segments up to list size
-            playlist_segments = segments[-HLS_LIST_SIZE:] if segments else []
-            
-            if not playlist_segments:
-                # Return minimal valid playlist
-                return (
-                    '#EXTM3U\n'
-                    '#EXT-X-VERSION:3\n'
-                    f'#EXT-X-TARGETDURATION:{HLS_SEGMENT_TIME}\n'
-                    '#EXT-X-MEDIA-SEQUENCE:0\n'
-                )
-            
-            media_sequence = playlist_segments[0].sequence
-            max_duration = max(seg.duration for seg in playlist_segments)
-            target_duration = int(max_duration) + 1
-            
-            lines = [
-                '#EXTM3U',
-                '#EXT-X-VERSION:3',
-                f'#EXT-X-TARGETDURATION:{target_duration}',
-                f'#EXT-X-MEDIA-SEQUENCE:{media_sequence}',
-            ]
-            
-            for seg in playlist_segments:
-                if seg.discontinuity_before:
-                    lines.append('#EXT-X-DISCONTINUITY')
-                lines.append(f'#EXTINF:{seg.duration:.3f},')
-                lines.append(seg.filename)
-            
-            return '\n'.join(lines) + '\n'
+            return self._generate_playlist_unlocked(variant)
+    
+    def _generate_playlist_unlocked(self, variant: int) -> str:
+        """Generate playlist without acquiring lock (caller must hold lock)."""
+        segments = self._segments.get(variant, [])
+        
+        # Get most recent segments up to list size
+        playlist_segments = segments[-HLS_LIST_SIZE:] if segments else []
+        
+        if not playlist_segments:
+            # Return minimal valid playlist
+            return (
+                '#EXTM3U\n'
+                '#EXT-X-VERSION:3\n'
+                f'#EXT-X-TARGETDURATION:{HLS_SEGMENT_TIME}\n'
+                '#EXT-X-MEDIA-SEQUENCE:0\n'
+            )
+        
+        media_sequence = playlist_segments[0].sequence
+        max_duration = max(seg.duration for seg in playlist_segments)
+        target_duration = int(max_duration) + 1
+        
+        lines = [
+            '#EXTM3U',
+            '#EXT-X-VERSION:3',
+            f'#EXT-X-TARGETDURATION:{target_duration}',
+            f'#EXT-X-MEDIA-SEQUENCE:{media_sequence}',
+        ]
+        
+        for seg in playlist_segments:
+            if seg.discontinuity_before:
+                lines.append('#EXT-X-DISCONTINUITY')
+            lines.append(f'#EXTINF:{seg.duration:.3f},')
+            lines.append(seg.filename)
+        
+        return '\n'.join(lines) + '\n'
     
     async def generate_master_playlist(self) -> str:
         """Generate the master playlist for ABR mode."""
@@ -231,7 +215,8 @@ class SegmentStore:
         if MUX_MODE != 'abr':
             # In copy mode, generate playlist directly (no master needed)
             # This shouldn't normally be called in copy mode
-            return await self.generate_playlist(0)
+            async with self._lock:
+                return self._generate_playlist_unlocked(0)
         
         lines = [
             '#EXTM3U',
@@ -244,8 +229,8 @@ class SegmentStore:
         
         # ABR variants
         for i, variant in enumerate(ABR_VARIANTS):
-            bandwidth = _parse_bitrate(variant['video_bitrate']) * 1000
-            bandwidth += _parse_bitrate(variant['audio_bitrate']) * 1000
+            bandwidth = parse_bitrate(variant['video_bitrate']) * 1000
+            bandwidth += parse_bitrate(variant['audio_bitrate']) * 1000
             height = variant['height']
             width = int(height * 16 / 9)  # Assume 16:9
             
@@ -254,15 +239,6 @@ class SegmentStore:
         
         return '\n'.join(lines) + '\n'
 
-
-def _parse_bitrate(bitrate_str: str) -> int:
-    """Parse a human-readable bitrate string to integer kbps."""
-    bitrate_str = bitrate_str.lower().strip()
-    if bitrate_str.endswith('m'):
-        return int(float(bitrate_str[:-1]) * 1000)
-    if bitrate_str.endswith('k'):
-        return int(float(bitrate_str[:-1]))
-    return int(bitrate_str)
 
 
 def setup_output_dirs() -> None:

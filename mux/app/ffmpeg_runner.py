@@ -7,7 +7,7 @@ registering them with the segment store as they appear.
 import asyncio
 import logging
 import re
-import subprocess
+import time
 from pathlib import Path
 from typing import Optional, Callable, Awaitable
 
@@ -18,7 +18,9 @@ from config import (
     ICECAST_SOURCE_PASSWORD, ICECAST_MOUNT,
     ICECAST_AUDIO_BITRATE, ICECAST_AUDIO_FORMAT,
     NUM_VARIANTS, SEGMENT_STABILITY_DELAY,
+    parse_bitrate,
 )
+from utils import wait_for_stable_file
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +28,7 @@ logger = logging.getLogger(__name__)
 SEGMENT_PATTERN = re.compile(r'segment_(\d+)\.ts$')
 
 
-def _parse_bitrate(bitrate_str: str) -> int:
-    """Parse a human-readable bitrate string to integer kbps."""
-    bitrate_str = bitrate_str.lower().strip()
-    if bitrate_str.endswith('m'):
-        return int(float(bitrate_str[:-1]) * 1000)
-    if bitrate_str.endswith('k'):
-        return int(float(bitrate_str[:-1]))
-    return int(bitrate_str)
+
 
 
 def _build_icecast_output(cmd: list[str]) -> None:
@@ -131,7 +126,7 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
         vb = variant['video_bitrate']
         ab = variant['audio_bitrate']
         
-        kbps = _parse_bitrate(vb)
+        kbps = parse_bitrate(vb)
         maxrate = f'{int(kbps * 1.07)}k'
         bufsize = f'{int(kbps * 1.5)}k'
         
@@ -188,18 +183,11 @@ class FFmpegRunner:
         self._watcher_task: Optional[asyncio.Task] = None
         self._stderr_task: Optional[asyncio.Task] = None
         self._known_segments: set[str] = set()
-        self._current_url: Optional[str] = None
-        self._start_number: int = 0
     
     @property
     def is_running(self) -> bool:
         """Check if FFmpeg process is running."""
         return self._running and self._process is not None and self._process.returncode is None
-    
-    @property
-    def current_url(self) -> Optional[str]:
-        """Get the current input URL."""
-        return self._current_url
     
     async def start(self, input_url: str, start_number: int = 0) -> bool:
         """Start FFmpeg with the given input URL.
@@ -210,8 +198,6 @@ class FFmpegRunner:
             logger.warning('FFmpeg already running, stopping first')
             await self.stop()
         
-        self._current_url = input_url
-        self._start_number = start_number
         self._known_segments = self._scan_existing_segments()
         
         cmd = build_ffmpeg_command(input_url, start_number)
@@ -300,9 +286,9 @@ class FFmpegRunner:
         Returns True if a segment was produced within timeout.
         """
         start_count = len(self._known_segments)
-        deadline = asyncio.get_event_loop().time() + timeout
+        deadline = time.monotonic() + timeout
         
-        while asyncio.get_event_loop().time() < deadline:
+        while time.monotonic() < deadline:
             if len(self._known_segments) > start_count:
                 return True
             if not self.is_running:
@@ -346,7 +332,7 @@ class FFmpegRunner:
                             continue
                         
                         # Wait for file to stabilize
-                        if not await self._wait_for_stable_file(ts_file):
+                        if not await wait_for_stable_file(ts_file, SEGMENT_STABILITY_DELAY):
                             continue
                         
                         self._known_segments.add(file_key)
@@ -364,28 +350,6 @@ class FFmpegRunner:
                 break
             except Exception as e:
                 logger.error(f'Error watching segments: {e}')
-    
-    async def _wait_for_stable_file(self, path: Path, max_attempts: int = 10) -> bool:
-        """Wait until file size stops changing."""
-        try:
-            for _ in range(max_attempts):
-                if not path.exists():
-                    return False
-                
-                size1 = path.stat().st_size
-                await asyncio.sleep(SEGMENT_STABILITY_DELAY)
-                
-                if not path.exists():
-                    return False
-                
-                size2 = path.stat().st_size
-                
-                if size1 == size2 and size1 > 0:
-                    return True
-            
-            return True  # Proceed anyway after max attempts
-        except Exception:
-            return False
     
     async def _drain_stderr(self) -> None:
         """Read and log FFmpeg stderr output."""

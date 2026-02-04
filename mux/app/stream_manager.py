@@ -12,7 +12,7 @@ import logging
 from enum import Enum, auto
 from typing import Optional
 
-from config import TRANSITION_TIMEOUT, HLS_OUTPUT_DIR, NUM_VARIANTS
+from config import TRANSITION_TIMEOUT
 from segment_store import segment_store, setup_output_dirs
 from ffmpeg_runner import FFmpegRunner
 
@@ -42,9 +42,7 @@ class StreamManager:
         self._state = StreamState.IDLE
         self._ffmpeg: Optional[FFmpegRunner] = None
         self._current_url: Optional[str] = None
-        self._pending_url: Optional[str] = None
         self._lock = asyncio.Lock()
-        self._switch_event = asyncio.Event()
         self._stop_event = asyncio.Event()
     
     @property
@@ -111,10 +109,10 @@ class StreamManager:
         Returns True if switch was successful.
         """
         # Check state and decide action
+        should_start_fresh = False
         async with self._lock:
             if self._state == StreamState.IDLE:
-                # Release lock before calling start to avoid deadlock
-                pass
+                should_start_fresh = True
             elif self._state != StreamState.RUNNING:
                 logger.warning(f'Cannot switch in state {self._state}')
                 return False
@@ -123,10 +121,9 @@ class StreamManager:
                 return True
             else:
                 self._state = StreamState.SWITCHING
-                self._pending_url = new_url
         
         # If idle, start fresh (lock released)
-        if self._state == StreamState.IDLE:
+        if should_start_fresh:
             return await self.start(new_url)
         
         # Proceed with switch (state is SWITCHING)
@@ -141,7 +138,7 @@ class StreamManager:
                 await self._ffmpeg.stop(graceful_timeout=5.0)
             
             # Step 2: Mark discontinuity in segment store
-            await segment_store.mark_discontinuity(new_url)
+            await segment_store.mark_discontinuity()
             
             # Step 3: Get next sequence number (after all current segments)
             next_seq = await segment_store.get_next_sequence()
@@ -162,7 +159,6 @@ class StreamManager:
             
             if has_segment:
                 self._current_url = new_url
-                self._pending_url = None
                 self._state = StreamState.RUNNING
                 logger.info('Stream switch completed successfully')
                 return True
