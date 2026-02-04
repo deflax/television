@@ -240,7 +240,6 @@ class SegmentStore:
         return '\n'.join(lines) + '\n'
 
 
-
 def setup_output_dirs() -> None:
     """Create the HLS output directory structure."""
     os.makedirs(HLS_OUTPUT_DIR, exist_ok=True)

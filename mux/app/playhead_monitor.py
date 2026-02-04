@@ -67,13 +67,12 @@ class PlayheadMonitor:
         """
         self._on_change = on_change
         self._current_url: Optional[str] = None
-        self._current_name: Optional[str] = None
         self._lock = asyncio.Lock()
         self._running = False
     
     @property
     def current_url(self) -> Optional[str]:
-        """Get the current stream URL (thread-safe)."""
+        """Get the current stream URL."""
         return self._current_url
     
     async def run(self) -> None:
@@ -151,7 +150,6 @@ class PlayheadMonitor:
             
             logger.info(f'Playhead changed: {stream_name} -> {new_url[:50]}...')
             self._current_url = new_url
-            self._current_name = stream_name
         
         # Notify callback
         if self._on_change:

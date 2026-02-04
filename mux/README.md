@@ -51,6 +51,7 @@ HLS stream multiplexer that monitors an API playhead via SSE and switches betwee
 |------|-------------|
 | `main.py` | Entry point, starts all async tasks |
 | `config.py` | Environment configuration |
+| `utils.py` | Shared utilities (file stability checks) |
 | `segment_store.py` | Central store for segments, generates playlists |
 | `ffmpeg_runner.py` | FFmpeg process wrapper with segment detection |
 | `stream_manager.py` | Handles stream lifecycle and transitions |
@@ -148,7 +149,7 @@ cd app && python main.py
 
 ## Dependencies
 
-- Python 3.11+
+- Python 3.10+ (uses `X | None` union syntax)
 - FFmpeg with libx264 and libmp3lame
 - httpx (async HTTP client)
 - quart (async web framework)
@@ -164,3 +165,45 @@ data: {"head": "https://example.com/stream.m3u8", "name": "Stream Name"}
 ```
 
 The `head` field contains the HLS stream URL to switch to. The `name` field is used for logging.
+
+## File Structure
+
+```
+/workspace
+├── app/
+│   ├── config.py           # Environment configuration
+│   ├── utils.py            # Shared utilities
+│   ├── segment_store.py    # Segment tracking and playlist generation
+│   ├── ffmpeg_runner.py    # FFmpeg process management
+│   ├── stream_manager.py   # Stream lifecycle and transitions
+│   ├── playhead_monitor.py # SSE client for API events
+│   ├── server.py           # HTTP server (Quart/uvicorn)
+│   └── main.py             # Entry point
+├── scripts/
+│   └── run.sh              # Docker entrypoint
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
+## Troubleshooting
+
+### Stream not starting
+- Check that the API is reachable at `API_URL`
+- Verify the API returns valid SSE events with `head` field
+- Check FFmpeg logs (set log level to DEBUG)
+
+### Playback issues after switch
+- This should not happen with the new architecture
+- If it does, check that `#EXT-X-DISCONTINUITY` tags appear in playlists
+- Verify segment sequence numbers are monotonically increasing
+
+### High CPU usage
+- In ABR mode, transcoding requires significant CPU
+- Consider using `ABR_PRESET=ultrafast` for lower CPU at cost of quality
+- In copy mode, CPU usage should be minimal
+
+### Segments not cleaning up
+- Cleanup runs every 30 seconds
+- Segments older than `HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3` seconds are removed
+- Check logs for cleanup errors

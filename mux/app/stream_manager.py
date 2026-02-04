@@ -213,7 +213,13 @@ class StreamManager:
                             self._ffmpeg = FFmpegRunner(on_segment=self._on_segment)
                             
                             if await self._ffmpeg.start(self._current_url, next_seq):
-                                logger.info('Crash recovery successful')
+                                # Wait for segment to confirm recovery worked
+                                if await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT):
+                                    logger.info('Crash recovery successful')
+                                else:
+                                    logger.error('Crash recovery: no segment produced')
+                                    await self._ffmpeg.stop()
+                                    self._state = StreamState.IDLE
                             else:
                                 logger.error('Crash recovery failed')
                                 self._state = StreamState.IDLE

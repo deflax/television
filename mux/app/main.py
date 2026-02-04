@@ -17,7 +17,7 @@ import signal
 from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT
 from playhead_monitor import PlayheadMonitor
 from stream_manager import stream_manager
-from segment_store import segment_store, setup_output_dirs
+from segment_store import segment_store
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +31,9 @@ logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 # Shutdown event
 shutdown_event = asyncio.Event()
+
+# Playhead monitor (set in main())
+_monitor: PlayheadMonitor | None = None
 
 
 async def on_playhead_change(new_url: str, stream_name: str) -> None:
@@ -80,6 +83,8 @@ async def shutdown() -> None:
     """Graceful shutdown."""
     logger.info('Shutting down...')
     shutdown_event.set()
+    if _monitor:
+        _monitor.stop()
     await stream_manager.stop()
     logger.info('Shutdown complete')
 
@@ -103,16 +108,14 @@ async def main() -> None:
         )
         logger.info(f'ABR variants: source (copy) + {variant_desc}')
     
-    # Setup
-    setup_output_dirs()
-    
     # Setup signal handlers
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, handle_signal)
     
     # Create playhead monitor
-    monitor = PlayheadMonitor(on_change=on_playhead_change)
+    global _monitor
+    _monitor = PlayheadMonitor(on_change=on_playhead_change)
     
     # Start background tasks
     manager_task = asyncio.create_task(stream_manager.run_loop())
@@ -121,7 +124,7 @@ async def main() -> None:
     
     # Run playhead monitor (blocks until stopped)
     try:
-        await monitor.run()
+        await _monitor.run()
     except asyncio.CancelledError:
         pass
     
