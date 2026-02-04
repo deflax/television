@@ -5,9 +5,11 @@ registering them with the segment store as they appear.
 """
 
 import asyncio
+import json
 import logging
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Callable, Awaitable
 
@@ -26,6 +28,85 @@ logger = logging.getLogger(__name__)
 
 # Regex to extract segment number from filename
 SEGMENT_PATTERN = re.compile(r'segment_(\d+)\.ts$')
+
+
+@dataclass
+class StreamInfo:
+    """Detected properties of an input stream."""
+    width: int = 1920
+    height: int = 1080
+    bitrate: int = 8000000  # bits per second
+    
+    @property
+    def resolution(self) -> str:
+        return f'{self.width}x{self.height}'
+
+
+async def probe_stream(url: str, timeout: float = 10.0) -> Optional[StreamInfo]:
+    """Probe a stream URL to detect its properties.
+    
+    Returns StreamInfo with detected values, or None if probing fails.
+    """
+    cmd = [
+        'ffprobe',
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_format',
+        '-show_streams',
+        '-select_streams', 'v:0',  # First video stream only
+        url,
+    ]
+    
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        
+        if proc.returncode != 0:
+            logger.debug(f'ffprobe failed with code {proc.returncode}')
+            return None
+        
+        data = json.loads(stdout.decode())
+        
+        # Extract video stream info
+        streams = data.get('streams', [])
+        if not streams:
+            logger.debug('No video streams found')
+            return None
+        
+        video = streams[0]
+        width = video.get('width', 1920)
+        height = video.get('height', 1080)
+        
+        # Try to get bitrate from stream or format
+        bitrate = video.get('bit_rate')
+        if not bitrate:
+            format_info = data.get('format', {})
+            bitrate = format_info.get('bit_rate')
+        
+        # Convert to int, default to 8Mbps if not available
+        try:
+            bitrate = int(bitrate) if bitrate else 8000000
+        except (ValueError, TypeError):
+            bitrate = 8000000
+        
+        info = StreamInfo(width=width, height=height, bitrate=bitrate)
+        logger.info(f'Probed stream: {info.resolution} @ {info.bitrate // 1000}kbps')
+        return info
+        
+    except asyncio.TimeoutError:
+        logger.warning(f'Stream probe timed out after {timeout}s')
+        return None
+    except json.JSONDecodeError as e:
+        logger.warning(f'Failed to parse ffprobe output: {e}')
+        return None
+    except Exception as e:
+        logger.warning(f'Stream probe failed: {e}')
+        return None
 
 
 def _build_icecast_output(cmd: list[str]) -> None:
@@ -162,6 +243,10 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
     return cmd
 
 
+# Maximum retries for segments that fail stability check
+SEGMENT_STABILITY_MAX_RETRIES = 5
+
+
 class FFmpegRunner:
     """Manages FFmpeg process lifecycle and segment detection."""
     
@@ -180,6 +265,13 @@ class FFmpegRunner:
         self._watcher_task: Optional[asyncio.Task] = None
         self._stderr_task: Optional[asyncio.Task] = None
         self._known_segments: set[str] = set()
+        self._pending_segments: dict[str, int] = {}  # file_key -> retry count
+        self._stream_info: Optional[StreamInfo] = None
+    
+    @property
+    def stream_info(self) -> Optional[StreamInfo]:
+        """Get detected stream properties (available after start)."""
+        return self._stream_info
     
     @property
     def is_running(self) -> bool:
@@ -196,10 +288,16 @@ class FFmpegRunner:
             await self.stop()
         
         self._known_segments = self._scan_existing_segments()
+        self._pending_segments.clear()
+        
+        # Probe stream to detect resolution/bitrate (non-blocking, best effort)
+        self._stream_info = await probe_stream(input_url)
         
         cmd = build_ffmpeg_command(input_url, start_number)
         
-        logger.info(f'Starting FFmpeg: mode={MUX_MODE} start={start_number} url={input_url}')
+        # Truncate URL in logs to avoid exposing tokens/credentials
+        safe_url = input_url[:80] + '...' if len(input_url) > 80 else input_url
+        logger.info(f'Starting FFmpeg: mode={MUX_MODE} start={start_number} url={safe_url}')
         
         try:
             self._process = await asyncio.create_subprocess_exec(
@@ -330,9 +428,22 @@ class FFmpegRunner:
                         
                         # Wait for file to stabilize
                         if not await wait_for_stable_file(ts_file, SEGMENT_STABILITY_DELAY):
-                            continue
+                            # Track retry count for this segment
+                            retries = self._pending_segments.get(file_key, 0)
+                            if retries < SEGMENT_STABILITY_MAX_RETRIES:
+                                self._pending_segments[file_key] = retries + 1
+                                logger.debug(f'Segment not stable, retry {retries + 1}: {ts_file.name}')
+                                continue
+                            else:
+                                # Give up after max retries
+                                logger.warning(f'Segment never stabilized after {retries} retries: {ts_file.name}')
+                                self._known_segments.add(file_key)
+                                self._pending_segments.pop(file_key, None)
+                                continue
                         
+                        # Segment is stable, remove from pending and add to known
                         self._known_segments.add(file_key)
+                        self._pending_segments.pop(file_key, None)
                         
                         # Extract segment number and calculate duration
                         match = SEGMENT_PATTERN.search(ts_file.name)
@@ -346,7 +457,7 @@ class FFmpegRunner:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f'Error watching segments: {e}')
+                logger.error(f'Error watching segments: {e}', exc_info=True)
     
     async def _drain_stderr(self) -> None:
         """Read and log FFmpeg stderr output."""

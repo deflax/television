@@ -21,6 +21,9 @@ from config import HLS_OUTPUT_DIR, HLS_LIST_SIZE, HLS_SEGMENT_TIME, MAX_SEGMENT_
 
 logger = logging.getLogger(__name__)
 
+# Maximum segments to keep in memory per variant (prevents unbounded growth)
+MAX_SEGMENTS_IN_MEMORY = HLS_LIST_SIZE * 3
+
 
 @dataclass
 class Segment:
@@ -58,6 +61,18 @@ class SegmentStore:
         self._segments: dict[int, list[Segment]] = {i: [] for i in range(NUM_VARIANTS)}
         self._next_sequence = 0
         self._pending_discontinuity = False
+        # Source stream properties (detected via ffprobe)
+        self._source_width: int = 1920
+        self._source_height: int = 1080
+        self._source_bitrate: int = 8000000
+    
+    async def set_source_info(self, width: int, height: int, bitrate: int) -> None:
+        """Update the source stream properties for master playlist generation."""
+        async with self._lock:
+            self._source_width = width
+            self._source_height = height
+            self._source_bitrate = bitrate
+            logger.info(f'Source stream info updated: {width}x{height} @ {bitrate // 1000}kbps')
     
     async def add_segment(
         self,
@@ -114,6 +129,15 @@ class SegmentStore:
             
             self._segments[variant].append(segment)
             
+            # Prevent unbounded memory growth
+            if len(self._segments[variant]) > MAX_SEGMENTS_IN_MEMORY:
+                excess = self._segments[variant][:-MAX_SEGMENTS_IN_MEMORY]
+                self._segments[variant] = self._segments[variant][-MAX_SEGMENTS_IN_MEMORY:]
+                # Clean up files for excess segments
+                for old_seg in excess:
+                    self._delete_segment_file(old_seg)
+                logger.debug(f'Trimmed {len(excess)} excess segments from variant {variant}')
+            
             logger.debug(f'Added segment: variant={variant} seq={segment.sequence} file={filename}')
             return segment
     
@@ -136,6 +160,15 @@ class SegmentStore:
         async with self._lock:
             return self._next_sequence
     
+    def _delete_segment_file(self, seg: Segment) -> bool:
+        """Delete a segment's file from disk. Returns True if deleted."""
+        try:
+            seg.path.unlink(missing_ok=True)
+            return True
+        except Exception as e:
+            logger.warning(f'Failed to delete segment {seg.path}: {e}')
+            return False
+    
     async def cleanup_old_segments(self) -> int:
         """Remove segments older than MAX_SEGMENT_AGE.
         
@@ -157,12 +190,8 @@ class SegmentStore:
                 
                 # Delete files for old segments
                 for seg in old_segments:
-                    try:
-                        if seg.path.exists():
-                            seg.path.unlink()
-                            removed += 1
-                    except Exception as e:
-                        logger.warning(f'Failed to delete segment {seg.path}: {e}')
+                    if self._delete_segment_file(seg):
+                        removed += 1
         
         if removed > 0:
             logger.debug(f'Cleaned up {removed} old segments')
@@ -218,13 +247,18 @@ class SegmentStore:
             async with self._lock:
                 return self._generate_playlist_unlocked(0)
         
+        async with self._lock:
+            source_width = self._source_width
+            source_height = self._source_height
+            source_bitrate = self._source_bitrate
+        
         lines = [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
         ]
         
-        # Stream 0 is source copy (highest quality)
-        lines.append('#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080')
+        # Stream 0 is source copy (highest quality) - use detected values
+        lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={source_bitrate},RESOLUTION={source_width}x{source_height}')
         lines.append('stream_0/playlist.m3u8')
         
         # ABR variants
@@ -232,7 +266,11 @@ class SegmentStore:
             bandwidth = parse_bitrate(variant['video_bitrate']) * 1000
             bandwidth += parse_bitrate(variant['audio_bitrate']) * 1000
             height = variant['height']
-            width = int(height * 16 / 9)  # Assume 16:9
+            # Calculate width maintaining source aspect ratio
+            aspect_ratio = source_width / source_height if source_height > 0 else 16 / 9
+            width = int(height * aspect_ratio)
+            # Ensure width is even (required for most codecs)
+            width = width - (width % 2)
             
             lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={width}x{height}')
             lines.append(f'stream_{i + 1}/playlist.m3u8')

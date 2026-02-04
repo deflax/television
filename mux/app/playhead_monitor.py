@@ -37,8 +37,9 @@ async def wait_for_api() -> bool:
                 if resp.status_code == 200:
                     logger.info('API is ready')
                     return True
-            except (httpx.RequestError, httpx.TimeoutException):
-                pass
+                logger.debug(f'API returned status {resp.status_code}')
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                logger.debug(f'API not ready: {e}')
             except asyncio.CancelledError:
                 return False
             
@@ -124,16 +125,49 @@ class PlayheadMonitor:
                     await self._handle_line(line)
     
     async def _handle_line(self, line: str) -> None:
-        """Parse an SSE line and handle playhead changes."""
-        if not line or line.startswith('event:'):
+        """Parse an SSE line and handle playhead changes.
+        
+        SSE format (per spec):
+        - Lines starting with ':' are comments
+        - 'event: <name>' sets event type
+        - 'data: <content>' is the data payload
+        - 'id: <id>' sets last event ID
+        - 'retry: <ms>' sets reconnection time
+        - Empty line dispatches the event
+        """
+        line = line.strip()
+        
+        # Ignore empty lines and comments
+        if not line or line.startswith(':'):
             return
         
-        if not line.startswith('data: '):
+        # Handle event type (we currently ignore it but log for debugging)
+        if line.startswith('event:'):
+            event_type = line[6:].strip()
+            logger.debug(f'SSE event type: {event_type}')
+            return
+        
+        # Handle retry directive
+        if line.startswith('retry:'):
+            return
+        
+        # Handle id directive
+        if line.startswith('id:'):
+            return
+        
+        # Handle data - support both 'data: ' and 'data:' formats
+        if line.startswith('data:'):
+            data_str = line[5:].lstrip()
+        else:
+            return
+        
+        if not data_str:
             return
         
         try:
-            data = json.loads(line[6:])
-        except json.JSONDecodeError:
+            data = json.loads(data_str)
+        except json.JSONDecodeError as e:
+            logger.debug(f'Failed to parse SSE data as JSON: {e}')
             return
         
         new_url = data.get('head')
@@ -156,4 +190,4 @@ class PlayheadMonitor:
             try:
                 await self._on_change(new_url, stream_name)
             except Exception as e:
-                logger.error(f'Error in playhead change callback: {e}')
+                logger.error(f'Error in playhead change callback: {e}', exc_info=True)

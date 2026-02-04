@@ -76,7 +76,7 @@ async def cleanup_loop() -> None:
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error(f'Cleanup error: {e}')
+            logger.error(f'Cleanup error: {e}', exc_info=True)
 
 
 async def shutdown() -> None:
