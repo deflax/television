@@ -98,22 +98,22 @@ services:
     labels:
       - meta.role=mux
 
-  icecast:
-    depends_on:
-      - "api"
-    build: ./icecast
-    image: tv-icecast:latest
-    env_file:
-      - "variables.env"
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    volumes:
-      - /etc/localtime:/etc/localtime:ro 
-      - "./icecast/config/icecast.xml.template:/etc/icecast2/icecast.xml.template"
-      - "./data/icecast:/usr/share/icecast2/web/data"
-      - "./logs/icecast:/var/log/icecast2"
-    networks:
-      - net
-    labels:
-      - meta.role=icecast
+  # icecast:
+  #   depends_on:
+  #     - "api"
+  #   build: ./icecast
+  #   image: tv-icecast:latest
+  #   env_file:
+  #     - "variables.env"
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - /etc/localtime:/etc/localtime:ro 
+  #     - "./icecast/config/icecast.xml.template:/etc/icecast2/icecast.xml.template"
+  #     - "./data/icecast:/usr/share/icecast2/web/data"
+  #     - "./logs/icecast:/var/log/icecast2"
+  #   networks:
+  #     - net
+  #   labels:
+  #     - meta.role=icecast
