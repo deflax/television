@@ -15,7 +15,6 @@ HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 
 # Server settings
-SERVER_HOST = '0.0.0.0'
 SERVER_PORT = 8091
 
 # Internal restreamer URL rewriting (bypass public hostname/Cloudflare)
@@ -69,6 +68,19 @@ SEGMENT_STABILITY_DELAY = 0.1
 # Derived values
 NUM_VARIANTS = len(ABR_VARIANTS) + 1 if MUX_MODE == 'abr' else 1
 MAX_SEGMENT_AGE = HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3
+
+
+def parse_bitrate(bitrate_str: str) -> int:
+    """Parse a human-readable bitrate string to integer kbps.
+    
+    Examples: '5000k' -> 5000, '2.5m' -> 2500, '128' -> 128
+    """
+    bitrate_str = bitrate_str.lower().strip()
+    if bitrate_str.endswith('m'):
+        return int(float(bitrate_str[:-1]) * 1000)
+    if bitrate_str.endswith('k'):
+        return int(float(bitrate_str[:-1]))
+    return int(bitrate_str)
 
 
 def rewrite_stream_url(url: str) -> str:

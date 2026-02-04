@@ -12,12 +12,12 @@ from quart import Quart, Response, abort, send_file
 
 from config import HLS_OUTPUT_DIR, MUX_MODE, NUM_VARIANTS
 from segment_store import segment_store
+from utils import wait_for_stable_file
 
 logger = logging.getLogger(__name__)
 
 # Retry settings for segments that may still be writing
 SEGMENT_RETRY_DELAYS = (0.1, 0.2, 0.3, 0.5, 0.7)
-STABILITY_CHECK_DELAY = 0.05
 
 
 # Silence noisy access logs
@@ -99,7 +99,7 @@ async def variant_segment(variant: int, filename: str):
         abort(403)
     
     file_path = Path(HLS_OUTPUT_DIR) / f'stream_{variant}' / filename
-    return await _serve_segment(file_path, filename)
+    return await _serve_segment(file_path)
 
 
 @app.route('/live/<filename>')
@@ -119,10 +119,10 @@ async def segment(filename: str):
         abort(404)
     
     file_path = Path(HLS_OUTPUT_DIR) / filename
-    return await _serve_segment(file_path, filename)
+    return await _serve_segment(file_path)
 
 
-async def _serve_segment(file_path: Path, filename: str) -> Response:
+async def _serve_segment(file_path: Path) -> Response:
     """Serve a segment file with retry logic for files being written."""
     # Retry if file doesn't exist yet
     if not file_path.exists():
@@ -132,11 +132,11 @@ async def _serve_segment(file_path: Path, filename: str) -> Response:
                 break
     
     if not file_path.exists():
-        logger.warning(f'Segment not found: {filename}')
+        logger.warning(f'Segment not found: {file_path.name}')
         abort(404)
     
     # Wait for file to be fully written
-    await _wait_for_stable_file(file_path)
+    await wait_for_stable_file(file_path)
     
     response = await send_file(
         file_path,
@@ -145,20 +145,6 @@ async def _serve_segment(file_path: Path, filename: str) -> Response:
     response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
-
-
-async def _wait_for_stable_file(path: Path, max_attempts: int = 20) -> None:
-    """Wait until file size stops changing."""
-    try:
-        for _ in range(max_attempts):
-            size1 = path.stat().st_size
-            await asyncio.sleep(STABILITY_CHECK_DELAY)
-            size2 = path.stat().st_size
-            
-            if size1 == size2 and size1 > 0:
-                return
-    except Exception:
-        pass
 
 
 if __name__ == '__main__':

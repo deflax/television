@@ -34,13 +34,14 @@ shutdown_event = asyncio.Event()
 
 
 async def on_playhead_change(new_url: str, stream_name: str) -> None:
-    """Handle playhead change from API."""
+    """Handle playhead change from API.
+    
+    Always calls switch() which handles both IDLE state (starts fresh)
+    and RUNNING state (performs transition).
+    """
     logger.info(f'Switching to stream: {stream_name}')
     
-    if stream_manager.is_running:
-        success = await stream_manager.switch(new_url)
-    else:
-        success = await stream_manager.start(new_url)
+    success = await stream_manager.switch(new_url)
     
     if not success:
         logger.error(f'Failed to switch to {stream_name}')
@@ -106,7 +107,7 @@ async def main() -> None:
     setup_output_dirs()
     
     # Setup signal handlers
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, handle_signal)
     

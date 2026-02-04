@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 HEALTH_POLL_INTERVAL = 5.0
 HEALTH_LOG_EVERY = 6  # Log every 30 seconds while waiting
 SSE_RECONNECT_DELAY = 5.0
-SSE_CONNECT_TIMEOUT = 30.0
+SSE_READ_TIMEOUT = 60.0  # Reconnect if no data received for this long
 
 
 async def wait_for_api() -> bool:
@@ -76,11 +76,6 @@ class PlayheadMonitor:
         """Get the current stream URL (thread-safe)."""
         return self._current_url
     
-    @property
-    def current_name(self) -> Optional[str]:
-        """Get the current stream name."""
-        return self._current_name
-    
     async def run(self) -> None:
         """Connect to SSE and process events until cancelled."""
         if not await wait_for_api():
@@ -95,6 +90,9 @@ class PlayheadMonitor:
             except asyncio.CancelledError:
                 logger.info('PlayheadMonitor cancelled')
                 break
+            except httpx.ReadTimeout:
+                logger.warning(f'SSE read timeout after {SSE_READ_TIMEOUT}s, reconnecting...')
+                await asyncio.sleep(1.0)  # Brief delay before reconnect
             except httpx.HTTPStatusError as e:
                 logger.error(f'HTTP error from API: {e}')
                 await asyncio.sleep(SSE_RECONNECT_DELAY)
@@ -109,8 +107,14 @@ class PlayheadMonitor:
         self._running = False
     
     async def _consume_sse(self) -> None:
-        """Open SSE connection and process events."""
-        async with httpx.AsyncClient(timeout=None) as client:
+        """Open SSE connection and process events.
+        
+        Uses a read timeout to detect stale connections where the server
+        stops sending data but doesn't close the connection.
+        """
+        # No connect timeout, but enforce read timeout for stale detection
+        timeout = httpx.Timeout(connect=30.0, read=SSE_READ_TIMEOUT, write=None, pool=None)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream('GET', f'{API_URL}/events') as response:
                 response.raise_for_status()
                 logger.info('SSE connection established')
