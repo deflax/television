@@ -1,0 +1,166 @@
+# Mux Service
+
+HLS stream multiplexer that monitors an API playhead via SSE and switches between input streams to produce a continuous HLS output stream.
+
+## Features
+
+- **Clean stream transitions** - Switches happen at segment boundaries, no playback glitches
+- **ABR support** - Adaptive bitrate with source passthrough + transcoded variants
+- **Copy mode** - Simple passthrough for single-quality output
+- **Icecast output** - Optional audio-only stream to Icecast server
+- **Dynamic playlists** - Generated on-demand from segment store for consistency
+- **Crash recovery** - Auto-restarts FFmpeg on failures with discontinuity markers
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         main.py                             │
+│  - Coordinates all components                               │
+│  - Signal handling (SIGTERM/SIGINT)                         │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+    ┌─────────────┼─────────────┬─────────────────┐
+    ▼             ▼             ▼                 ▼
+┌────────┐  ┌──────────┐  ┌──────────┐    ┌────────────┐
+│Playhead│  │ Stream   │  │ HTTP     │    │ Cleanup    │
+│Monitor │  │ Manager  │  │ Server   │    │ Loop       │
+└───┬────┘  └────┬─────┘  └────┬─────┘    └─────┬──────┘
+    │            │             │                │
+    │ on_change  │             │                │
+    └───────────►│             │                │
+                 │             │                │
+           ┌─────▼─────┐       │                │
+           │  FFmpeg   │       │                │
+           │  Runner   │       │                │
+           └─────┬─────┘       │                │
+                 │             │                │
+                 ▼             ▼                ▼
+           ┌─────────────────────────────────────────┐
+           │            Segment Store                │
+           │  - Tracks all segments with metadata    │
+           │  - Generates playlists dynamically      │
+           │  - Handles discontinuity markers        │
+           │  - Cleans up old segments               │
+           └─────────────────────────────────────────┘
+```
+
+### Components
+
+| File | Description |
+|------|-------------|
+| `main.py` | Entry point, starts all async tasks |
+| `config.py` | Environment configuration |
+| `segment_store.py` | Central store for segments, generates playlists |
+| `ffmpeg_runner.py` | FFmpeg process wrapper with segment detection |
+| `stream_manager.py` | Handles stream lifecycle and transitions |
+| `playhead_monitor.py` | SSE client watching API for URL changes |
+| `server.py` | HTTP server for HLS output |
+
+## How Stream Switching Works
+
+The key improvement over typical implementations is that transitions happen at **clean segment boundaries**:
+
+1. **Playhead change detected** via SSE from API
+2. **Stop current FFmpeg** gracefully (lets current segment finish writing)
+3. **Mark discontinuity** in segment store
+4. **Start new FFmpeg** with next sequence number
+5. **Wait for first segment** from new stream
+6. **Resume normal operation**
+
+This eliminates the "back and forth" playback issue caused by overlapping FFmpeg instances or segment number collisions.
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_URL` | `http://api:8080` | API endpoint for SSE playhead events |
+| `MUX_MODE` | `copy` | `copy` (passthrough) or `abr` (adaptive bitrate) |
+| `HLS_SEGMENT_TIME` | `4` | Segment duration in seconds |
+| `HLS_LIST_SIZE` | `20` | Max segments in playlist |
+| `TRANSITION_TIMEOUT` | `15` | Max seconds to wait for new stream segment |
+
+### ABR Mode Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ABR_PRESET` | `veryfast` | x264 encoding preset |
+| `ABR_GOP_SIZE` | `48` | Keyframe interval |
+| `ABR_VARIANTS` | (see below) | JSON array of variant definitions |
+
+Default ABR variants:
+```json
+[
+  {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
+  {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
+  {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"}
+]
+```
+
+### Icecast Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ICECAST_ENABLED` | `true` | Enable Icecast audio output |
+| `ICECAST_HOST` | `icecast` | Icecast server hostname |
+| `ICECAST_PORT` | `8000` | Icecast server port |
+| `ICECAST_SOURCE_PASSWORD` | `hackme` | Source password |
+| `ICECAST_MOUNT` | `/stream.mp3` | Mount point |
+| `ICECAST_AUDIO_BITRATE` | `128k` | Audio bitrate |
+| `ICECAST_AUDIO_FORMAT` | `mp3` | `mp3` or `aac` |
+
+### URL Rewriting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RESTREAMER_INTERNAL_URL` | `http://restreamer:8080` | Internal restreamer URL |
+| `CORE_API_HOSTNAME` | (empty) | Public hostname to rewrite |
+
+When set, URLs starting with `https://{CORE_API_HOSTNAME}/` are rewritten to use the internal URL.
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check, returns `{"status": "ok", "stream_ready": bool}` |
+| `GET /live/stream.m3u8` | Master playlist (ABR) or media playlist (copy mode) |
+| `GET /live/stream_N/playlist.m3u8` | Variant playlist (ABR mode only) |
+| `GET /live/*.ts` | Segment files |
+
+## Running
+
+### Docker
+
+```bash
+docker build -t mux .
+docker run -p 8091:8091 \
+  -e API_URL=http://api:8080 \
+  -e MUX_MODE=copy \
+  mux
+```
+
+### Local Development
+
+```bash
+pip install -r requirements.txt
+cd app && python main.py
+```
+
+## Dependencies
+
+- Python 3.11+
+- FFmpeg with libx264 and libmp3lame
+- httpx (async HTTP client)
+- quart (async web framework)
+- uvicorn (ASGI server)
+
+## Expected API Format
+
+The service expects the API to provide an SSE endpoint at `/events` that emits events in this format:
+
+```
+event: playhead
+data: {"head": "https://example.com/stream.m3u8", "name": "Stream Name"}
+```
+
+The `head` field contains the HLS stream URL to switch to. The `name` field is used for logging.

@@ -1,15 +1,13 @@
 """Playhead monitoring via Server-Sent Events from the API.
 
-Connects to the API's ``/events`` SSE endpoint and watches for playhead
-changes.  When the active stream URL changes, the configured callback is
-invoked so the mux loop can trigger a transition.
+Async implementation that connects to the API's /events SSE endpoint
+and notifies when the playhead stream URL changes.
 """
 
+import asyncio
 import json
-import time
 import logging
-import threading
-from typing import Callable, Optional
+from typing import Optional, Callable, Awaitable
 
 import httpx
 
@@ -17,108 +15,143 @@ from config import API_URL, rewrite_stream_url
 
 logger = logging.getLogger(__name__)
 
-# How often (seconds) to retry the API health check.
-_HEALTH_POLL_INTERVAL = 5
-# How often to log "still waiting" while the API is unreachable.
-_HEALTH_LOG_EVERY = 6  # iterations (6 * 5 s = 30 s)
-# Delay before reconnecting after an SSE error.
-_SSE_RECONNECT_DELAY = 5
+# Retry settings
+HEALTH_POLL_INTERVAL = 5.0
+HEALTH_LOG_EVERY = 6  # Log every 30 seconds while waiting
+SSE_RECONNECT_DELAY = 5.0
+SSE_CONNECT_TIMEOUT = 30.0
 
 
-def wait_for_api(stop_event: threading.Event) -> bool:
-    """Block until the API health endpoint returns 200."""
+async def wait_for_api() -> bool:
+    """Wait until the API health endpoint returns 200.
+    
+    Returns True when API is ready, False if cancelled.
+    """
     logger.info(f'Waiting for API at {API_URL}...')
     attempt = 0
-    while not stop_event.is_set():
-        try:
-            with httpx.Client() as client:
-                resp = client.get(f'{API_URL}/health', timeout=5.0)
+    
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                resp = await client.get(f'{API_URL}/health', timeout=5.0)
                 if resp.status_code == 200:
                     logger.info('API is ready')
                     return True
-        except Exception:
-            pass
-        attempt += 1
-        if attempt % _HEALTH_LOG_EVERY == 1:
-            logger.info('Waiting for API to be ready...')
-        time.sleep(_HEALTH_POLL_INTERVAL)
-    return False
+            except (httpx.RequestError, httpx.TimeoutException):
+                pass
+            except asyncio.CancelledError:
+                return False
+            
+            attempt += 1
+            if attempt % HEALTH_LOG_EVERY == 1:
+                logger.info('Waiting for API to be ready...')
+            
+            await asyncio.sleep(HEALTH_POLL_INTERVAL)
 
 
 class PlayheadMonitor:
-    """Watch the API SSE stream and fire *on_url_change* on playhead updates."""
-
+    """Watch the API SSE stream for playhead changes.
+    
+    Usage:
+        monitor = PlayheadMonitor(on_change=my_callback)
+        await monitor.run()  # Runs until cancelled
+    """
+    
     def __init__(
         self,
-        stop_event: threading.Event,
-        on_url_change: Optional[Callable[[str, str], None]] = None,
+        on_change: Optional[Callable[[str, str], Awaitable[None]]] = None,
     ):
-        self.stop_event = stop_event
-        self.on_url_change = on_url_change
+        """
+        Args:
+            on_change: Async callback when URL changes. Args: (new_url, stream_name)
+        """
+        self._on_change = on_change
         self._current_url: Optional[str] = None
-        self._url_lock = threading.Lock()
-
-    def get_current_url(self) -> Optional[str]:
-        """Thread-safe read of the current stream URL."""
-        with self._url_lock:
-            return self._current_url
-
-    def run(self) -> None:
-        """Connect to the SSE endpoint and process events until stopped."""
-        if not wait_for_api(self.stop_event):
+        self._current_name: Optional[str] = None
+        self._lock = asyncio.Lock()
+        self._running = False
+    
+    @property
+    def current_url(self) -> Optional[str]:
+        """Get the current stream URL (thread-safe)."""
+        return self._current_url
+    
+    @property
+    def current_name(self) -> Optional[str]:
+        """Get the current stream name."""
+        return self._current_name
+    
+    async def run(self) -> None:
+        """Connect to SSE and process events until cancelled."""
+        if not await wait_for_api():
             return
-
+        
         logger.info(f'Connecting to API SSE at {API_URL}/events')
-
-        while not self.stop_event.is_set():
+        self._running = True
+        
+        while self._running:
             try:
-                self._consume_sse()
+                await self._consume_sse()
+            except asyncio.CancelledError:
+                logger.info('PlayheadMonitor cancelled')
+                break
             except httpx.HTTPStatusError as e:
-                logger.error(f'HTTP error connecting to API: {e}')
-                time.sleep(_SSE_RECONNECT_DELAY)
+                logger.error(f'HTTP error from API: {e}')
+                await asyncio.sleep(SSE_RECONNECT_DELAY)
             except Exception as e:
-                logger.error(f'Error connecting to API: {e}')
-                time.sleep(_SSE_RECONNECT_DELAY)
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _consume_sse(self) -> None:
-        """Open a single SSE connection and process lines until it drops."""
-        with httpx.stream('GET', f'{API_URL}/events', timeout=None) as response:
-            response.raise_for_status()
-            logger.info('SSE connection established')
-
-            for line in response.iter_lines():
-                if self.stop_event.is_set():
-                    break
-                self._handle_line(line)
-
-    def _handle_line(self, line: str) -> None:
+                logger.error(f'Error in SSE connection: {e}')
+                await asyncio.sleep(SSE_RECONNECT_DELAY)
+        
+        self._running = False
+    
+    def stop(self) -> None:
+        """Signal the monitor to stop."""
+        self._running = False
+    
+    async def _consume_sse(self) -> None:
+        """Open SSE connection and process events."""
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream('GET', f'{API_URL}/events') as response:
+                response.raise_for_status()
+                logger.info('SSE connection established')
+                
+                async for line in response.aiter_lines():
+                    if not self._running:
+                        break
+                    await self._handle_line(line)
+    
+    async def _handle_line(self, line: str) -> None:
+        """Parse an SSE line and handle playhead changes."""
         if not line or line.startswith('event:'):
             return
-
+        
         if not line.startswith('data: '):
             return
-
+        
         try:
-            data = json.loads(line[6:])  # strip 'data: ' prefix
+            data = json.loads(line[6:])
         except json.JSONDecodeError:
             return
-
+        
         new_url = data.get('head')
         if not new_url:
             return
-
+        
+        # Rewrite URL if needed
         new_url = rewrite_stream_url(new_url)
-
-        with self._url_lock:
+        stream_name = data.get('name', 'unknown')
+        
+        async with self._lock:
             if self._current_url == new_url:
                 return
-            stream_name = data.get('name', 'unknown')
-            logger.info(f'Playhead changed: {stream_name}')
+            
+            logger.info(f'Playhead changed: {stream_name} -> {new_url[:50]}...')
             self._current_url = new_url
-
-            if self.on_url_change:
-                self.on_url_change(new_url, stream_name)
+            self._current_name = stream_name
+        
+        # Notify callback
+        if self._on_change:
+            try:
+                await self._on_change(new_url, stream_name)
+            except Exception as e:
+                logger.error(f'Error in playhead change callback: {e}')
