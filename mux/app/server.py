@@ -63,18 +63,22 @@ async def _wait_for_segment(file_path: Path, filename: str) -> None:
             return
 
 
-async def _ensure_segment_stable(file_path: Path) -> None:
+async def _ensure_segment_stable(file_path: Path, max_attempts: int = 20) -> None:
     """Wait until the segment file size stops growing.
 
     FFmpeg may still be flushing the final bytes when a client requests a
-    segment that just appeared on disk.
+    segment that just appeared on disk. Poll until size is stable.
     """
     try:
-        size_before = file_path.stat().st_size
-        await asyncio.sleep(_STABILITY_PROBE_DELAY)
-        size_after = file_path.stat().st_size
-        if size_after > size_before:
-            await asyncio.sleep(_STABILITY_EXTRA_DELAY)
+        for _ in range(max_attempts):
+            size_before = file_path.stat().st_size
+            await asyncio.sleep(_STABILITY_PROBE_DELAY)
+            size_after = file_path.stat().st_size
+            if size_after == size_before and size_before > 0:
+                # File size is stable
+                return
+        # If still changing after max attempts, wait one final time
+        await asyncio.sleep(_STABILITY_EXTRA_DELAY)
     except Exception:
         pass  # best-effort; proceed even if stat fails
 
@@ -113,6 +117,8 @@ async def serve_master_playlist():
         playlist_path,
         mimetype='application/vnd.apple.mpegurl',
         cache_timeout=0,
+        conditional=True,
+        etag=False
     )
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -152,7 +158,13 @@ async def serve_file(filename: str):
     mimetype = _mimetype_for(filename)
     cache_timeout = 3600 if filename.endswith('.ts') else 0
 
-    response = await send_file(file_path, mimetype=mimetype, cache_timeout=cache_timeout)
+    response = await send_file(
+        file_path,
+        mimetype=mimetype,
+        cache_timeout=cache_timeout,
+        conditional=True,
+        etag=False
+    )
     for key, value in _response_headers(filename).items():
         response.headers[key] = value
     return response
