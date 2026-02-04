@@ -170,6 +170,30 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         """Lightweight health check endpoint for HAProxy."""
         return 'OK', 200
 
+    @app.route('/realm.m3u8', methods=['GET'])
+    async def realm_m3u8_route():
+        """Serve dynamically generated realm.m3u8 playlist file."""
+        client_ip = get_client_address(request)
+        loggers.content.info(f'[{client_ip}] realm.m3u8')
+        
+        # Get the host from the request
+        host = request.headers.get('Host') or request.host
+        scheme = request.scheme  # 'http' or 'https'
+        
+        # Extract domain name for tvg-id (remove port if present)
+        domain = host.split(':')[0] if ':' in host else host
+        
+        # Generate the playlist content dynamically
+        playlist_content = f"""#EXTM3U
+#EXTINF:-1 tvg-id="{domain}@HD" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain} (1080p)
+{scheme}://{host}/live/stream.m3u8
+"""
+        
+        response = await app.make_response(playlist_content)
+        response.headers['Content-Type'] = 'application/vnd.apple.mpegurl'
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
+
     @app.route('/', methods=['GET'])
     async def root_route():
         """Frontend index page - public live stream."""
