@@ -33,6 +33,8 @@ class Segment:
     filename: str
     duration: float
     discontinuity_before: bool = False
+    # Discontinuity sequence number at this segment (for EXT-X-DISCONTINUITY-SEQUENCE)
+    discontinuity_sequence: int = 0
     created_at: float = field(default_factory=time.time)
     
     @property
@@ -64,6 +66,8 @@ class SegmentStore:
         # FFmpeg file number - tracks highest segment number on disk to avoid collisions
         self._next_file_number = 0
         self._pending_discontinuity = False
+        # Count of discontinuities for EXT-X-DISCONTINUITY-SEQUENCE
+        self._discontinuity_count = 0
         # Source stream properties (detected via ffprobe)
         self._source_width: int = 1920
         self._source_height: int = 1080
@@ -88,19 +92,23 @@ class SegmentStore:
         Returns the created Segment object.
         """
         async with self._lock:
-            # Use internal sequence counter for playlist ordering
-            # The filename's number is irrelevant - what matters is the logical
-            # position in the playlist. This ensures continuous media sequence
-            # numbers even when FFmpeg restarts with different start_number.
-            seq = self._next_sequence
-            self._next_sequence += 1
-            
-            # Track the highest file number we've seen for FFmpeg start_number
+            # Extract sequence number from filename (segment_00001.ts -> 1)
+            # FFmpeg's start_number determines the filename sequence, and we use
+            # that same sequence for the playlist's MEDIA-SEQUENCE.
             match = re.search(r'segment_(\d+)\.ts$', filename)
             if match:
-                file_num = int(match.group(1))
-                if file_num >= self._next_file_number:
-                    self._next_file_number = file_num + 1
+                seq = int(match.group(1))
+            else:
+                # Fallback to internal counter
+                seq = self._next_sequence
+            
+            # Track for next FFmpeg start_number (continue from highest seen + 1)
+            if seq >= self._next_sequence:
+                self._next_sequence = seq + 1
+            
+            # Also track highest file number separately for collision avoidance
+            if seq >= self._next_file_number:
+                self._next_file_number = seq + 1
             
             # Determine discontinuity - apply to first segment at this sequence
             discontinuity = False
@@ -130,6 +138,7 @@ class SegmentStore:
                 filename=filename,
                 duration=duration,
                 discontinuity_before=discontinuity,
+                discontinuity_sequence=self._discontinuity_count,
             )
             
             self._segments[variant].append(segment)
@@ -150,7 +159,8 @@ class SegmentStore:
         """Mark that the next segment should have a discontinuity tag."""
         async with self._lock:
             self._pending_discontinuity = True
-            logger.info('Discontinuity marked for next segment')
+            self._discontinuity_count += 1
+            logger.info(f'Discontinuity marked for next segment (count: {self._discontinuity_count})')
     
     async def get_segments(self, variant: int, count: Optional[int] = None) -> list[Segment]:
         """Get segments for a variant, optionally limited to most recent count."""
@@ -161,14 +171,13 @@ class SegmentStore:
             return segments.copy()
     
     async def get_next_sequence(self) -> int:
-        """Get the next file number for FFmpeg's start_number parameter.
+        """Get the next sequence number for FFmpeg's start_number parameter.
         
-        This returns the highest segment file number seen + 1, to avoid
-        filename collisions on disk. This is different from the playlist
-        sequence which is a continuous counter.
+        This returns the highest segment sequence seen + 1, ensuring
+        continuous numbering across stream switches.
         """
         async with self._lock:
-            return self._next_file_number
+            return self._next_sequence
     
     def _delete_segment_file(self, seg: Segment) -> bool:
         """Delete a segment's file from disk. Returns True if deleted."""
@@ -232,11 +241,21 @@ class SegmentStore:
         max_duration = max(seg.duration for seg in playlist_segments)
         target_duration = int(max_duration) + 1
         
+        # Get discontinuity sequence from first segment
+        # This represents how many discontinuities occurred before this playlist window
+        first_seg = playlist_segments[0]
+        disc_seq = first_seg.discontinuity_sequence
+        if first_seg.discontinuity_before:
+            # If first segment has a discontinuity, the sequence should be one less
+            # because the discontinuity is "at" this segment, not before it
+            disc_seq = max(0, disc_seq - 1)
+        
         lines = [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             f'#EXT-X-TARGETDURATION:{target_duration}',
             f'#EXT-X-MEDIA-SEQUENCE:{media_sequence}',
+            f'#EXT-X-DISCONTINUITY-SEQUENCE:{disc_seq}',
         ]
         
         for seg in playlist_segments:

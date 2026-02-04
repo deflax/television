@@ -267,6 +267,7 @@ class FFmpegRunner:
         self._known_segments: set[str] = set()
         self._pending_segments: dict[str, int] = {}  # file_key -> retry count
         self._stream_info: Optional[StreamInfo] = None
+        self._start_number: int = 0  # Filter to ignore segments below this
     
     @property
     def stream_info(self) -> Optional[StreamInfo]:
@@ -289,6 +290,8 @@ class FFmpegRunner:
         
         self._known_segments = self._scan_existing_segments()
         self._pending_segments.clear()
+        # Store start_number to filter out old segments that appear after we start
+        self._start_number = start_number
         
         # Probe stream to detect resolution/bitrate (non-blocking, best effort)
         self._stream_info = await probe_stream(input_url)
@@ -448,6 +451,14 @@ class FFmpegRunner:
                         # Extract segment number and calculate duration
                         match = SEGMENT_PATTERN.search(ts_file.name)
                         if match:
+                            seg_num = int(match.group(1))
+                            
+                            # Ignore segments from previous FFmpeg runs (below our start number)
+                            # This prevents late-arriving old segments from being added
+                            if seg_num < self._start_number:
+                                logger.debug(f'Ignoring old segment {ts_file.name} (below start {self._start_number})')
+                                continue
+                            
                             # Use configured segment time as duration estimate
                             duration = float(HLS_SEGMENT_TIME)
                             
