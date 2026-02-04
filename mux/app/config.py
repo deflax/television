@@ -14,6 +14,10 @@ HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
 HLS_LIST_SIZE = int(os.environ.get('HLS_LIST_SIZE', '20'))
 
+# Server settings
+SERVER_HOST = '0.0.0.0'
+SERVER_PORT = 8091
+
 # Internal restreamer URL rewriting (bypass public hostname/Cloudflare)
 RESTREAMER_INTERNAL_URL = os.environ.get('RESTREAMER_INTERNAL_URL', 'http://restreamer:8080')
 RESTREAMER_PUBLIC_HOST = os.environ.get('CORE_API_HOSTNAME', '')
@@ -22,11 +26,10 @@ RESTREAMER_PUBLIC_HOST = os.environ.get('CORE_API_HOSTNAME', '')
 MUX_MODE = os.environ.get('MUX_MODE', 'copy').lower()
 
 # ABR encoding settings
-ABR_PRESET = os.environ.get('ABR_PRESET', 'veryfast')  # x264 preset
-ABR_GOP_SIZE = int(os.environ.get('ABR_GOP_SIZE', '48'))  # Keyframe interval
+ABR_PRESET = os.environ.get('ABR_PRESET', 'veryfast')
+ABR_GOP_SIZE = int(os.environ.get('ABR_GOP_SIZE', '48'))
 
-# ABR variants configuration (JSON string or use defaults)
-# Format: [{"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"}, ...]
+# ABR variants configuration
 DEFAULT_ABR_VARIANTS = [
     {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
     {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
@@ -57,15 +60,19 @@ ICECAST_PORT = int(os.environ.get('ICECAST_PORT', '8000'))
 ICECAST_SOURCE_PASSWORD = os.environ.get('ICECAST_SOURCE_PASSWORD', 'hackme')
 ICECAST_MOUNT = os.environ.get('ICECAST_MOUNT', '/stream.mp3')
 ICECAST_AUDIO_BITRATE = os.environ.get('ICECAST_AUDIO_BITRATE', '128k')
-ICECAST_AUDIO_FORMAT = os.environ.get('ICECAST_AUDIO_FORMAT', 'mp3')  # mp3 or aac
+ICECAST_AUDIO_FORMAT = os.environ.get('ICECAST_AUDIO_FORMAT', 'mp3')
+
+# Transition settings
+TRANSITION_TIMEOUT = float(os.environ.get('TRANSITION_TIMEOUT', '15'))
+SEGMENT_STABILITY_DELAY = 0.1
+
+# Derived values
+NUM_VARIANTS = len(ABR_VARIANTS) + 1 if MUX_MODE == 'abr' else 1
+MAX_SEGMENT_AGE = HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3
 
 
 def rewrite_stream_url(url: str) -> str:
-    """Rewrite public stream URL to use internal restreamer container.
-    
-    Replaces https://{RESTREAMER_PUBLIC_HOST}/... with {RESTREAMER_INTERNAL_URL}/...
-    to bypass Cloudflare and route directly within Docker network.
-    """
+    """Rewrite public stream URL to use internal restreamer container."""
     if not RESTREAMER_PUBLIC_HOST or not RESTREAMER_INTERNAL_URL:
         return url
     

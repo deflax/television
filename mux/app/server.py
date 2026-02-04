@@ -1,176 +1,164 @@
-"""HTTP server for the muxed HLS output stream.
+"""HTTP server for HLS output.
 
-Serves playlists and segments under ``/live/`` with transition-aware
-retry logic so clients don't get spurious 404s during source switches.
+Serves playlists dynamically from the segment store, ensuring
+consistency during transitions. Segments are served directly from disk.
 """
 
 import asyncio
 import logging
 from pathlib import Path
 
-from quart import Quart, send_file, abort
+from quart import Quart, Response, abort, send_file
 
-from config import HLS_OUTPUT_DIR
+from config import HLS_OUTPUT_DIR, MUX_MODE, NUM_VARIANTS
+from segment_store import segment_store
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Retry / stability constants
-# ---------------------------------------------------------------------------
-
-# Back-off schedule (seconds) when a .ts segment doesn't exist yet.
-_SEGMENT_RETRY_DELAYS = (0.2, 0.3, 0.5, 0.7, 1.0)  # ~2.7 s total
-
-# How long to pause before rechecking a missing playlist.
-_PLAYLIST_RETRY_DELAY = 0.3  # seconds
-
-# Brief pause used to detect whether a segment file is still being written.
-_STABILITY_PROBE_DELAY = 0.05
-_STABILITY_EXTRA_DELAY = 0.2
+# Retry settings for segments that may still be writing
+SEGMENT_RETRY_DELAYS = (0.1, 0.2, 0.3, 0.5, 0.7)
+STABILITY_CHECK_DELAY = 0.05
 
 
-# ---------------------------------------------------------------------------
-# Logging filter – silence noisy 200 OK lines for health / segment requests
-# ---------------------------------------------------------------------------
-
-class _QuietAccessFilter(logging.Filter):
+# Silence noisy access logs
+class QuietAccessFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
-        if '200' in msg and '/health' in msg:
-            return False
-        if '200' in msg and ('/live/stream' in msg or '/live/segment_' in msg):
+        if '200' in msg and ('/health' in msg or '/live/' in msg):
             return False
         return True
 
 
-logging.getLogger('uvicorn.access').addFilter(_QuietAccessFilter())
+logging.getLogger('uvicorn.access').addFilter(QuietAccessFilter())
 
 app = Quart(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def _wait_for_segment(file_path: Path, filename: str) -> None:
-    """Retry with back-off until *file_path* appears on disk."""
-    for attempt, delay in enumerate(_SEGMENT_RETRY_DELAYS):
-        await asyncio.sleep(delay)
-        if file_path.exists():
-            logger.debug(
-                f'Segment {filename} available after {attempt + 1} retries'
-            )
-            return
-
-
-async def _ensure_segment_stable(file_path: Path, max_attempts: int = 20) -> None:
-    """Wait until the segment file size stops growing.
-
-    FFmpeg may still be flushing the final bytes when a client requests a
-    segment that just appeared on disk. Poll until size is stable.
-    """
-    try:
-        for _ in range(max_attempts):
-            size_before = file_path.stat().st_size
-            await asyncio.sleep(_STABILITY_PROBE_DELAY)
-            size_after = file_path.stat().st_size
-            if size_after == size_before and size_before > 0:
-                # File size is stable
-                return
-        # If still changing after max attempts, wait one final time
-        await asyncio.sleep(_STABILITY_EXTRA_DELAY)
-    except Exception:
-        pass  # best-effort; proceed even if stat fails
-
-
-def _response_headers(filename: str) -> dict[str, str]:
-    """Return Cache-Control / CORS headers appropriate for *filename*."""
-    headers: dict[str, str] = {'Access-Control-Allow-Origin': '*'}
-    if filename.endswith('.m3u8'):
-        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    elif filename.endswith('.ts'):
-        headers['Cache-Control'] = 'public, max-age=3600, immutable'
-    return headers
-
-
-def _mimetype_for(filename: str) -> str:
-    if filename.endswith('.m3u8'):
-        return 'application/vnd.apple.mpegurl'
-    if filename.endswith('.ts'):
-        return 'video/mp2t'
-    return 'application/octet-stream'
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-@app.route('/live/stream.m3u8')
-async def serve_master_playlist():
-    """Serve the HLS master playlist (ABR)."""
-    playlist_path = Path(HLS_OUTPUT_DIR) / 'stream.m3u8'
-
-    if not playlist_path.exists():
-        abort(503, 'Stream not ready yet')
-
-    response = await send_file(
-        playlist_path,
-        mimetype='application/vnd.apple.mpegurl',
-        cache_timeout=0
-    )
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
-
-
-@app.route('/live/<path:filename>')
-async def serve_file(filename: str):
-    """Serve HLS variant playlists and segments.
-
-    Includes transition-aware retry logic:
-    - Segments (``.ts``): back-off retry + file-stability check.
-    - Playlists (``.m3u8``): brief delay for discontinuity markers.
-    """
-    if '..' in filename or filename.startswith('/'):
-        abort(403)
-
-    file_path = Path(HLS_OUTPUT_DIR) / filename
-
-    # --- Retry logic for files that may not exist yet ------------------
-    if not file_path.exists():
-        if filename.endswith('.ts'):
-            await _wait_for_segment(file_path, filename)
-        elif filename.endswith('.m3u8'):
-            await asyncio.sleep(_PLAYLIST_RETRY_DELAY)
-
-    if not file_path.exists():
-        abort(404)
-
-    # --- Stability check for segments ----------------------------------
-    if filename.endswith('.ts'):
-        await _ensure_segment_stable(file_path)
-
-    # --- Serve the file ------------------------------------------------
-    mimetype = _mimetype_for(filename)
-    cache_timeout = 3600 if filename.endswith('.ts') else 0
-
-    response = await send_file(
-        file_path,
-        mimetype=mimetype,
-        cache_timeout=cache_timeout
-    )
-    for key, value in _response_headers(filename).items():
-        response.headers[key] = value
-    return response
 
 
 @app.route('/health')
 async def health():
     """Health check endpoint."""
-    master_exists = Path(HLS_OUTPUT_DIR, 'stream.m3u8').exists()
-    return {'status': 'ok', 'stream_ready': master_exists}
+    # Check if we have any segments
+    segments = await segment_store.get_segments(0, count=1)
+    stream_ready = len(segments) > 0
+    
+    return {
+        'status': 'ok',
+        'stream_ready': stream_ready,
+        'mode': MUX_MODE,
+    }
+
+
+@app.route('/live/stream.m3u8')
+async def master_playlist():
+    """Serve the master playlist."""
+    if MUX_MODE == 'abr':
+        content = await segment_store.generate_master_playlist()
+    else:
+        # In copy mode, serve the variant playlist directly
+        content = await segment_store.generate_playlist(0)
+    
+    return Response(
+        content,
+        mimetype='application/vnd.apple.mpegurl',
+        headers={
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
+
+
+@app.route('/live/stream_<int:variant>/playlist.m3u8')
+async def variant_playlist(variant: int):
+    """Serve a variant playlist (ABR mode)."""
+    if variant < 0 or variant >= NUM_VARIANTS:
+        abort(404)
+    
+    content = await segment_store.generate_playlist(variant)
+    
+    return Response(
+        content,
+        mimetype='application/vnd.apple.mpegurl',
+        headers={
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
+
+
+@app.route('/live/stream_<int:variant>/<filename>')
+async def variant_segment(variant: int, filename: str):
+    """Serve a segment file from a variant directory."""
+    if variant < 0 or variant >= NUM_VARIANTS:
+        abort(404)
+    
+    if not filename.endswith('.ts'):
+        abort(404)
+    
+    # Security check
+    if '..' in filename or filename.startswith('/'):
+        abort(403)
+    
+    file_path = Path(HLS_OUTPUT_DIR) / f'stream_{variant}' / filename
+    return await _serve_segment(file_path, filename)
+
+
+@app.route('/live/<filename>')
+async def segment(filename: str):
+    """Serve a segment file (copy mode) or redirect."""
+    # Security check
+    if '..' in filename or filename.startswith('/'):
+        abort(403)
+    
+    if filename.endswith('.m3u8'):
+        # Serve playlist dynamically
+        if filename == 'stream.m3u8':
+            return await master_playlist()
+        abort(404)
+    
+    if not filename.endswith('.ts'):
+        abort(404)
+    
+    file_path = Path(HLS_OUTPUT_DIR) / filename
+    return await _serve_segment(file_path, filename)
+
+
+async def _serve_segment(file_path: Path, filename: str) -> Response:
+    """Serve a segment file with retry logic for files being written."""
+    # Retry if file doesn't exist yet
+    if not file_path.exists():
+        for delay in SEGMENT_RETRY_DELAYS:
+            await asyncio.sleep(delay)
+            if file_path.exists():
+                break
+    
+    if not file_path.exists():
+        logger.warning(f'Segment not found: {filename}')
+        abort(404)
+    
+    # Wait for file to be fully written
+    await _wait_for_stable_file(file_path)
+    
+    response = await send_file(
+        file_path,
+        mimetype='video/mp2t',
+    )
+    response.headers['Cache-Control'] = 'public, max-age=3600, immutable'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+
+async def _wait_for_stable_file(path: Path, max_attempts: int = 20) -> None:
+    """Wait until file size stops changing."""
+    try:
+        for _ in range(max_attempts):
+            size1 = path.stat().st_size
+            await asyncio.sleep(STABILITY_CHECK_DELAY)
+            size2 = path.stat().st_size
+            
+            if size1 == size2 and size1 > 0:
+                return
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
