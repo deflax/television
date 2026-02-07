@@ -14,7 +14,8 @@ import asyncio
 import logging
 import signal
 
-from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT
+from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT, API_URL
+from hls_viewer_tracker import cleanup_loop as hls_cleanup_loop, report_loop as hls_report_loop
 from playhead_monitor import PlayheadMonitor
 from stream_manager import stream_manager
 from segment_store import segment_store
@@ -120,6 +121,8 @@ async def main() -> None:
     # Start background tasks
     manager_task = asyncio.create_task(stream_manager.run_loop())
     cleanup_task = asyncio.create_task(cleanup_loop())
+    hls_cleanup_task = asyncio.create_task(hls_cleanup_loop())
+    hls_report_task = asyncio.create_task(hls_report_loop(API_URL))
     server_task = asyncio.create_task(run_server())
     
     # Run playhead monitor (blocks until stopped)
@@ -132,7 +135,7 @@ async def main() -> None:
     if not shutdown_event.is_set():
         await shutdown()
     
-    for task in [manager_task, cleanup_task, server_task]:
+    for task in [manager_task, cleanup_task, hls_cleanup_task, hls_report_task, server_task]:
         task.cancel()
         try:
             await task
