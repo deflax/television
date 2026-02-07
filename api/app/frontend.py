@@ -202,7 +202,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         # Update Discord bot: diffs IPs and logs connect/disconnect events
         if discord_bot_manager is not None:
             total = visitor_tracker.count + hls_viewer_count
-            await discord_bot_manager.update_hls_viewers(hls_only_ips, total)
+            discord_bot_manager.update_hls_viewers(hls_only_ips, total)
 
         return 'OK', 200
 
