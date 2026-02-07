@@ -660,7 +660,7 @@ class DiscordBotManager:
             self.logger.error(f'Failed to schedule visitor disconnect message: {e}')
             return False
 
-    async def _log_visitor_async(self, obfuscated_ip: str, visitor_count: int, connected: bool):
+    async def _log_visitor_async(self, obfuscated_ip: str, visitor_count: int, connected: bool, source: str = '🖥️'):
         """Internal async method to log visitor event to Discord."""
         try:
             channel = self.bot.get_channel(int(self.live_channel_id))
@@ -668,14 +668,42 @@ class DiscordBotManager:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
                 return
 
-            if connected:
-                message = f"📥 `{obfuscated_ip}` 👽 `{visitor_count}`"
-            else:
-                message = f"📤 `{obfuscated_ip}` 👽 `{visitor_count}`"
+            direction = '📥' if connected else '📤'
+            message = f"{direction} {source} `{obfuscated_ip}` 👽 `{visitor_count}`"
 
             await self._send_and_prune(channel, content=message)
         except Exception as e:
             self.logger.error(f'Failed to send visitor log to Discord: {e}')
+
+    async def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
+        """Update HLS viewer state and log connect/disconnect events to Discord.
+
+        Diffs the new HLS-only IPs against the previous set and sends
+        connect/disconnect messages for each change.
+
+        Args:
+            new_ips: Current set of HLS-only viewer IPs (already excludes SSE users)
+            total_count: Current total visitor count (SSE + HLS)
+        """
+        old_ips = self.hls_viewer_ips
+        self.hls_viewer_ips = new_ips
+
+        connected = new_ips - old_ips
+        disconnected = old_ips - new_ips
+
+        if not connected and not disconnected:
+            return
+
+        if self.live_channel_id == 0 or not self.bot.is_ready():
+            return
+
+        for ip in connected:
+            obfuscated_ip = obfuscate_hostname(ip, ip)
+            await self._log_visitor_async(obfuscated_ip, total_count, connected=True, source='📡')
+
+        for ip in disconnected:
+            obfuscated_ip = obfuscate_hostname(ip, ip)
+            await self._log_visitor_async(obfuscated_ip, total_count, connected=False, source='📡')
 
     async def exec_recorder(self, playhead):
         """Execute the recorder to capture a stream."""
