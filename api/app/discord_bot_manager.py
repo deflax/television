@@ -49,6 +49,7 @@ class DiscordBotManager:
         self.rec_path = "/recordings"
         self.recorder = False
         self.visitor_tracker = None
+        self.hls_viewer_ips: set = set()  # IPs of HLS-only viewers (not connected via SSE)
 
         # Track bot messages per channel (keep last N message IDs)
         self.max_channel_messages = 1
@@ -331,8 +332,10 @@ class DiscordBotManager:
                 await ctx.channel.send(embed=embed)
                 return
 
-            current_visitors = self.visitor_tracker.visitors
-            if not current_visitors:
+            sse_visitors = self.visitor_tracker.visitors
+            hls_only_ips = self.hls_viewer_ips or set()
+
+            if not sse_visitors and not hls_only_ips:
                 embed = self._make_embed(
                     title='👁️ Watchers',
                     description='No watchers connected.',
@@ -342,18 +345,26 @@ class DiscordBotManager:
                 return
 
             watcher_lines = []
-            for ip in current_visitors:
-                hostname = obfuscate_hostname(ip, ip)
-                connections = current_visitors[ip]
-                if connections > 1:
-                    watcher_lines.append(f'`{hostname}` ×{connections}')
-                else:
-                    watcher_lines.append(f'`{hostname}`')
 
-            total = len(current_visitors)
+            # SSE viewers (browser)
+            for ip in sse_visitors:
+                hostname = obfuscate_hostname(ip, ip)
+                connections = sse_visitors[ip]
+                if connections > 1:
+                    watcher_lines.append(f'🖥️ `{hostname}` ×{connections}')
+                else:
+                    watcher_lines.append(f'🖥️ `{hostname}`')
+
+            # HLS-only viewers (external players)
+            for ip in hls_only_ips:
+                hostname = obfuscate_hostname(ip, ip)
+                watcher_lines.append(f'📡 `{hostname}`')
+
+            total = len(sse_visitors) + len(hls_only_ips)
             embed = self._make_embed(
                 title=f'👁️ Watchers ({total})',
                 description='\n'.join(watcher_lines),
+                footer='🖥️ Browser  📡 External player',
                 color=self.COLOR_INFO
             )
             await ctx.channel.send(embed=embed)

@@ -199,6 +199,10 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         old_count = hls_viewer_count
         hls_viewer_count = len(hls_only_ips)
 
+        # Share HLS-only IPs with Discord bot for .watchers command
+        if discord_bot_manager is not None:
+            discord_bot_manager.hls_viewer_ips = hls_only_ips
+
         if hls_viewer_count != old_count:
             await _broadcast_visitors()
 
