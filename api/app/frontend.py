@@ -167,8 +167,6 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
     # HLS viewer count reported by mux service (viewers not using SSE)
     hls_viewer_count: int = 0
-    # IPs of HLS-only viewers (reported by mux), used to avoid double-counting
-    hls_viewer_ips: set = set()
     
     @app.route('/health', methods=['GET'])
     async def health_route():
@@ -183,7 +181,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         that are actively fetching HLS playlists. We subtract any IPs
         that are already counted via SSE to avoid double-counting.
         """
-        nonlocal hls_viewer_count, hls_viewer_ips
+        nonlocal hls_viewer_count
 
         data = await request.get_json()
         if not data or 'count' not in data:
@@ -194,17 +192,17 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         sse_ips = set(visitor_tracker.visitors.keys())
         # Only count HLS viewers that are NOT also connected via SSE
         hls_only_ips = reported_ips - sse_ips
-        hls_viewer_ips = hls_only_ips
 
         old_count = hls_viewer_count
         hls_viewer_count = len(hls_only_ips)
 
-        # Share HLS-only IPs with Discord bot for .watchers command
-        if discord_bot_manager is not None:
-            discord_bot_manager.hls_viewer_ips = hls_only_ips
-
         if hls_viewer_count != old_count:
             await _broadcast_visitors()
+
+        # Update Discord bot: diffs IPs and logs connect/disconnect events
+        if discord_bot_manager is not None:
+            total = visitor_tracker.count + hls_viewer_count
+            await discord_bot_manager.update_hls_viewers(hls_only_ips, total)
 
         return 'OK', 200
 
