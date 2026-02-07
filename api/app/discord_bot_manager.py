@@ -675,11 +675,11 @@ class DiscordBotManager:
         except Exception as e:
             self.logger.error(f'Failed to send visitor log to Discord: {e}')
 
-    async def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
+    def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
         """Update HLS viewer state and log connect/disconnect events to Discord.
 
-        Diffs the new HLS-only IPs against the previous set and sends
-        connect/disconnect messages for each change.
+        Diffs the new HLS-only IPs against the previous set and schedules
+        connect/disconnect messages on the bot's event loop.
 
         Args:
             new_ips: Current set of HLS-only viewer IPs (already excludes SSE users)
@@ -699,11 +699,23 @@ class DiscordBotManager:
 
         for ip in connected:
             obfuscated_ip = obfuscate_hostname(ip, ip)
-            await self._log_visitor_async(obfuscated_ip, total_count, connected=True, source='📡')
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._log_visitor_async(obfuscated_ip, total_count, connected=True, source='📡'),
+                    self.bot.loop
+                )
+            except Exception as e:
+                self.logger.error(f'Failed to schedule HLS viewer connect message: {e}')
 
         for ip in disconnected:
             obfuscated_ip = obfuscate_hostname(ip, ip)
-            await self._log_visitor_async(obfuscated_ip, total_count, connected=False, source='📡')
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._log_visitor_async(obfuscated_ip, total_count, connected=False, source='📡'),
+                    self.bot.loop
+                )
+            except Exception as e:
+                self.logger.error(f'Failed to schedule HLS viewer disconnect message: {e}')
 
     async def exec_recorder(self, playhead):
         """Execute the recorder to capture a stream."""
