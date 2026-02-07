@@ -8,9 +8,10 @@ import asyncio
 import logging
 from pathlib import Path
 
-from quart import Quart, Response, abort, send_file
+from quart import Quart, Response, abort, request, send_file
 
 from config import HLS_OUTPUT_DIR, MUX_MODE, NUM_VARIANTS
+from hls_viewer_tracker import hls_viewer_tracker
 from segment_store import segment_store
 from utils import wait_for_stable_file
 
@@ -74,9 +75,27 @@ async def health():
     return {'status': 'ok', 'mode': MUX_MODE}
 
 
+@app.route('/viewers')
+async def viewers():
+    """Return current HLS viewer count."""
+    count = await hls_viewer_tracker.count
+    return {'hls_viewers': count}
+
+
+def _get_client_ip() -> str:
+    """Get the client IP, respecting X-Forwarded-For from HAProxy."""
+    forwarded_for = request.headers.get('X-Forwarded-For')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    return request.remote_addr or '0.0.0.0'
+
+
 @app.route('/live/stream.m3u8')
 async def master_playlist():
     """Serve the master playlist."""
+    # Track this client as an HLS viewer
+    await hls_viewer_tracker.record_playlist_fetch(_get_client_ip())
+
     if MUX_MODE == 'abr':
         content = await segment_store.generate_master_playlist()
     else:
@@ -96,6 +115,9 @@ async def variant_playlist(variant: int):
     if variant < 0 or variant >= NUM_VARIANTS:
         abort(404)
     
+    # Track this client as an HLS viewer (variant fetches also count)
+    await hls_viewer_tracker.record_playlist_fetch(_get_client_ip())
+
     content = await segment_store.generate_playlist(variant)
     
     return Response(

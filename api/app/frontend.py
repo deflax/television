@@ -164,10 +164,44 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
     # Set of active SSE client queues for broadcasting updates
     sse_clients: Set[asyncio.Queue] = set()
+
+    # HLS viewer count reported by mux service (viewers not using SSE)
+    hls_viewer_count: int = 0
+    # IPs of HLS-only viewers (reported by mux), used to avoid double-counting
+    hls_viewer_ips: set = set()
     
     @app.route('/health', methods=['GET'])
     async def health_route():
         """Lightweight health check endpoint for HAProxy."""
+        return 'OK', 200
+
+    @app.route('/hls-viewers', methods=['POST'])
+    async def hls_viewers_route():
+        """Receive HLS viewer count from the mux service.
+
+        The mux service periodically POSTs its count of unique IPs
+        that are actively fetching HLS playlists. We subtract any IPs
+        that are already counted via SSE to avoid double-counting.
+        """
+        nonlocal hls_viewer_count, hls_viewer_ips
+
+        data = await request.get_json()
+        if not data or 'count' not in data:
+            return 'Bad request', 400
+
+        reported_ips = set(data.get('viewers', {}).keys())
+        # IPs already tracked via SSE connections
+        sse_ips = set(visitor_tracker.visitors.keys())
+        # Only count HLS viewers that are NOT also connected via SSE
+        hls_only_ips = reported_ips - sse_ips
+        hls_viewer_ips = hls_only_ips
+
+        old_count = hls_viewer_count
+        hls_viewer_count = len(hls_only_ips)
+
+        if hls_viewer_count != old_count:
+            await _broadcast_visitors()
+
         return 'OK', 200
 
     @app.route('/realm.m3u', methods=['GET'])
@@ -348,8 +382,9 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                     initial_data = json.dumps(stream_manager.playhead)
                     yield f"event: playhead\ndata: {initial_data}\n\n"
 
-                # Send initial visitor count
-                yield f"event: visitors\ndata: {json.dumps({'visitors': visitor_tracker.count})}\n\n"
+                # Send initial visitor count (SSE + HLS-only viewers)
+                total = visitor_tracker.count + hls_viewer_count
+                yield f"event: visitors\ndata: {json.dumps({'visitors': total})}\n\n"
 
                 # Send initial EPG state
                 if stream_manager is not None:
@@ -381,10 +416,11 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         return response
 
     async def _broadcast_visitors():
-        """Broadcast current visitor count to all SSE clients."""
+        """Broadcast combined visitor count (SSE + HLS-only) to all SSE clients."""
+        total = visitor_tracker.count + hls_viewer_count
         event = {
             'type': 'visitors',
-            'data': json.dumps({'visitors': visitor_tracker.count})
+            'data': json.dumps({'visitors': total})
         }
         for q in list(sse_clients):
             try:
