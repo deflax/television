@@ -92,7 +92,6 @@ services:
       - "variables.env"
     environment:
       - API_URL=http://api:8080
-      - LOG_LEVEL=debug
     restart: unless-stopped
     networks:
       - net
