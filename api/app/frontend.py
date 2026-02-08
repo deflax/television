@@ -207,7 +207,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
         return 'OK', 200
 
-    @app.route('/realm.m3u', methods=['GET'])
+    @app.route('/realm.m3u8', methods=['GET'])
     async def realm_m3u8_route():
         """Serve dynamically generated realm.m3u8 playlist file."""
         client_ip = get_client_address(request)
