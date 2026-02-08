@@ -215,7 +215,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         
         # Get the host from the request
         host = request.headers.get('Host') or request.host
-        scheme = request.scheme  # 'http' or 'https'
+        scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
         
         # Extract domain name for tvg-id (remove port if present)
         domain = host.split(':')[0] if ':' in host else host
@@ -239,7 +239,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         loggers.content.info(f'[{client_ip}] epg.xml')
 
         host = request.headers.get('Host') or request.host
-        scheme = request.scheme
+        scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
         domain = host.split(':')[0] if ':' in host else host
         channel_id = domain
 
