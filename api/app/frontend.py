@@ -223,7 +223,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         # Generate the playlist content dynamically
         epg_url = f'{scheme}://{host}/epg.xml'
         playlist_content = f"""#EXTM3U url-tvg="{epg_url}"
-#EXTINF:-1 tvg-id="{domain}@HD" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain} (1080p)
+#EXTINF:-1 tvg-id="{domain}" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain} (1080p)
 {scheme}://{host}/live/stream.m3u8
 """
         
@@ -241,7 +241,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         host = request.headers.get('Host') or request.host
         scheme = request.scheme
         domain = host.split(':')[0] if ':' in host else host
-        channel_id = f'{domain}@HD'
+        channel_id = domain
 
         # Build XMLTV document
         tv = ET.Element('tv', attrib={
@@ -321,10 +321,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                     'channel': channel_id,
                 })
                 ET.SubElement(prog_el, 'title', lang='en').text = prog['title']
-                if prog['desc']:
-                    ET.SubElement(prog_el, 'desc', lang='en').text = prog['desc']
-                if prog['live']:
-                    ET.SubElement(prog_el, 'live')
+                ET.SubElement(prog_el, 'desc', lang='en').text = prog['desc'] if prog['desc'] else ''
 
         xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n'
         xml_doctype = '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
