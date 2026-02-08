@@ -68,6 +68,8 @@ class SegmentStore:
         self._pending_discontinuity = False
         # Count of discontinuities for EXT-X-DISCONTINUITY-SEQUENCE
         self._discontinuity_count = 0
+        # Track seen (variant, sequence) pairs for deduplication
+        self._seen_sequences: set[tuple[int, int]] = set()
         # Source stream properties (detected via ffprobe)
         self._source_width: int = 1920
         self._source_height: int = 1080
@@ -86,10 +88,10 @@ class SegmentStore:
         variant: int,
         filename: str,
         duration: float,
-    ) -> Segment:
+    ) -> Optional[Segment]:
         """Add a new segment to the store.
         
-        Returns the created Segment object.
+        Returns the created Segment object, or None if duplicate.
         """
         async with self._lock:
             # Extract sequence number from filename (segment_00001.ts -> 1)
@@ -101,6 +103,14 @@ class SegmentStore:
             else:
                 # Fallback to internal counter
                 seq = self._next_sequence
+            
+            # Deduplicate: reject if we already have this (variant, sequence) pair.
+            # This can happen during stream switches or crash recovery when a new
+            # FFmpegRunner re-detects segments the previous runner already reported.
+            if (variant, seq) in self._seen_sequences:
+                logger.debug(f'Ignoring duplicate segment: variant={variant} seq={seq} file={filename}')
+                return None
+            self._seen_sequences.add((variant, seq))
             
             # Track for next FFmpeg start_number (continue from highest seen + 1)
             if seq >= self._next_sequence:
@@ -147,8 +157,9 @@ class SegmentStore:
             if len(self._segments[variant]) > MAX_SEGMENTS_IN_MEMORY:
                 excess = self._segments[variant][:-MAX_SEGMENTS_IN_MEMORY]
                 self._segments[variant] = self._segments[variant][-MAX_SEGMENTS_IN_MEMORY:]
-                # Clean up files for excess segments
+                # Clean up files for excess segments and remove from dedup set
                 for old_seg in excess:
+                    self._seen_sequences.discard((old_seg.variant, old_seg.sequence))
                     self._delete_segment_file(old_seg)
                 logger.debug(f'Trimmed {len(excess)} excess segments from variant {variant}')
             
@@ -208,8 +219,9 @@ class SegmentStore:
                 
                 self._segments[variant] = new_segments
                 
-                # Delete files for old segments
+                # Delete files for old segments and remove from dedup set
                 for seg in old_segments:
+                    self._seen_sequences.discard((seg.variant, seg.sequence))
                     if self._delete_segment_file(seg):
                         removed += 1
         
