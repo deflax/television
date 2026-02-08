@@ -321,12 +321,14 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
                     'channel': channel_id,
                 })
                 ET.SubElement(prog_el, 'title', lang='en').text = prog['title']
-                ET.SubElement(prog_el, 'desc', lang='en').text = prog['desc'] if prog['desc'] else ''
+                if prog.get('desc'):
+                    ET.SubElement(prog_el, 'desc', lang='en').text = prog['desc']
 
         xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n'
         xml_doctype = '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
+        ET.indent(tv, space='  ')
         xml_body = ET.tostring(tv, encoding='unicode', xml_declaration=False)
-        xml_content = xml_declaration + xml_doctype + xml_body
+        xml_content = xml_declaration + xml_doctype + xml_body + '\n'
 
         response = await app.make_response(xml_content)
         response.headers['Content-Type'] = 'application/xml; charset=utf-8'
