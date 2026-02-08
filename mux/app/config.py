@@ -113,6 +113,14 @@ ICECAST_MOUNT = os.environ.get('ICECAST_MOUNT', '/stream.mp3')
 ICECAST_AUDIO_BITRATE = os.environ.get('ICECAST_AUDIO_BITRATE', '128k')
 ICECAST_AUDIO_FORMAT = os.environ.get('ICECAST_AUDIO_FORMAT', 'mp3')
 
+# Logging
+_VALID_LOG_LEVELS = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+_raw_log_level = os.environ.get('MUX_LOG_LEVEL', 'INFO').upper()
+if _raw_log_level not in _VALID_LOG_LEVELS:
+    logger.warning(f'Invalid MUX_LOG_LEVEL={_raw_log_level!r}, using INFO')
+    _raw_log_level = 'INFO'
+LOG_LEVEL = getattr(logging, _raw_log_level)
+
 # Transition settings
 TRANSITION_TIMEOUT = _parse_env('TRANSITION_TIMEOUT', 15.0, float, min_val=1.0, max_val=120.0)
 SEGMENT_STABILITY_DELAY = 0.1

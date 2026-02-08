@@ -14,7 +14,7 @@ import asyncio
 import logging
 import signal
 
-from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT, API_URL
+from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT, API_URL, LOG_LEVEL
 from hls_viewer_tracker import cleanup_loop as hls_cleanup_loop, report_loop as hls_report_loop
 from playhead_monitor import PlayheadMonitor
 from stream_manager import stream_manager
@@ -22,7 +22,7 @@ from segment_store import segment_store
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format='%(name)s - %(levelname)s - %(message)s',
 )
 logger = logging.getLogger(__name__)
