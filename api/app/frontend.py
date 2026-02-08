@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import asyncio
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Set
 from quart import Quart, render_template, jsonify, request, abort, session, redirect, url_for
@@ -220,13 +221,118 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         domain = host.split(':')[0] if ':' in host else host
         
         # Generate the playlist content dynamically
-        playlist_content = f"""#EXTM3U
+        epg_url = f'{scheme}://{host}/epg.xml'
+        playlist_content = f"""#EXTM3U url-tvg="{epg_url}"
 #EXTINF:-1 tvg-id="{domain}@HD" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain} (1080p)
 {scheme}://{host}/live/stream.m3u8
 """
         
         response = await app.make_response(playlist_content)
         response.headers['Content-Type'] = 'application/vnd.apple.mpegurl'
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
+
+    @app.route('/epg.xml', methods=['GET'])
+    async def epg_xml_route():
+        """Serve dynamically generated XMLTV EPG from the stream database."""
+        client_ip = get_client_address(request)
+        loggers.content.info(f'[{client_ip}] epg.xml')
+
+        host = request.headers.get('Host') or request.host
+        scheme = request.scheme
+        domain = host.split(':')[0] if ':' in host else host
+        channel_id = f'{domain}@HD'
+
+        # Build XMLTV document
+        tv = ET.Element('tv', attrib={
+            'generator-info-name': 'television-epg',
+            'generator-info-url': f'{scheme}://{host}',
+        })
+
+        # Single channel entry matching the tvg-id in realm.m3u
+        ch = ET.SubElement(tv, 'channel', id=channel_id)
+        ET.SubElement(ch, 'display-name').text = f'{domain} (1080p)'
+        ET.SubElement(ch, 'icon', src=f'{scheme}://{host}/static/images/logo.png')
+
+        # Build programme entries from the stream database
+        if stream_manager is not None and stream_manager.database:
+            now = datetime.now(timezone.utc)
+            live_programmes = []
+            scheduled_programmes = []
+
+            for stream_id, entry in stream_manager.database.items():
+                start_at = entry.get('start_at', '')
+                name = entry.get('name', 'Unknown')
+                details = entry.get('details', '')
+
+                if start_at == 'never':
+                    continue
+
+                if start_at == 'now':
+                    # Currently live -- keep separate, uses its own 3h window
+                    live_programmes.append({
+                        'start': now,
+                        'stop': now + timedelta(hours=3),
+                        'title': name,
+                        'desc': details,
+                        'live': True,
+                    })
+                else:
+                    # Parse military time (e.g. '2100' or '14')
+                    time_str = str(start_at).strip()
+                    if len(time_str) <= 2:
+                        hour, minute = int(time_str), 0
+                    else:
+                        hour, minute = int(time_str[:-2]), int(time_str[-2:])
+                    prog_start = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    # If the time already passed today, show it for tomorrow
+                    if prog_start < now - timedelta(hours=1):
+                        prog_start += timedelta(days=1)
+                    scheduled_programmes.append({
+                        'start': prog_start,
+                        'title': name,
+                        'desc': details,
+                        'live': False,
+                    })
+
+            # Sort scheduled programmes by start time
+            scheduled_programmes.sort(key=lambda p: p['start'])
+
+            # Each scheduled programme ends when the next one begins;
+            # the last one wraps around to the first one's start (+24h if needed)
+            for i, prog in enumerate(scheduled_programmes):
+                if i + 1 < len(scheduled_programmes):
+                    prog['stop'] = scheduled_programmes[i + 1]['start']
+                elif len(scheduled_programmes) > 1:
+                    # Last entry wraps to the first entry's start next day
+                    prog['stop'] = scheduled_programmes[0]['start'] + timedelta(days=1)
+                else:
+                    # Only one scheduled programme -- give it a 24h window
+                    prog['stop'] = prog['start'] + timedelta(hours=24)
+
+            # Combine: live entries first, then scheduled
+            programmes = live_programmes + scheduled_programmes
+
+            for prog in programmes:
+                fmt = '%Y%m%d%H%M%S +0000'
+                prog_el = ET.SubElement(tv, 'programme', attrib={
+                    'start': prog['start'].strftime(fmt),
+                    'stop': prog['stop'].strftime(fmt),
+                    'channel': channel_id,
+                })
+                ET.SubElement(prog_el, 'title', lang='en').text = prog['title']
+                if prog['desc']:
+                    ET.SubElement(prog_el, 'desc', lang='en').text = prog['desc']
+                if prog['live']:
+                    ET.SubElement(prog_el, 'live')
+
+        xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        xml_doctype = '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
+        xml_body = ET.tostring(tv, encoding='unicode', xml_declaration=False)
+        xml_content = xml_declaration + xml_doctype + xml_body
+
+        response = await app.make_response(xml_content)
+        response.headers['Content-Type'] = 'application/xml; charset=utf-8'
         response.headers['Cache-Control'] = 'no-cache'
         return response
 
