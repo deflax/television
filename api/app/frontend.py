@@ -207,11 +207,11 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
         return 'OK', 200
 
-    @app.route('/realm.m3u8', methods=['GET'])
-    async def realm_m3u8_route():
-        """Serve dynamically generated realm.m3u8 playlist file."""
+    @app.route('/live.m3u8', methods=['GET'])
+    async def live_m3u8_route():
+        """Serve dynamically generated live.m3u8 playlist file."""
         client_ip = get_client_address(request)
-        loggers.content.info(f'[{client_ip}] realm.m3u8')
+        loggers.content.info(f'[{client_ip}] live.m3u8')
         
         # Get the host from the request
         host = request.headers.get('Host') or request.host
