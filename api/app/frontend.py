@@ -222,10 +222,10 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         
         # Generate the playlist content dynamically
         epg_url = f'{scheme}://{host}/epg.xml'
-        playlist_content = f"""#EXTM3U url-tvg="{epg_url}"
-#EXTINF:-1 tvg-id="{domain}" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain} (1080p)
-{scheme}://{host}/live/stream.m3u8
-"""
+        channel_id = domain.lower()
+        playlist_content = f'#EXTM3U url-tvg="{epg_url}" x-tvg-url="{epg_url}"\n'
+        playlist_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{domain}" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain}\n'
+        playlist_content += f'{scheme}://{host}/live/stream.m3u8\n'
         
         response = await app.make_response(playlist_content)
         response.headers['Content-Type'] = 'application/vnd.apple.mpegurl'
@@ -241,7 +241,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         host = request.headers.get('Host') or request.host
         scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
         domain = host.split(':')[0] if ':' in host else host
-        channel_id = domain
+        channel_id = domain.lower()
 
         # Build XMLTV document
         tv = ET.Element('tv', attrib={
@@ -249,9 +249,9 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
             'generator-info-url': f'{scheme}://{host}',
         })
 
-        # Single channel entry matching the tvg-id in realm.m3u
+        # Single channel entry matching the tvg-id in live.m3u8
         ch = ET.SubElement(tv, 'channel', id=channel_id)
-        ET.SubElement(ch, 'display-name').text = f'{domain} (1080p)'
+        ET.SubElement(ch, 'display-name').text = domain
         ET.SubElement(ch, 'icon', src=f'{scheme}://{host}/static/images/logo.png')
 
         # Build programme entries from the stream database
