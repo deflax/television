@@ -223,7 +223,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         # Generate the playlist content dynamically
         epg_url = f'{scheme}://{host}/epg.xml'
         channel_id = domain.lower()
-        playlist_content = f'#EXTM3U url-tvg="{epg_url}" x-tvg-url="{epg_url}"\n'
+        playlist_content = f'#EXTM3U url-tvg="{epg_url}" x-tvg-url="{epg_url}" url-tvg-refresh="1"\n'
         playlist_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{domain}" tvg-logo="{scheme}://{host}/static/images/logo.png" group-title="Relax",{domain}\n'
         playlist_content += f'{scheme}://{host}/live/stream.m3u8\n'
         
