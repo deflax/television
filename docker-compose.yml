@@ -19,6 +19,7 @@ services:
       - "api"
       - "replay"
       - "mux"
+      - "most"
     restart: unless-stopped
     networks:
       - net
@@ -117,3 +118,27 @@ services:
   #     - net
   #   labels:
   #     - meta.role=icecast
+
+  mostdb:
+    image: postgres:13
+    container_name: mattermost-db
+    restart: unless-stopped
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: mmuser
+      POSTGRES_PASSWORD: mmuser_password
+      POSTGRES_DB: mattermost
+
+  most:
+    image: mattermost/mattermost-team-edition:latest
+    container_name: mattermost-app
+    restart: unless-stopped
+    ports:
+      - "8065:8065"
+    volumes:
+      - "./data/mattermost:/mattermost/data"
+    environment:
+      MM_CONFIG: /mattermost/config/config.json
+    depends_on:
+      - "mostdb"
