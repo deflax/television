@@ -148,11 +148,10 @@ class StreamManager:
         
         try:
             # Step 1: Stop current FFmpeg gracefully by sending 'q' to stdin.
-            # This tells FFmpeg to finalize the current segment before exiting,
-            # preventing truncated .ts chunks that break the transition.
-            # After FFmpeg exits, the watcher runs one final cycle to pick up
-            # the last completed segment so sequence numbers stay correct.
-            logger.debug('Stopping current FFmpeg gracefully (finalizing current segment)...')
+            # The watcher is stopped first to prevent registering the truncated
+            # last segment, then FFmpeg exits, and the runt segment is deleted.
+            # This ensures only complete segments are in the store.
+            logger.debug('Stopping current FFmpeg gracefully...')
             if self._ffmpeg:
                 await self._ffmpeg.stop_graceful(timeout=float(HLS_SEGMENT_TIME + 5))
             

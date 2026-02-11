@@ -373,14 +373,12 @@ class FFmpegRunner:
         return exit_code
     
     async def stop_graceful(self, timeout: float = 10.0) -> Optional[int]:
-        """Stop FFmpeg by sending 'q' to stdin, letting it finalize the current segment.
+        """Stop FFmpeg by sending 'q' to stdin, then clean up the truncated last segment.
         
-        FFmpeg's 'q' command tells it to finish the current output cleanly
-        (close muxer, write trailer) before exiting. For HLS this means the
-        current segment is finalized properly — no truncated chunks.
-        
-        After FFmpeg exits, runs one final watcher cycle to pick up the
-        last completed segment so the sequence numbers stay correct.
+        FFmpeg's 'q' command stops input reading and flushes buffered data.
+        The last segment will be a truncated runt (partial duration) because
+        FFmpeg writes whatever was buffered at quit time. We detect and delete
+        this runt so it never gets served to viewers.
         
         Falls back to SIGTERM/SIGKILL if 'q' doesn't work within timeout.
         Returns the exit code, or None if process wasn't running.
@@ -388,11 +386,23 @@ class FFmpegRunner:
         if not self._process:
             return None
         
+        # Stop the watcher FIRST so it doesn't pick up the truncated last segment
+        self._running = False
+        if self._watcher_task:
+            self._watcher_task.cancel()
+            try:
+                await self._watcher_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Snapshot which segments the watcher already registered (these are complete)
+        known_before_quit = set(self._known_segments)
+        
         exit_code = None
         
         if self._process.returncode is None:
             # Send 'q' to FFmpeg stdin for clean shutdown
-            logger.info('Sending quit command to FFmpeg for clean segment finalization...')
+            logger.info('Sending quit command to FFmpeg...')
             try:
                 if self._process.stdin:
                     self._process.stdin.write(b'q\n')
@@ -400,13 +410,13 @@ class FFmpegRunner:
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 logger.warning(f'Failed to send quit to FFmpeg stdin: {e}')
             
-            # Wait for FFmpeg to finish on its own
+            # Wait for FFmpeg to finish
             try:
                 exit_code = await asyncio.wait_for(
                     self._process.wait(),
                     timeout=timeout
                 )
-                logger.info(f'FFmpeg exited cleanly after quit command (code {exit_code})')
+                logger.info(f'FFmpeg exited after quit command (code {exit_code})')
             except asyncio.TimeoutError:
                 logger.warning(f'FFmpeg did not exit after quit within {timeout}s, sending SIGTERM')
                 self._process.terminate()
@@ -422,24 +432,10 @@ class FFmpegRunner:
         else:
             exit_code = self._process.returncode
         
-        # Let the watcher run one final cycle to pick up the last segment
-        # that FFmpeg finalized before exiting. The watcher checks
-        # `self._running` each loop, so we keep it True briefly.
-        if self._watcher_task:
-            # Wait for watcher to do one more scan (it sleeps 0.5s per cycle)
-            await asyncio.sleep(1.0)
-            self._running = False
-            # Now wait for it to exit from the while condition
-            try:
-                await asyncio.wait_for(self._watcher_task, timeout=3.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                self._watcher_task.cancel()
-                try:
-                    await self._watcher_task
-                except asyncio.CancelledError:
-                    pass
-        else:
-            self._running = False
+        # Delete truncated last segment(s) that FFmpeg wrote after we stopped the watcher.
+        # These are files on disk that weren't in _known_segments (i.e. the watcher
+        # never registered them as complete). They are runts from the quit flush.
+        self._cleanup_truncated_segments(known_before_quit)
         
         # Clean up stderr drain
         if self._stderr_task:
@@ -452,6 +448,38 @@ class FFmpegRunner:
         self._process = None
         logger.info(f'FFmpeg stopped gracefully with exit code {exit_code}')
         return exit_code
+    
+    def _cleanup_truncated_segments(self, known_segments: set[str]) -> None:
+        """Delete any segment files on disk that weren't registered by the watcher.
+        
+        After FFmpeg exits, any new .ts files that the watcher didn't process
+        are truncated runts from the quit/kill. Delete them so they don't get
+        picked up by the next FFmpegRunner or served to viewers.
+        """
+        output_path = Path(HLS_OUTPUT_DIR)
+        removed = 0
+        
+        for variant in range(NUM_VARIANTS):
+            if NUM_VARIANTS > 1:
+                variant_path = output_path / f'stream_{variant}'
+            else:
+                variant_path = output_path
+            
+            if not variant_path.exists():
+                continue
+            
+            for ts_file in variant_path.glob('segment_*.ts'):
+                file_key = str(ts_file)
+                if file_key not in known_segments:
+                    try:
+                        ts_file.unlink()
+                        removed += 1
+                        logger.info(f'Deleted truncated segment: {ts_file.name}')
+                    except OSError as e:
+                        logger.warning(f'Failed to delete truncated segment {ts_file.name}: {e}')
+        
+        if removed > 0:
+            logger.info(f'Cleaned up {removed} truncated segment(s)')
     
     async def wait(self) -> Optional[int]:
         """Wait for FFmpeg to exit.
