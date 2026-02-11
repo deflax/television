@@ -147,30 +147,23 @@ class StreamManager:
         logger.info(f'Switching stream to: {new_url[:60]}...')
         
         try:
-            # Step 1: Wait for the current segment to finish writing.
-            # This prevents killing FFmpeg mid-chunk which would produce
-            # a truncated .ts file and break the transition for viewers.
-            if self._ffmpeg and self._ffmpeg.is_running:
-                logger.debug('Waiting for current segment to complete before stopping...')
-                completed = await self._ffmpeg.wait_for_segment(timeout=float(HLS_SEGMENT_TIME + 2))
-                if completed:
-                    logger.debug('Segment completed, stopping FFmpeg cleanly')
-                else:
-                    logger.warning('Timed out waiting for segment to complete, stopping anyway')
-            
-            # Step 2: Stop current FFmpeg gracefully
-            logger.debug('Stopping current FFmpeg...')
+            # Step 1: Stop current FFmpeg gracefully by sending 'q' to stdin.
+            # This tells FFmpeg to finalize the current segment before exiting,
+            # preventing truncated .ts chunks that break the transition.
+            # After FFmpeg exits, the watcher runs one final cycle to pick up
+            # the last completed segment so sequence numbers stay correct.
+            logger.debug('Stopping current FFmpeg gracefully (finalizing current segment)...')
             if self._ffmpeg:
-                await self._ffmpeg.stop(graceful_timeout=5.0)
+                await self._ffmpeg.stop_graceful(timeout=float(HLS_SEGMENT_TIME + 5))
             
-            # Step 3: Mark discontinuity in segment store
+            # Step 2: Mark discontinuity in segment store
             await segment_store.mark_discontinuity()
             
-            # Step 4: Get next sequence number (after all current segments)
+            # Step 3: Get next sequence number (after all current segments)
             next_seq = await segment_store.get_next_sequence()
             logger.debug(f'Next sequence number: {next_seq}')
             
-            # Step 5: Start new FFmpeg
+            # Step 4: Start new FFmpeg
             self._ffmpeg = FFmpegRunner(on_segment=self._on_segment)
             success = await self._ffmpeg.start(new_url, next_seq)
             
@@ -184,7 +177,7 @@ class StreamManager:
                 info = self._ffmpeg.stream_info
                 await segment_store.set_source_info(info.width, info.height, info.bitrate)
             
-            # Step 6: Wait for first segment from new stream
+            # Step 5: Wait for first segment from new stream
             logger.info('Waiting for new stream segment...')
             has_segment = await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT)
             
