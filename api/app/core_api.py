@@ -7,7 +7,7 @@ validation bugs and reduce dependencies.
 import json
 import base64
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
@@ -71,7 +71,8 @@ class CoreAPIClient:
     def _token_is_expired(self) -> bool:
         if self._access_token_expires_at is None:
             return True
-        return datetime.fromtimestamp(self._access_token_expires_at) <= datetime.now()
+        # Refresh 30 seconds early to avoid 401s from clock skew or network latency
+        return datetime.fromtimestamp(self._access_token_expires_at) <= datetime.now() + timedelta(seconds=30)
 
     def _refresh_access_token(self) -> None:
         """Attempt to refresh the access token, falling back to full login."""
