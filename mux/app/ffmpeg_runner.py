@@ -432,10 +432,8 @@ class FFmpegRunner:
         else:
             exit_code = self._process.returncode
         
-        # Delete truncated last segment(s) that FFmpeg wrote after we stopped the watcher.
-        # These are files on disk that weren't in _known_segments (i.e. the watcher
-        # never registered them as complete). They are runts from the quit flush.
-        self._cleanup_truncated_segments(known_before_quit)
+        # Clean up truncated segments and FFmpeg-written m3u8 files
+        self._cleanup_after_stop(known_before_quit)
         
         # Clean up stderr drain
         if self._stderr_task:
@@ -449,12 +447,14 @@ class FFmpegRunner:
         logger.info(f'FFmpeg stopped gracefully with exit code {exit_code}')
         return exit_code
     
-    def _cleanup_truncated_segments(self, known_segments: set[str]) -> None:
-        """Delete any segment files on disk that weren't registered by the watcher.
+    def _cleanup_after_stop(self, known_segments: set[str]) -> None:
+        """Clean up after FFmpeg exits during a graceful stop.
         
-        After FFmpeg exits, any new .ts files that the watcher didn't process
-        are truncated runts from the quit/kill. Delete them so they don't get
-        picked up by the next FFmpegRunner or served to viewers.
+        1. Delete truncated segment files (runts from quit flush) — any .ts file
+           on disk that the watcher didn't register as complete.
+        2. Delete FFmpeg-written .m3u8 playlist files so the next FFmpeg instance
+           doesn't read them via append_list and skip ahead in segment numbering.
+           (We generate playlists dynamically from segment_store, not from these files.)
         """
         output_path = Path(HLS_OUTPUT_DIR)
         removed = 0
@@ -468,6 +468,7 @@ class FFmpegRunner:
             if not variant_path.exists():
                 continue
             
+            # Delete truncated .ts segments
             for ts_file in variant_path.glob('segment_*.ts'):
                 file_key = str(ts_file)
                 if file_key not in known_segments:
@@ -477,6 +478,23 @@ class FFmpegRunner:
                         logger.info(f'Deleted truncated segment: {ts_file.name}')
                     except OSError as e:
                         logger.warning(f'Failed to delete truncated segment {ts_file.name}: {e}')
+            
+            # Delete FFmpeg-written m3u8 files to prevent the next FFmpeg
+            # from reading them (append_list flag) and skipping segment numbers
+            for m3u8_file in variant_path.glob('*.m3u8'):
+                try:
+                    m3u8_file.unlink()
+                    logger.debug(f'Deleted FFmpeg playlist: {m3u8_file.name}')
+                except OSError as e:
+                    logger.warning(f'Failed to delete playlist {m3u8_file.name}: {e}')
+        
+        # Also clean m3u8 in the root output dir (copy mode writes stream.m3u8 there)
+        for m3u8_file in output_path.glob('*.m3u8'):
+            try:
+                m3u8_file.unlink()
+                logger.debug(f'Deleted FFmpeg playlist: {m3u8_file.name}')
+            except OSError as e:
+                logger.warning(f'Failed to delete playlist {m3u8_file.name}: {e}')
         
         if removed > 0:
             logger.info(f'Cleaned up {removed} truncated segment(s)')
