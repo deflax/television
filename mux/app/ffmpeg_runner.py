@@ -305,6 +305,7 @@ class FFmpegRunner:
         try:
             self._process = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -322,9 +323,11 @@ class FFmpegRunner:
             return False
     
     async def stop(self, graceful_timeout: float = 5.0) -> Optional[int]:
-        """Stop FFmpeg gracefully.
+        """Stop FFmpeg immediately with SIGTERM.
         
         Returns the exit code, or None if process wasn't running.
+        Note: This may truncate the current segment. For clean transitions
+        use stop_graceful() which lets FFmpeg finalize the current segment.
         """
         if not self._process:
             return None
@@ -367,6 +370,87 @@ class FFmpegRunner:
         
         self._process = None
         logger.info(f'FFmpeg stopped with exit code {exit_code}')
+        return exit_code
+    
+    async def stop_graceful(self, timeout: float = 10.0) -> Optional[int]:
+        """Stop FFmpeg by sending 'q' to stdin, letting it finalize the current segment.
+        
+        FFmpeg's 'q' command tells it to finish the current output cleanly
+        (close muxer, write trailer) before exiting. For HLS this means the
+        current segment is finalized properly — no truncated chunks.
+        
+        After FFmpeg exits, runs one final watcher cycle to pick up the
+        last completed segment so the sequence numbers stay correct.
+        
+        Falls back to SIGTERM/SIGKILL if 'q' doesn't work within timeout.
+        Returns the exit code, or None if process wasn't running.
+        """
+        if not self._process:
+            return None
+        
+        exit_code = None
+        
+        if self._process.returncode is None:
+            # Send 'q' to FFmpeg stdin for clean shutdown
+            logger.info('Sending quit command to FFmpeg for clean segment finalization...')
+            try:
+                if self._process.stdin:
+                    self._process.stdin.write(b'q\n')
+                    await self._process.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                logger.warning(f'Failed to send quit to FFmpeg stdin: {e}')
+            
+            # Wait for FFmpeg to finish on its own
+            try:
+                exit_code = await asyncio.wait_for(
+                    self._process.wait(),
+                    timeout=timeout
+                )
+                logger.info(f'FFmpeg exited cleanly after quit command (code {exit_code})')
+            except asyncio.TimeoutError:
+                logger.warning(f'FFmpeg did not exit after quit within {timeout}s, sending SIGTERM')
+                self._process.terminate()
+                try:
+                    exit_code = await asyncio.wait_for(
+                        self._process.wait(),
+                        timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning('FFmpeg did not terminate, killing')
+                    self._process.kill()
+                    exit_code = await self._process.wait()
+        else:
+            exit_code = self._process.returncode
+        
+        # Let the watcher run one final cycle to pick up the last segment
+        # that FFmpeg finalized before exiting. The watcher checks
+        # `self._running` each loop, so we keep it True briefly.
+        if self._watcher_task:
+            # Wait for watcher to do one more scan (it sleeps 0.5s per cycle)
+            await asyncio.sleep(1.0)
+            self._running = False
+            # Now wait for it to exit from the while condition
+            try:
+                await asyncio.wait_for(self._watcher_task, timeout=3.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                self._watcher_task.cancel()
+                try:
+                    await self._watcher_task
+                except asyncio.CancelledError:
+                    pass
+        else:
+            self._running = False
+        
+        # Clean up stderr drain
+        if self._stderr_task:
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                pass
+        
+        self._process = None
+        logger.info(f'FFmpeg stopped gracefully with exit code {exit_code}')
         return exit_code
     
     async def wait(self) -> Optional[int]:
