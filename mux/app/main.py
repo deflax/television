@@ -4,10 +4,11 @@ Monitors the API playhead via SSE and switches between input streams to
 produce a continuous HLS output stream at /live/stream.m3u8.
 
 The key improvement is that transitions happen at clean segment boundaries:
-1. Stop FFmpeg (allows current segment to finish)
-2. Mark discontinuity in segment store
-3. Start new FFmpeg with next sequence number
-4. Playlists are generated dynamically from segment store
+1. Wait for current segment to finish writing (no truncated chunks)
+2. Stop FFmpeg cleanly
+3. Mark discontinuity in segment store
+4. Start new FFmpeg with next sequence number
+5. Playlists are generated dynamically from segment store
 """
 
 import asyncio
