@@ -4,7 +4,7 @@ import random
 import logging
 import requests
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Callable, Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from core_api import CoreAPIClient
 
@@ -40,6 +40,8 @@ class StreamManager:
         self.database: Dict[str, Dict[str, Any]] = {}
         self.playhead: Dict[str, Any] = {}
         self.priority = 0
+        self.on_channel_added: Optional[Callable] = None   # callback(stream_name, start_at, prio)
+        self.on_channel_removed: Optional[Callable] = None # callback(stream_name)
     
     def get_core_process_list(self) -> list:
         """Get all processes from Core API with their names and states."""
@@ -158,6 +160,12 @@ class StreamManager:
         }
         self.logger.info(f'{stream_id} ({stream_name}) added to database. Config: {api_settings}')
 
+        if self.on_channel_added:
+            try:
+                self.on_channel_added(stream_name, stream_start, stream_prio)
+            except Exception as e:
+                self.logger.error(f'on_channel_added callback failed: {e}')
+
         # Preempt: if this stream outranks the current playhead, execute immediately
         if self.playhead and stream_prio > self.playhead.get('prio', 0):
             self.logger.info(
@@ -219,7 +227,13 @@ class StreamManager:
         
         self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state["exec"]}')
         self.database.pop(stream_id)
-        
+
+        if self.on_channel_removed:
+            try:
+                self.on_channel_removed(stream_name)
+            except Exception as e:
+                self.logger.error(f'on_channel_removed callback failed: {e}')
+
         try:
             self.scheduler.remove_job(stream_id)
         except Exception as e:

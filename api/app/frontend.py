@@ -147,11 +147,11 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
     # Create visitor event callbacks for Discord logging
     def on_visitor_connect(ip: str, count: int) -> None:
         if discord_bot_manager is not None:
-            discord_bot_manager.log_visitor_connect(ip, count)
+            discord_bot_manager.log_visitor_change()
 
     def on_visitor_disconnect(ip: str, count: int) -> None:
         if discord_bot_manager is not None:
-            discord_bot_manager.log_visitor_disconnect(ip, count)
+            discord_bot_manager.log_visitor_change()
 
     # Initialize visitor tracker with SSE connection-based tracking
     visitor_tracker = VisitorTracker(

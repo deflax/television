@@ -6,7 +6,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 import discord
-from discord.ext.commands import Bot, has_permissions, CheckFailure, has_role, MissingRole
+from discord.ext.commands import Bot, CheckFailure, has_role
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from ffmpeg import FFmpeg, Progress
 from obfuscation import obfuscate_hostname
@@ -27,17 +27,8 @@ class DiscordBotManager:
         self.live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440)
         self.scheduler_hostname = os.environ.get('SERVER_NAME', 'example.com')
 
-        # Discord API Intents
-        intents = discord.Intents.all()
-        intents.members = True
-        intents.guilds = True
-        intents.messages = True
-        intents.reactions = True
-        intents.presences = True
-        intents.message_content = True
-
         # Discord client
-        self.bot = Bot(command_prefix=".", intents=intents)
+        self.bot = Bot(command_prefix=".", intents=discord.Intents.all())
         self.worshipper_role_name = "worshipper"
         self.boss_role_name = "bosmang"
 
@@ -85,6 +76,35 @@ class DiscordBotManager:
         if footer:
             embed.set_footer(text=footer)
         return embed
+
+    @staticmethod
+    def _format_schedule_time(start_at: str) -> str:
+        """Format a military time or keyword into a display string."""
+        if start_at == 'now':
+            return 'Live now'
+        if start_at == 'never':
+            return 'Unscheduled'
+        time_str = str(start_at).strip()
+        if len(time_str) <= 2:
+            return f'{time_str.zfill(2)}:00 UTC'
+        return f'{time_str[:-2].zfill(2)}:{time_str[-2:]} UTC'
+
+    def _schedule_async(self, coro, error_msg: str) -> bool:
+        """Schedule a coroutine on the bot event loop (thread-safe).
+
+        Common guard: returns False if live channel is unconfigured or bot is not ready.
+        """
+        if self.live_channel_id == 0:
+            return False
+        if not self.bot.is_ready():
+            self.logger.warning('Discord bot is not ready yet')
+            return False
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
+            return True
+        except Exception as e:
+            self.logger.error(f'{error_msg}: {e}')
+            return False
 
     def _resolve_process(self, identifier: str) -> Optional[dict]:
         """Resolve a stream name or process ID to a process dict.
@@ -161,13 +181,18 @@ class DiscordBotManager:
             if isinstance(error, CheckFailure):
                 await ctx.channel.send('Access denied!')
 
-        @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
-        @has_role(self.boss_role_name)
-        async def start(ctx, *, identifier: str = None):
+        # Shared error handler for role-gated commands
+        async def _access_denied(ctx, error):
+            if isinstance(error, CheckFailure):
+                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
+                await ctx.channel.send(embed=embed)
+
+        async def _process_command(ctx, identifier, command):
+            """Shared handler for .start and .stop commands."""
             if not identifier:
                 embed = self._make_embed(
                     title='⚠️ Usage',
-                    description='`.start <name or process_id>`\nUse `.streams` to list available streams.',
+                    description=f'`.{command} <name or process_id>`\nUse `.streams` to list available streams.',
                     color=self.COLOR_WARNING
                 )
                 await ctx.channel.send(embed=embed)
@@ -183,73 +208,33 @@ class DiscordBotManager:
                 return
             process_id = process['id']
             display_name = process['name']
-            result = self.stream_manager.process_command(process_id, 'start')
+            result = self.stream_manager.process_command(process_id, command)
             if result['success']:
-                embed = self._make_embed(
-                    title='▶️ Stream Started',
-                    description=f'**{display_name}**',
-                    color=self.COLOR_SUCCESS,
-                    footer=f'ID: {process_id}'
-                )
+                title = '▶️ Stream Started' if command == 'start' else '⏹️ Stream Stopped'
+                color = self.COLOR_SUCCESS if command == 'start' else self.COLOR_NEUTRAL
+                embed = self._make_embed(title=title, description=f'**{display_name}**',
+                                         color=color, footer=f'ID: {process_id}')
             else:
                 embed = self._make_embed(
-                    title='❌ Start Failed',
+                    title=f'❌ {command.capitalize()} Failed',
                     description=f'**{display_name}**\n{result["message"]}',
-                    color=self.COLOR_ERROR,
-                    footer=f'ID: {process_id}'
+                    color=self.COLOR_ERROR, footer=f'ID: {process_id}'
                 )
             await ctx.channel.send(embed=embed)
 
-        @start.error
-        async def start_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
+        @has_role(self.boss_role_name)
+        async def start(ctx, *, identifier: str = None):
+            await _process_command(ctx, identifier, 'start')
+
+        start.error(_access_denied)
 
         @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <name or process_id>')
         @has_role(self.boss_role_name)
         async def stop(ctx, *, identifier: str = None):
-            if not identifier:
-                embed = self._make_embed(
-                    title='⚠️ Usage',
-                    description='`.stop <name or process_id>`\nUse `.streams` to list available streams.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-                return
-            process = self._resolve_process(identifier)
-            if not process:
-                embed = self._make_embed(
-                    title='⚠️ Not Found',
-                    description=f'No stream found matching `{identifier}`\nUse `.streams` to list available streams.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-                return
-            process_id = process['id']
-            display_name = process['name']
-            result = self.stream_manager.process_command(process_id, 'stop')
-            if result['success']:
-                embed = self._make_embed(
-                    title='⏹️ Stream Stopped',
-                    description=f'**{display_name}**',
-                    color=self.COLOR_NEUTRAL,
-                    footer=f'ID: {process_id}'
-                )
-            else:
-                embed = self._make_embed(
-                    title='❌ Stop Failed',
-                    description=f'**{display_name}**\n{result["message"]}',
-                    color=self.COLOR_ERROR,
-                    footer=f'ID: {process_id}'
-                )
-            await ctx.channel.send(embed=embed)
+            await _process_command(ctx, identifier, 'stop')
 
-        @stop.error
-        async def stop_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        stop.error(_access_denied)
 
         @self.bot.command(name='hello', help='Say hello to the bot')
         @has_role(self.worshipper_role_name)
@@ -295,18 +280,15 @@ class DiscordBotManager:
             live_streams = []
             scheduled_streams = []
 
-            for key, value in self.database.items():
+            for value in self.database.values():
                 item_name = value['name']
                 item_start = value['start_at']
                 if item_start == 'now':
                     live_streams.append(f'🔴 **{item_name}**')
                 elif item_start != 'never':
-                    item_str = str(item_start).strip()
-                    if len(item_str) <= 2:
-                        display_time = item_str.zfill(2) + ':00'
-                    else:
-                        display_time = item_str[:-2].zfill(2) + ':' + item_str[-2:]
-                    scheduled_streams.append(f'⏰ {item_name} — `{display_time} UTC`')
+                    scheduled_streams.append(
+                        f'⏰ {item_name} — `{self._format_schedule_time(item_start)}`'
+                    )
 
             if live_streams:
                 fields.append({'name': 'Live Now', 'value': '\n'.join(live_streams), 'inline': False})
@@ -320,60 +302,22 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
-        @self.bot.command(name='watchers', help='Lists all current watcher hostnames')
+        @self.bot.command(name='visitors', help='Lists all current visitor hostnames')
         @has_role(self.boss_role_name)
-        async def watchers(ctx):
+        async def visitors(ctx):
             if self.visitor_tracker is None:
                 embed = self._make_embed(
-                    title='👁️ Watchers',
+                    title=':alien: Visitors',
                     description='Visitor tracker not available.',
                     color=self.COLOR_WARNING
                 )
                 await ctx.channel.send(embed=embed)
                 return
 
-            sse_visitors = self.visitor_tracker.visitors
-            hls_only_ips = self.hls_viewer_ips or set()
-
-            if not sse_visitors and not hls_only_ips:
-                embed = self._make_embed(
-                    title='👁️ Watchers',
-                    description='No watchers connected.',
-                    color=self.COLOR_NEUTRAL
-                )
-                await ctx.channel.send(embed=embed)
-                return
-
-            watcher_lines = []
-
-            # SSE viewers (browser)
-            for ip in sse_visitors:
-                hostname = obfuscate_hostname(ip, ip)
-                connections = sse_visitors[ip]
-                if connections > 1:
-                    watcher_lines.append(f'🖥️ `{hostname}` ×{connections}')
-                else:
-                    watcher_lines.append(f'🖥️ `{hostname}`')
-
-            # HLS-only viewers (external players)
-            for ip in hls_only_ips:
-                hostname = obfuscate_hostname(ip, ip)
-                watcher_lines.append(f'📡 `{hostname}`')
-
-            total = len(sse_visitors) + len(hls_only_ips)
-            embed = self._make_embed(
-                title=f'👁️ Watchers ({total})',
-                description='\n'.join(watcher_lines),
-                footer='🖥️ Browser  📡 External player',
-                color=self.COLOR_INFO
-            )
+            embed = self._build_visitors_embed()
             await ctx.channel.send(embed=embed)
 
-        @watchers.error
-        async def watchers_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        visitors.error(_access_denied)
 
         @self.bot.command(name='now', help='Displays whats playing right now')
         async def now(ctx):
@@ -425,11 +369,7 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
-        @rnd.error
-        async def rnd_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        rnd.error(_access_denied)
 
         @self.bot.command(name='rec', help='Start the recorder')
         @has_role(self.boss_role_name)
@@ -453,11 +393,7 @@ class DiscordBotManager:
                 await ctx.channel.send(embed=embed)
                 await self.exec_recorder(playhead)
 
-        @rec.error
-        async def rec_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        rec.error(_access_denied)
 
         @self.bot.command(name='recstop', help='Stop the recorder')
         @has_role(self.boss_role_name)
@@ -478,11 +414,7 @@ class DiscordBotManager:
                 )
             await ctx.channel.send(embed=embed)
 
-        @recstop.error
-        async def recstop_error(ctx, error):
-            if isinstance(error, CheckFailure):
-                embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
-                await ctx.channel.send(embed=embed)
+        recstop.error(_access_denied)
 
     async def _send_and_prune(self, channel, content=None, embed=None):
         """Send a message to a channel and delete oldest messages beyond the limit.
@@ -563,6 +495,50 @@ class DiscordBotManager:
             await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
+    def announce_channel_added(self, stream_name: str, start_at: str, prio: int) -> bool:
+        """Announce a channel addition to Discord (thread-safe)."""
+        return self._schedule_async(
+            self._announce_channel_change_async(stream_name, start_at, prio, added=True),
+            'Failed to schedule channel added announcement'
+        )
+
+    def announce_channel_removed(self, stream_name: str) -> bool:
+        """Announce a channel removal to Discord (thread-safe)."""
+        return self._schedule_async(
+            self._announce_channel_change_async(stream_name, added=False),
+            'Failed to schedule channel removed announcement'
+        )
+
+    async def _announce_channel_change_async(self, stream_name: str, start_at: str = None,
+                                              prio: int = None, added: bool = True):
+        """Internal async method to announce channel addition/removal to Discord."""
+        try:
+            channel = self.bot.get_channel(int(self.live_channel_id))
+            if channel is None:
+                self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
+                return
+
+            if added:
+                embed = self._make_embed(
+                    title=':satellite_orbital: Channel Added',
+                    description=f'**{stream_name}**',
+                    color=self.COLOR_SUCCESS,
+                    fields=[
+                        {'name': 'Schedule', 'value': self._format_schedule_time(start_at), 'inline': True},
+                        {'name': 'Priority', 'value': str(prio), 'inline': True},
+                    ]
+                )
+            else:
+                embed = self._make_embed(
+                    title=':satellite_orbital: Channel Removed',
+                    description=f'**{stream_name}**',
+                    color=self.COLOR_NEUTRAL,
+                )
+
+            await channel.send(embed=embed)
+        except Exception as e:
+            self.logger.error(f'Failed to send channel change announcement to Discord: {e}')
+
     def send_timecode_message(self, obfuscated_hostname: str, timecode: str) -> bool:
         """Send timecode message to Discord channel (thread-safe, sync method).
 
@@ -604,118 +580,73 @@ class DiscordBotManager:
         except Exception as e:
             self.logger.error(f'Failed to send timecode message to Discord: {e}')
 
-    def log_visitor_connect(self, ip: str, visitor_count: int) -> bool:
-        """Log visitor connection to Discord channel (thread-safe, sync method).
+    def log_visitor_change(self) -> bool:
+        """Send updated visitors embed on connect/disconnect (thread-safe)."""
+        return self._schedule_async(
+            self._send_visitors_embed(),
+            'Failed to schedule visitor change message'
+        )
 
-        Args:
-            ip: The visitor's IP address (will be obfuscated)
-            visitor_count: Current total visitor count
+    def _build_visitors_embed(self) -> discord.Embed:
+        """Build the visitors embed from current tracker state.
 
-        Returns:
-            True if message was scheduled, False otherwise.
+        Shared by the .visitors command and automatic connect/disconnect announcements.
         """
-        if self.live_channel_id == 0:
-            return False
+        sse_visitors = self.visitor_tracker.visitors if self.visitor_tracker else {}
+        hls_only_ips = self.hls_viewer_ips or set()
 
-        if not self.bot.is_ready():
-            self.logger.warning('Discord bot is not ready yet')
-            return False
-
-        obfuscated_ip = obfuscate_hostname(ip, ip)
-        try:
-            asyncio.run_coroutine_threadsafe(
-                self._log_visitor_async(obfuscated_ip, visitor_count, connected=True),
-                self.bot.loop
+        if not sse_visitors and not hls_only_ips:
+            return self._make_embed(
+                title=':alien: Visitors',
+                description='No visitors connected.',
+                color=self.COLOR_NEUTRAL
             )
-            return True
-        except Exception as e:
-            self.logger.error(f'Failed to schedule visitor connect message: {e}')
-            return False
 
-    def log_visitor_disconnect(self, ip: str, visitor_count: int) -> bool:
-        """Log visitor disconnection to Discord channel (thread-safe, sync method).
+        visitor_lines = []
 
-        Args:
-            ip: The visitor's IP address (will be obfuscated)
-            visitor_count: Current total visitor count
+        for ip in sse_visitors:
+            hostname = obfuscate_hostname(ip, ip)
+            connections = sse_visitors[ip]
+            if connections > 1:
+                visitor_lines.append(f'🖥️ `{hostname}` ×{connections}')
+            else:
+                visitor_lines.append(f'🖥️ `{hostname}`')
 
-        Returns:
-            True if message was scheduled, False otherwise.
-        """
-        if self.live_channel_id == 0:
-            return False
+        for ip in hls_only_ips:
+            hostname = obfuscate_hostname(ip, ip)
+            visitor_lines.append(f'📡 `{hostname}`')
 
-        if not self.bot.is_ready():
-            self.logger.warning('Discord bot is not ready yet')
-            return False
+        total = len(sse_visitors) + len(hls_only_ips)
+        return self._make_embed(
+            title=f':alien: Visitors ({total})',
+            description='\n'.join(visitor_lines),
+            footer='🖥️ Browser  📡 External player',
+            color=self.COLOR_INFO
+        )
 
-        obfuscated_ip = obfuscate_hostname(ip, ip)
-        try:
-            asyncio.run_coroutine_threadsafe(
-                self._log_visitor_async(obfuscated_ip, visitor_count, connected=False),
-                self.bot.loop
-            )
-            return True
-        except Exception as e:
-            self.logger.error(f'Failed to schedule visitor disconnect message: {e}')
-            return False
-
-    async def _log_visitor_async(self, obfuscated_ip: str, visitor_count: int, connected: bool, source: str = '🖥️'):
-        """Internal async method to log visitor event to Discord."""
+    async def _send_visitors_embed(self):
+        """Send the visitors embed to the live channel using send_and_prune."""
         try:
             channel = self.bot.get_channel(int(self.live_channel_id))
             if channel is None:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
                 return
 
-            direction = '📥' if connected else '📤'
-            message = f"{direction} {source} `{obfuscated_ip}` 👽 `{visitor_count}`"
-
-            await self._send_and_prune(channel, content=message)
+            embed = self._build_visitors_embed()
+            await self._send_and_prune(channel, embed=embed)
         except Exception as e:
-            self.logger.error(f'Failed to send visitor log to Discord: {e}')
+            self.logger.error(f'Failed to send visitors embed to Discord: {e}')
 
     def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
-        """Update HLS viewer state and log connect/disconnect events to Discord.
-
-        Diffs the new HLS-only IPs against the previous set and schedules
-        connect/disconnect messages on the bot's event loop.
-
-        Args:
-            new_ips: Current set of HLS-only viewer IPs (already excludes SSE users)
-            total_count: Current total visitor count (SSE + HLS)
-        """
+        """Update HLS viewer state and send visitors embed on changes."""
         old_ips = self.hls_viewer_ips
         self.hls_viewer_ips = new_ips
 
-        connected = new_ips - old_ips
-        disconnected = old_ips - new_ips
-
-        if not connected and not disconnected:
-            return
-
-        if self.live_channel_id == 0 or not self.bot.is_ready():
-            return
-
-        for ip in connected:
-            obfuscated_ip = obfuscate_hostname(ip, ip)
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self._log_visitor_async(obfuscated_ip, total_count, connected=True, source='📡'),
-                    self.bot.loop
-                )
-            except Exception as e:
-                self.logger.error(f'Failed to schedule HLS viewer connect message: {e}')
-
-        for ip in disconnected:
-            obfuscated_ip = obfuscate_hostname(ip, ip)
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self._log_visitor_async(obfuscated_ip, total_count, connected=False, source='📡'),
-                    self.bot.loop
-                )
-            except Exception as e:
-                self.logger.error(f'Failed to schedule HLS viewer disconnect message: {e}')
+        if new_ips != old_ips:
+            self._schedule_async(
+                self._send_visitors_embed(),
+                'Failed to schedule HLS visitors embed'
+            )
 
     async def exec_recorder(self, playhead):
         """Execute the recorder to capture a stream."""
