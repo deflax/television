@@ -141,6 +141,15 @@ def get_sorted_thumbnails(rec_path: str) -> List[str]:
 def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_manager=None) -> None:
     """Register all Quart routes for the frontend."""
 
+    # Inject site-wide template variables (SERVER_NAME, CORE_API_HOSTNAME)
+    # so templates never need to hardcode the domain.
+    @app.context_processor
+    def inject_site_vars():
+        return {
+            'server_name': config.server_name or 'localhost',
+            'core_hostname': config.core_hostname or 'localhost',
+        }
+
     # Initialize timecode manager
     timecode_manager = TimecodeManager()
 

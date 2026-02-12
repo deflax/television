@@ -6,9 +6,8 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 
 - **Multi-Channel Scheduling** - Schedule streams by hour with priority-based automatic switching
 - **Automatic Fallback** - Falls back to nearest scheduled stream when current ends
-- **Discord Bot Integration** - Live notifications, EPG commands, and remote recording control
+- **Discord Bot Integration** - Live notifications, EPG commands, and stream control
 - **Protected Video Archive** - HMAC-based timecode authentication for secure access
-- **Live Recording** - Record streams with automatic thumbnail generation
 - **Replay Service** - Multi-channel endless shuffled HLS playback of recorded videos
 - **Mux Service** - Seamless stream multiplexer with adaptive bitrate output and crash recovery
 - **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player and automatic error recovery
@@ -34,7 +33,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
               │                            │                            │
        ┌──────▼──────┐              ┌──────▼──────┐              ┌──────▼──────┐
        │  Quart API  │◄────SSE──────│     Mux     │              │  Restreamer │
-       │   :8080     │   /events    │    :8091    │              │    :8080    │
+       │   :8080     │   /events    │    :8091    │              │   (:8080)   │
        │             │              │             │              │    :1935    │
        │ - Web UI    │              │ - ABR HLS   │◄────HLS──────│    :6000    │
        │ - SSE       │              │ - 1080p/720p│              │             │
@@ -183,9 +182,11 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `API_VOD_TOKEN` | Bearer token for video upload API |
 | `FLASK_SECRET_KEY` | Flask session encryption key |
 | `TIMECODE_SECRET_KEY` | HMAC key for archive timecodes |
+| `DISCORDBOT_ENABLED` | Enable Discord bot (`true`/`false`, default: `false`) |
 | `DISCORDBOT_TOKEN` | Discord bot token |
-| `DISCORDBOT_GUILD_ID` | Discord server ID |
-| `DISCORDBOT_CHANNEL_ID` | Channel for bot messages |
+| `DISCORDBOT_LIVE_CHANNEL_ID` | Discord channel ID for live stream announcements |
+| `DISCORDBOT_TIMECODE_CHANNEL_ID` | Discord channel ID for timecode messages |
+| `DISCORDBOT_LIVE_CHANNEL_UPDATE` | Live announcement interval in minutes (default: `1440`) |
 | `FRONTEND_MODE` | `mux` (default) or `legacy` - see [Frontend Modes](#frontend-modes) |
 
 ### Replay Service Variables
@@ -228,19 +229,21 @@ Each variant specifies a resolution height (source is capped at this), video bit
 
 ### Icecast Audio Streaming Variables
 
+> **Note:** Icecast is disabled by default. The icecast service is commented out in `docker-compose.yml`. To enable it, uncomment the icecast service, set `ICECAST_ENABLED=true` in `variables.env`, and uncomment the icecast backend in `haproxy.cfg`.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ICECAST_ENABLED` | `true` | Enable audio-only streaming via Icecast |
-| `ICECAST_SOURCE_PASSWORD` | `hackme` | Password for FFmpeg to connect to Icecast |
+| `ICECAST_ENABLED` | `false` | Enable audio-only streaming via Icecast |
+| `ICECAST_SOURCE_PASSWORD` | - | Password for FFmpeg to connect to Icecast |
 | `ICECAST_ADMIN_PASSWORD` | - | Icecast admin interface password |
 | `ICECAST_RELAY_PASSWORD` | - | Icecast relay password |
 | `ICECAST_HOST` | `icecast` | Internal Icecast hostname |
 | `ICECAST_PORT` | `8000` | Icecast server port |
 | `ICECAST_MOUNT` | `/stream.mp3` | Mount point for audio stream |
-| `ICECAST_AUDIO_BITRATE` | `128k` | Audio encoding bitrate |
+| `ICECAST_AUDIO_BITRATE` | `128k` | Audio encoding bitrate (`320k` in `variables.env.dist`) |
 | `ICECAST_AUDIO_FORMAT` | `mp3` | Audio format: `mp3` or `aac` |
 
-The mux service automatically extracts audio from the muxed live stream and sends it to Icecast. The audio stream is available at `https://example.com/live/stream.mp3`.
+When enabled, the mux service automatically extracts audio from the muxed live stream and sends it to Icecast. The audio stream is available at `https://example.com/live/stream.mp3`.
 
 ## Services
 
@@ -282,7 +285,7 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 - **Two modes** - Copy (passthrough) or ABR (adaptive bitrate)
 - **No upscaling** - ABR mode caps output at source resolution
 - **Stale segment cleanup** - Background cleanup of old `.ts` segments to prevent disk filling
-- **Modular architecture** - Separated concerns: config, ffmpeg management, playlist operations, playhead monitoring
+- **Modular architecture** - Separated concerns: config, ffmpeg runner, segment store, stream management, playhead monitoring
 
 **Modes** (set via `MUX_MODE` env var):
 
@@ -382,29 +385,35 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `.streams` | bosmang | List all Restreamer processes and their states |
 | `.start <name or id>` | bosmang | Start a Restreamer process |
 | `.stop <name or id>` | bosmang | Stop a Restreamer process |
-| `.rec` | bosmang | Start recording current stream |
-| `.recstop` | bosmang | Stop recording |
+| `.rnd` | bosmang | Switch to a random stream from the database |
 
 #### Stream Control Workflow
 
 1. Use `.streams` to list all available Restreamer processes with their names, IDs, and current state (running/stopped)
 2. Use `.start <name or id>` to start a specific process (name matching is case-insensitive)
 3. Use `.stop <name or id>` to stop it
+4. Use `.rnd` to switch to a random stream (excludes the currently playing one)
 
 ### API Endpoints
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/` | GET | Public | Live stream player |
+| `/weather` | GET | Public | Weather visualization page |
 | `/archive` | GET/POST | Timecode | Video archive |
 | `/request-timecode` | POST | Public | Request archive access |
-| `/playhead` | GET | Public | Current stream info (JSON) |
-| `/events` | GET | Public | SSE stream for real-time updates |
+| `/logout` | GET | Public | Clear session and logout |
+| `/events` | GET | Public | SSE stream (playhead, visitors, EPG) |
 | `/health` | GET | Public | Health check endpoint |
+| `/live.m3u8` | GET | Public | IPTV playlist (dynamic) |
+| `/epg.xml` | GET | Public | XMLTV EPG (dynamic) |
 | `/video` | POST | Bearer | Upload video files |
+| `/video/watch/<name>` | GET | Timecode | Video player page |
+| `/video/<file>` | GET | Timecode | Stream video file |
+| `/video/download/<file>` | GET | Timecode | Download video file |
+| `/thumb/<file>` | GET | Timecode | Serve thumbnail image |
 | `/replay/<channel>/playlist.m3u8` | GET | Public | HLS replay stream for channel |
-| `/live/stream.m3u8` | GET | Public | Mux ABR stream (master playlist) |
-| `/live/stream.mp3` | GET | Public | Audio-only stream (Icecast) |
+| `/live/stream.m3u8` | GET | Public | Mux stream (master playlist) |
 
 ## Logging and Monitoring
 
@@ -412,13 +421,13 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 
 To reduce noise in logs, successful (200 OK) responses are filtered from access logs:
 
-**API Service** (`/workspace/api/app/flask_api.py`):
-- All 200 OK responses are hidden from uvicorn/hypercorn access logs
-- Only errors (4xx, 5xx) and other status codes appear in logs
+**API Service** (`api/app/flask_api.py`):
+- All 200 OK and 404 Not Found responses are hidden from uvicorn/hypercorn access logs
+- Only other status codes (3xx, 4xx, 5xx) appear in logs
 
-**Mux Service** (`/workspace/mux/app/server.py`):
-- 200 OK responses for `/live/stream*` and `/live/segment_*` are hidden
-- Errors still appear for debugging (404, 503, etc.)
+**Mux Service** (`mux/app/server.py`):
+- 200 OK responses for `/health` and `.m3u8` playlist requests are hidden
+- Segment requests (`.ts`) and errors still appear in logs
 
 **Visitor Tracking:**
 - Private/internal IP addresses (Docker, LAN, loopback) are excluded from visitor counts
@@ -445,13 +454,17 @@ television/
 │   ├── app/
 │   │   ├── static/              # CSS, JS, images
 │   │   ├── templates/
+│   │   │   ├── base.html        # Base template with modals
 │   │   │   ├── index_mux.html   # Mux mode template
 │   │   │   └── index_legacy.html # Legacy mode template
 │   │   ├── flask_api.py         # Application entry point
 │   │   ├── frontend.py          # Routes and views
 │   │   ├── stream_manager.py    # Stream orchestration
+│   │   ├── core_api.py          # Restreamer Core API client
 │   │   ├── discord_bot_manager.py
-│   │   └── timecode_manager.py
+│   │   ├── timecode_manager.py
+│   │   ├── visitor_tracker.py   # SSE visitor tracking
+│   │   └── obfuscation.py       # Hostname obfuscation
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── replay/
@@ -468,22 +481,25 @@ television/
 │   ├── app/
 │   │   ├── main.py              # Application orchestration
 │   │   ├── config.py            # Configuration management
-│   │   ├── ffmpeg_manager.py    # FFmpeg process lifecycle
-│   │   ├── playlist_manager.py  # HLS playlist operations
+│   │   ├── ffmpeg_runner.py     # FFmpeg process lifecycle
+│   │   ├── segment_store.py     # HLS segment & playlist management
+│   │   ├── stream_manager.py    # Stream switching logic
 │   │   ├── playhead_monitor.py  # SSE monitoring
-│   │   └── server.py            # HTTP server for HLS output
+│   │   ├── hls_viewer_tracker.py # HLS viewer counting
+│   │   ├── server.py            # HTTP server for HLS output
+│   │   └── utils.py             # Utility functions
 │   ├── scripts/
 │   │   └── run.sh
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── haproxy/
 │   ├── haproxy.cfg
-│   ├── cloudflare_ips.lst
 │   └── Dockerfile
 ├── data/                        # Runtime data (gitignored)
+│   ├── acme/                    # ACME certificates data
 │   ├── certificates/
 │   ├── restreamer/
-│   ├── recorder/                # Recorder channel files
+│   ├── recorder/                # Recorder channel files (vod/, thumb/)
 │   └── library/                 # Library channels (auto-discovered)
 ├── docker-compose.yml
 ├── variables.env.dist
