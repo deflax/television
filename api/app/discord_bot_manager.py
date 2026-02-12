@@ -1,14 +1,12 @@
 import os
 import asyncio
 import logging
-import json
 from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 import discord
 from discord.ext.commands import Bot, CheckFailure, has_role
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from ffmpeg import FFmpeg, Progress
 from obfuscation import obfuscate_hostname
 
 
@@ -37,8 +35,6 @@ class DiscordBotManager:
 
         # Internal state
         self.database = {}
-        self.rec_path = "/recordings"
-        self.recorder = False
         self.visitor_tracker = None
         self.hls_viewer_ips: set = set()  # IPs of HLS-only viewers (not connected via SSE)
 
@@ -209,18 +205,13 @@ class DiscordBotManager:
             process_id = process['id']
             display_name = process['name']
             result = self.stream_manager.process_command(process_id, command)
-            if result['success']:
-                title = '▶️ Stream Started' if command == 'start' else '⏹️ Stream Stopped'
-                color = self.COLOR_SUCCESS if command == 'start' else self.COLOR_NEUTRAL
-                embed = self._make_embed(title=title, description=f'**{display_name}**',
-                                         color=color, footer=f'ID: {process_id}')
-            else:
+            if not result['success']:
                 embed = self._make_embed(
                     title=f'❌ {command.capitalize()} Failed',
                     description=f'**{display_name}**\n{result["message"]}',
                     color=self.COLOR_ERROR, footer=f'ID: {process_id}'
                 )
-            await ctx.channel.send(embed=embed)
+                await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
         @has_role(self.boss_role_name)
@@ -302,23 +293,6 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
-        @self.bot.command(name='visitors', help='Lists all current visitor hostnames')
-        @has_role(self.boss_role_name)
-        async def visitors(ctx):
-            if self.visitor_tracker is None:
-                embed = self._make_embed(
-                    title=':alien: Visitors',
-                    description='Visitor tracker not available.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-                return
-
-            embed = self._build_visitors_embed()
-            await ctx.channel.send(embed=embed)
-
-        visitors.error(_access_denied)
-
         @self.bot.command(name='now', help='Displays whats playing right now')
         async def now(ctx):
             playhead = await self.query_playhead()
@@ -371,51 +345,6 @@ class DiscordBotManager:
 
         rnd.error(_access_denied)
 
-        @self.bot.command(name='rec', help='Start the recorder')
-        @has_role(self.boss_role_name)
-        async def rec(ctx):
-            if self.recorder:
-                embed = self._make_embed(
-                    title='⚠️ Recorder Busy',
-                    description='A recording is already in progress.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-            else:
-                playhead = await self.query_playhead()
-                stream_name = playhead.get('name', 'Unknown')
-                self.recorder = True
-                embed = self._make_embed(
-                    title='⏺️ Recording Started',
-                    description=f'Recording from **{stream_name}**...',
-                    color=self.COLOR_SUCCESS
-                )
-                await ctx.channel.send(embed=embed)
-                await self.exec_recorder(playhead)
-
-        rec.error(_access_denied)
-
-        @self.bot.command(name='recstop', help='Stop the recorder')
-        @has_role(self.boss_role_name)
-        async def recstop(ctx):
-            if self.recorder:
-                # TODO: kill any process currently running
-                self.recorder = False
-                embed = self._make_embed(
-                    title='⏹️ Recording Stopped',
-                    description='The recorder has been stopped.',
-                    color=self.COLOR_NEUTRAL
-                )
-            else:
-                embed = self._make_embed(
-                    title='ℹ️ Recorder Idle',
-                    description='The recorder is not running.',
-                    color=self.COLOR_NEUTRAL
-                )
-            await ctx.channel.send(embed=embed)
-
-        recstop.error(_access_denied)
-
     async def _send_and_prune(self, channel, content=None, embed=None):
         """Send a message to a channel and delete oldest messages beyond the limit.
 
@@ -439,6 +368,18 @@ class DiscordBotManager:
                 self.logger.warning(f'Failed to delete old message {old_msg.id}: {e}')
 
         return msg
+
+    async def _prune_all(self, channel):
+        """Delete all tracked bot messages for a channel without sending a new one."""
+        channel_id = channel.id
+        if channel_id not in self._channel_messages:
+            return
+        while self._channel_messages[channel_id]:
+            old_msg = self._channel_messages[channel_id].popleft()
+            try:
+                await old_msg.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                self.logger.warning(f'Failed to delete old message {old_msg.id}: {e}')
 
     async def query_playhead(self):
         """Query the playhead from stream_manager."""
@@ -625,11 +566,21 @@ class DiscordBotManager:
         )
 
     async def _send_visitors_embed(self):
-        """Send the visitors embed to the live channel using send_and_prune."""
+        """Send the visitors embed to the live channel using send_and_prune.
+
+        If no visitors are connected, deletes the previous message instead.
+        """
         try:
             channel = self.bot.get_channel(int(self.live_channel_id))
             if channel is None:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
+                return
+
+            sse_visitors = self.visitor_tracker.visitors if self.visitor_tracker else {}
+            hls_only_ips = self.hls_viewer_ips or set()
+
+            if not sse_visitors and not hls_only_ips:
+                await self._prune_all(channel)
                 return
 
             embed = self._build_visitors_embed()
@@ -647,117 +598,6 @@ class DiscordBotManager:
                 self._send_visitors_embed(),
                 'Failed to schedule HLS visitors embed'
             )
-
-    async def exec_recorder(self, playhead):
-        """Execute the recorder to capture a stream."""
-        stream_id = playhead['id']
-        stream_name = playhead['name']
-        stream_hls_url = playhead['head']
-        current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
-        video_file = current_datetime + ".mp4"
-        thumb_file = current_datetime + ".png"
-        video_output = f'{self.rec_path}/live/{video_file}'
-        thumb_output = f'{self.rec_path}/live/{thumb_file}'
-
-        try:
-            self.logger.info(f'Recording video {video_file}')
-            # Record a mp4 file
-            ffmpeg = (
-                FFmpeg()
-                .option("y")
-                .input(stream_hls_url)
-                .output(video_output,
-                        {"codec:v": "copy", "codec:a": "copy", "bsf:a": "aac_adtstoasc"},
-                ))
-
-            @ffmpeg.on("progress")
-            def on_progress(progress: Progress):
-                self.logger.info(progress)
-
-            ffmpeg.execute()
-            self.logger.info(f'Recording of {video_file} finished.')
-
-        except Exception as joberror:
-            self.logger.error(f'Recording of {video_file} failed!')
-            self.logger.error(joberror)
-
-        else:
-            # Show Metadata
-            ffmpeg_metadata = (
-                FFmpeg(executable="ffprobe")
-                .input(video_output,
-                       print_format="json",
-                       show_streams=None,)
-            )
-            media = json.loads(ffmpeg_metadata.execute())
-            self.logger.info(f"# Video")
-            self.logger.info(f"- Codec: {media['streams'][0]['codec_name']}")
-            self.logger.info(f"- Resolution: {media['streams'][0]['width']} X {media['streams'][0]['height']}")
-            self.logger.info(f"- Duration: {media['streams'][0]['duration']}")
-            self.logger.info(f"# Audio")
-            self.logger.info(f"- Codec: {media['streams'][1]['codec_name']}")
-            self.logger.info(f"- Sample Rate: {media['streams'][1]['sample_rate']}")
-            self.logger.info(f"- Duration: {media['streams'][1]['duration']}")
-
-            thumb_skip_time = float(media['streams'][0]['duration']) // 2
-            thumb_width = media['streams'][0]['width']
-
-        try:
-            self.logger.info(f'Generating thumb {thumb_file}')
-            # Generate thumbnail image from the recorded mp4 file
-            ffmpeg_thumb = (
-                FFmpeg()
-                .input(video_output, ss=thumb_skip_time)
-                .output(thumb_output, vf='scale={}:{}'.format(thumb_width, -1), vframes=1)
-            )
-            ffmpeg_thumb.execute()
-            self.logger.info(f'Thumbnail {thumb_file} created.')
-
-        except Exception as joberror:
-            self.logger.error(f'Generating thumb {thumb_file} failed!')
-            self.logger.error(joberror)
-
-        # When ready, move the recorded from the live dir to the archives and reset the rec head
-        os.rename(f'{video_output}', f'{self.rec_path}/vod/{video_file}')
-        os.rename(f'{thumb_output}', f'{self.rec_path}/thumb/{thumb_file}')
-        await self.create_embed(stream_name, video_file, thumb_file)
-        self.logger.info('Recording job done')
-        self.recorder = False
-
-    async def create_embed(self, stream_name, video_filename, thumb_filename):
-        """Create a Discord embed for a recorded video."""
-        img_url = f'https://{self.scheduler_hostname}/static/images'
-        thumb_url = f'https://{self.scheduler_hostname}/thumb/{thumb_filename}'
-        video_download_url = f'https://{self.scheduler_hostname}/video/download/{video_filename}'
-        video_filename_no_extension = video_filename.split('.')[0]
-        video_watch_url = f'https://{self.scheduler_hostname}/video/watch/{video_filename_no_extension}'
-
-        embed = discord.Embed(
-            title=f'VOD: {video_filename_no_extension}',
-            url=f'{video_watch_url}',
-            description=f'{stream_name}',
-            colour=0x00b0f4,
-            timestamp=datetime.now()
-        )
-        embed.add_field(
-            name="Download",
-            value=f'[mp4 file]({video_download_url})',
-            inline=True
-        )
-        embed.add_field(
-            name="Watch",
-            value=f'[plyr.js player]({video_watch_url}) :]',
-            inline=True
-        )
-        embed.set_image(url=thumb_url)
-        embed.set_footer(
-            text="DeflaxTV",
-            icon_url=f'{img_url}/logo-96.png'
-        )
-
-        if self.live_channel_id != 0:
-            live_channel = self.bot.get_channel(int(self.live_channel_id))
-            await live_channel.send(embed=embed)
 
     async def start(self):
         """Start the Discord bot."""
