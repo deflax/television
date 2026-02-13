@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_base">#02070E</color>
+    <color name="text_primary">#F3F8FF</color>
+    <color name="text_secondary">#BFD2E0</color>
+    <color name="status_text">#9CC6E1</color>
+    <color name="live_pill_text">#E8FFF2</color>
+</resources>
