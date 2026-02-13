@@ -23,3 +23,10 @@ If you use command line Gradle:
 ```bash
 ./gradlew :app:assembleDebug
 ```
+
+## Release
+
+- Release checklist: `PLAY_RELEASE_CHECKLIST.md`
+- Play listing template: `PLAY_STORE_METADATA_TEMPLATE.md`
+
+Before each upload, update `versionCode` and `versionName` in `app/build.gradle.kts`.
