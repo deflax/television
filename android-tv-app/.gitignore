@@ -5,3 +5,6 @@ local.properties
 /.kotlin/
 /build/
 **/build/
+*.aab
+*.apk
+app/release/
