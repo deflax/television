@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import asyncio
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Set
@@ -18,6 +19,7 @@ from visitor_tracker import VisitorTracker
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi')
 THUMBNAIL_EXTENSION = '.png'
 DEFAULT_REC_PATH = "/recordings"
+SSE_TO_HLS_GRACE_SECONDS = 45.0
 
 
 # Route helpers
@@ -177,6 +179,15 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
     # HLS viewer count reported by mux service (viewers not using SSE)
     hls_viewer_count: int = 0
+    # Recently disconnected SSE clients (ip -> monotonic disconnect time)
+    recent_sse_disconnects: dict[str, float] = {}
+
+    def _prune_recent_sse_disconnects(now: float) -> None:
+        """Drop expired disconnect entries used for SSE->HLS grace handling."""
+        cutoff = now - SSE_TO_HLS_GRACE_SECONDS
+        for ip, ts in list(recent_sse_disconnects.items()):
+            if ts < cutoff:
+                del recent_sse_disconnects[ip]
     
     @app.route('/health', methods=['GET'])
     async def health_route():
@@ -197,11 +208,19 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
         if not data or 'count' not in data:
             return 'Bad request', 400
 
+        now = time.monotonic()
+        _prune_recent_sse_disconnects(now)
+
         reported_ips = set(data.get('viewers', {}).keys())
         # IPs already tracked via SSE connections
         sse_ips = set(visitor_tracker.visitors.keys())
+        # Recently dropped SSE connections should not be reclassified immediately
+        grace_ips = {
+            ip for ip, ts in recent_sse_disconnects.items()
+            if ts >= now - SSE_TO_HLS_GRACE_SECONDS
+        }
         # Only count HLS viewers that are NOT also connected via SSE
-        hls_only_ips = reported_ips - sse_ips
+        hls_only_ips = reported_ips - sse_ips - grace_ips
 
         old_count = hls_viewer_count
         hls_viewer_count = len(hls_only_ips)
@@ -486,6 +505,7 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
 
         queue: asyncio.Queue = asyncio.Queue()
         sse_clients.add(queue)
+        recent_sse_disconnects.pop(client_ip, None)
         visitor_tracker.connect(client_ip)
 
         # Notify all clients about the updated visitor count
@@ -519,6 +539,9 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
             finally:
                 sse_clients.discard(queue)
                 visitor_tracker.disconnect(client_ip)
+                now = time.monotonic()
+                recent_sse_disconnects[client_ip] = now
+                _prune_recent_sse_disconnects(now)
                 loggers.sse.info(f'[{client_ip}] SSE client disconnected')
                 # Notify remaining clients about updated visitor count
                 await _broadcast_visitors()
