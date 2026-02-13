@@ -48,6 +48,13 @@ def get_client_hostname(req) -> str:
     return 'unknown'
 
 
+def get_request_base_url(req) -> str:
+    """Build external base URL from current request and proxy headers."""
+    host = req.headers.get('Host') or req.host
+    scheme = req.headers.get('X-Forwarded-Proto', req.scheme)
+    return f'{scheme}://{host}'
+
+
 def send_timecode_to_discord(discord_bot_manager, obfuscated_hostname: str, timecode: str) -> bool:
     """Send timecode request to Discord via bot.
 
@@ -193,6 +200,26 @@ def register_routes(app: Quart, stream_manager, config, loggers, discord_bot_man
     async def health_route():
         """Lightweight health check endpoint for HAProxy."""
         return 'OK', 200
+
+    @app.route('/privacy-policy', methods=['GET'])
+    @app.route('/privacy', methods=['GET'])
+    async def privacy_policy_route():
+        """Privacy policy page - public."""
+        client_ip = get_client_address(request)
+        loggers.content.info(f'[{client_ip}] privacy policy /privacy-policy')
+        return await render_template(
+            'privacy_policy.html',
+            now=datetime.now(timezone.utc)
+        )
+
+    @app.route('/privacy-policy-url', methods=['GET'])
+    async def privacy_policy_url_route():
+        """Public privacy policy URL for app-store metadata."""
+        client_ip = get_client_address(request)
+        loggers.content.info(f'[{client_ip}] privacy policy url /privacy-policy-url')
+        return jsonify({
+            'privacy_policy_url': f'{get_request_base_url(request)}/privacy-policy'
+        })
 
     @app.route('/hls-viewers', methods=['POST'])
     async def hls_viewers_route():
