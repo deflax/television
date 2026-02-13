@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Deflax TV</string>
+    <string name="epg_title">Program Guide</string>
+    <string name="epg_loading">Loading EPG...</string>
+    <string name="epg_unavailable">EPG unavailable</string>
+    <string name="epg_empty">No upcoming EPG events</string>
+    <string name="epg_updated">EPG updated %1$s</string>
+    <string name="epg_stale">EPG stale (%1$s)</string>
+    <string name="now_playing_label">Now Playing</string>
+    <string name="now_playing_unknown">No current EPG item</string>
+    <string name="next_program_none">No next program in EPG</string>
+    <string name="next_program_countdown">Next: %1$s in %2$s</string>
+    <string name="next_program_starts_in">Starts in %1$s: %2$s</string>
+    <string name="epg_time_window">%1$s - %2$s</string>
+    <string name="live_now">LIVE</string>
+    <string name="overlay_toggle_hint">Press OK/Info to show or hide guide</string>
+    <string name="playback_live">Playback live</string>
+    <string name="playback_reconnecting">Reconnecting stream...</string>
+    <string name="playback_retrying_in">Stream error. Retrying in %1$ds</string>
+</resources>
