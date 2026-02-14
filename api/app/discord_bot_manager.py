@@ -85,6 +85,24 @@ class DiscordBotManager:
             return f'{time_str.zfill(2)}:00 UTC'
         return f'{time_str[:-2].zfill(2)}:{time_str[-2:]} UTC'
 
+    @staticmethod
+    def _schedule_sort_minutes(start_at: str) -> int:
+        """Convert schedule time to minutes from midnight for sorting."""
+        try:
+            time_str = str(start_at).strip()
+            if len(time_str) <= 2:
+                hour, minute = int(time_str), 0
+            else:
+                hour, minute = int(time_str[:-2]), int(time_str[-2:])
+
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError('Invalid time range')
+
+            return (hour * 60) + minute
+        except (TypeError, ValueError):
+            # Keep malformed schedule values at the end of the list.
+            return (24 * 60) + 1
+
     def _schedule_async(self, coro, error_msg: str) -> bool:
         """Schedule a coroutine on the bot event loop (thread-safe).
 
@@ -277,14 +295,26 @@ class DiscordBotManager:
                 if item_start == 'now':
                     live_streams.append(f'🔴 **{item_name}**')
                 elif item_start != 'never':
-                    scheduled_streams.append(
-                        f'⏰ {item_name} — `{self._format_schedule_time(item_start)}`'
-                    )
+                    scheduled_streams.append({
+                        'name': item_name,
+                        'start_at': item_start,
+                    })
+
+            scheduled_streams.sort(
+                key=lambda item: (
+                    self._schedule_sort_minutes(item['start_at']),
+                    item['name'].lower(),
+                )
+            )
+            scheduled_lines = [
+                f'⏰ {item["name"]} — `{self._format_schedule_time(item["start_at"])}`'
+                for item in scheduled_streams
+            ]
 
             if live_streams:
                 fields.append({'name': 'Live Now', 'value': '\n'.join(live_streams), 'inline': False})
-            if scheduled_streams:
-                fields.append({'name': 'Scheduled', 'value': '\n'.join(scheduled_streams), 'inline': False})
+            if scheduled_lines:
+                fields.append({'name': 'Scheduled', 'value': '\n'.join(scheduled_lines), 'inline': False})
 
             embed = self._make_embed(
                 title='📺 Schedule',
