@@ -34,11 +34,10 @@ app = Quart(__name__)
 
 @app.after_request
 async def add_hls_headers(response: Response) -> Response:
-    """Add headers to prevent HTTP/2 stream issues with HLS clients."""
+    """Add CORS headers for HLS clients."""
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = '*'
-    response.headers['Connection'] = 'keep-alive'
     return response
 
 
