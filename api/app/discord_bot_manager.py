@@ -307,7 +307,7 @@ class DiscordBotManager:
                 )
             )
             scheduled_lines = [
-                f'⏰ {item["name"]} — `{self._format_schedule_time(item["start_at"])}`'
+                f"⏰ `{self._format_schedule_time(item['start_at'])}` — {item['name']}"
                 for item in scheduled_streams
             ]
 
