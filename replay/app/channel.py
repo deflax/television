@@ -43,6 +43,7 @@ class Channel:
     ffmpeg_process: Optional[subprocess.Popen] = None
     shuffled_files: list[str] = field(default_factory=list)
     known_files: set[str] = field(default_factory=set)
+    stop_event: threading.Event = field(default_factory=threading.Event)
     restart_event: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
 
@@ -54,9 +55,19 @@ class Channel:
         try:
             with open(config_path) as f:
                 config = json.load(f)
+            if not isinstance(config, dict):
+                logger.warning(f"[{self.name}] channel.json must be a JSON object")
+                return
             if 'transcode' in config:
-                self.transcode = bool(config['transcode'])
-                logger.info(f"[{self.name}] Config loaded: transcode={self.transcode}")
+                transcode = config['transcode']
+                if isinstance(transcode, bool):
+                    self.transcode = transcode
+                    logger.info(f"[{self.name}] Config loaded: transcode={self.transcode}")
+                else:
+                    logger.warning(
+                        f"[{self.name}] Invalid channel.json value for 'transcode': "
+                        f"{transcode!r} (expected true/false)"
+                    )
         except Exception as e:
             logger.warning(f"[{self.name}] Failed to load channel.json: {e}")
 
@@ -96,7 +107,7 @@ class Channel:
 def cleanup_old_segments(channel: Channel):
     """Periodically remove old .ts segments for a channel."""
     hls_dir = Path(channel.hls_dir)
-    while not stop_event.is_set():
+    while not (stop_event.is_set() or channel.stop_event.is_set()):
         try:
             now = time.time()
             for seg in hls_dir.glob('segment_*.ts'):
@@ -110,14 +121,14 @@ def cleanup_old_segments(channel: Channel):
                     logger.warning(f"[{channel.name}] Could not remove old segment {seg}: {e}")
         except Exception as e:
             logger.warning(f"[{channel.name}] Segment cleanup error: {e}")
-        stop_event.wait(timeout=HLS_SEGMENT_TIME)
+        channel.stop_event.wait(timeout=HLS_SEGMENT_TIME)
 
 
 def watch_channel_files(channel: Channel):
     """Watch for file changes in a channel's source directory."""
-    while not stop_event.is_set():
-        stop_event.wait(timeout=SCAN_INTERVAL)
-        if stop_event.is_set():
+    while not (stop_event.is_set() or channel.stop_event.is_set()):
+        channel.stop_event.wait(timeout=SCAN_INTERVAL)
+        if stop_event.is_set() or channel.stop_event.is_set():
             break
         current_files = set(channel.get_video_files())
         if current_files == channel.known_files:
@@ -158,7 +169,7 @@ def run_channel_ffmpeg(channel: Channel):
     logger.info(f"[{channel.name}] Started (source: {channel.source_dir})")
 
     waiting_for_files = False
-    while not stop_event.is_set():
+    while not (stop_event.is_set() or channel.stop_event.is_set()):
         channel.shuffle_playlist()
         channel.known_files = set(channel.shuffled_files)
         channel.restart_event.clear()
@@ -167,14 +178,17 @@ def run_channel_ffmpeg(channel: Channel):
             if not waiting_for_files:
                 logger.info(f"[{channel.name}] No video files found. Waiting for files...")
                 waiting_for_files = True
-            # Wait for file watcher to detect new files
-            channel.restart_event.wait()
+            # Wait for file watcher to detect new files or for stop requests
+            channel.restart_event.wait(timeout=SCAN_INTERVAL)
             channel.restart_event.clear()
             continue
         
         waiting_for_files = False
 
         concat_file = channel.create_concat_file()
+
+        if stop_event.is_set() or channel.stop_event.is_set():
+            break
 
         # Build ffmpeg command - use copy mode or transcode based on channel config
         cmd = [
@@ -249,7 +263,7 @@ def run_channel_ffmpeg(channel: Channel):
             drain_thread.start()
 
             last_segment_time = time.time()
-            while channel.ffmpeg_process.poll() is None and not stop_event.is_set():
+            while channel.ffmpeg_process.poll() is None and not (stop_event.is_set() or channel.stop_event.is_set()):
                 time.sleep(2)
 
                 if channel.restart_event.is_set():
@@ -272,7 +286,13 @@ def run_channel_ffmpeg(channel: Channel):
                         channel.ffmpeg_process.kill()
                         break
 
-            if stop_event.is_set():
+            if stop_event.is_set() or channel.stop_event.is_set():
+                if channel.ffmpeg_process.poll() is None:
+                    channel.ffmpeg_process.terminate()
+                    try:
+                        channel.ffmpeg_process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        channel.ffmpeg_process.kill()
                 break
 
             drain_thread.join(timeout=5)
@@ -311,36 +331,45 @@ def discover_library_channels() -> list[str]:
 
 def start_channel(name: str, source_dir: str):
     """Start a new channel."""
+    hls_dir = f'{HLS_BASE_DIR}/{name}'
+    channel = Channel(name=name, source_dir=source_dir, hls_dir=hls_dir)
+    channel.load_config()
+    channel.thread = threading.Thread(
+        target=run_channel_ffmpeg, args=(channel,), daemon=True
+    )
+
     with channels_lock:
         if name in channels:
             logger.warning(f"Channel '{name}' already exists")
             return
-
-        hls_dir = f'{HLS_BASE_DIR}/{name}'
-        channel = Channel(name=name, source_dir=source_dir, hls_dir=hls_dir)
-        channel.load_config()
-        channel.thread = threading.Thread(
-            target=run_channel_ffmpeg, args=(channel,), daemon=True
-        )
-        channel.thread.start()
         channels[name] = channel
-        logger.info(f"Channel '{name}' started (transcode={channel.transcode})")
+
+    channel.thread.start()
+    logger.info(f"Channel '{name}' started (transcode={channel.transcode})")
 
 
 def stop_channel(name: str):
     """Stop a channel."""
     with channels_lock:
-        if name not in channels:
-            return
-        channel = channels[name]
-        if channel.ffmpeg_process:
-            channel.ffmpeg_process.terminate()
-            try:
-                channel.ffmpeg_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                channel.ffmpeg_process.kill()
-        del channels[name]
-        logger.info(f"Channel '{name}' stopped")
+        channel = channels.pop(name, None)
+
+    if channel is None:
+        return
+
+    channel.stop_event.set()
+    channel.restart_event.set()
+
+    if channel.ffmpeg_process and channel.ffmpeg_process.poll() is None:
+        channel.ffmpeg_process.terminate()
+        try:
+            channel.ffmpeg_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            channel.ffmpeg_process.kill()
+
+    if channel.thread and channel.thread.is_alive():
+        channel.thread.join(timeout=10)
+
+    logger.info(f"Channel '{name}' stopped")
 
 
 def watch_library():
@@ -369,13 +398,23 @@ def watch_library():
 def stop_all_channels():
     """Stop all channels gracefully."""
     stop_event.set()
+
     with channels_lock:
-        for name, channel in list(channels.items()):
-            if channel.ffmpeg_process:
-                logger.info(f"Stopping channel '{name}'...")
-                channel.ffmpeg_process.terminate()
-                try:
-                    channel.ffmpeg_process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    channel.ffmpeg_process.kill()
+        active_channels = list(channels.items())
         channels.clear()
+
+    for name, channel in active_channels:
+        logger.info(f"Stopping channel '{name}'...")
+        channel.stop_event.set()
+        channel.restart_event.set()
+
+        if channel.ffmpeg_process and channel.ffmpeg_process.poll() is None:
+            channel.ffmpeg_process.terminate()
+            try:
+                channel.ffmpeg_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                channel.ffmpeg_process.kill()
+
+    for _, channel in active_channels:
+        if channel.thread and channel.thread.is_alive():
+            channel.thread.join(timeout=10)
