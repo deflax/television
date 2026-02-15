@@ -271,6 +271,11 @@ Multi-channel HLS streaming service that serves video files as endless shuffled 
 - `transcode: false` (default) - Copy mode, passthrough without re-encoding
 - `transcode: true` - Full transcoding to configured bitrate
 
+**Copy mode compatibility:**
+- Smooth file-to-file transitions in copy mode require compatible source streams (codec, resolution, fps, and audio layout).
+- The replay service keeps the largest compatible subset and skips incompatible files (with warnings in logs) to avoid stream breaks.
+- For best non-transcoding results, remux files to MPEG-TS (`.ts`) with aligned stream parameters.
+
 **Conflict detection:** If `data/library/recorder` exists, it's skipped to avoid conflict with the reserved `recorder` channel.
 
 ### Mux Service

@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from config import (
     logger,
@@ -43,6 +43,7 @@ class Channel:
     ffmpeg_process: Optional[subprocess.Popen] = None
     shuffled_files: list[str] = field(default_factory=list)
     known_files: set[str] = field(default_factory=set)
+    probe_cache: dict[str, tuple[float, tuple[Any, ...]]] = field(default_factory=dict)
     stop_event: threading.Event = field(default_factory=threading.Event)
     restart_event: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
@@ -80,18 +81,139 @@ class Channel:
 
         video_files = [
             f for f in source_path.rglob('*')
-            if f.suffix.lower() in ('.mp4', '.mkv')
+            if f.suffix.lower() in ('.mp4', '.mkv', '.ts')
         ]
         files = sorted([str(f) for f in video_files])
         return files
 
+    def probe_signature(self, file_path: str) -> Optional[tuple[Any, ...]]:
+        """Probe media properties used to validate concat copy compatibility."""
+        path = Path(file_path)
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return None
+
+        cached = self.probe_cache.get(file_path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+
+        probe_cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', (
+                'stream=codec_type,codec_name,width,height,'
+                'pix_fmt,r_frame_rate,sample_rate,channels'
+            ),
+            '-of', 'json',
+            file_path,
+        ]
+
+        try:
+            result = subprocess.run(
+                probe_cmd,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except Exception as e:
+            logger.warning(f"[{self.name}] ffprobe failed for {path.name}: {e}")
+            return None
+
+        if result.returncode != 0:
+            err = result.stderr.strip()
+            if err:
+                logger.warning(f"[{self.name}] ffprobe error for {path.name}: {err}")
+            return None
+
+        try:
+            data = json.loads(result.stdout or '{}')
+        except json.JSONDecodeError as e:
+            logger.warning(f"[{self.name}] ffprobe JSON parse failed for {path.name}: {e}")
+            return None
+
+        streams = data.get('streams', [])
+        video = next((s for s in streams if s.get('codec_type') == 'video'), None)
+        audio = next((s for s in streams if s.get('codec_type') == 'audio'), None)
+
+        if not isinstance(video, dict):
+            logger.warning(f"[{self.name}] No video stream found in {path.name}")
+            return None
+
+        def _to_int(value: Any) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return 0
+
+        signature = (
+            video.get('codec_name') or '',
+            _to_int(video.get('width')),
+            _to_int(video.get('height')),
+            video.get('pix_fmt') or '',
+            video.get('r_frame_rate') or '',
+            audio.get('codec_name') if isinstance(audio, dict) else '',
+            _to_int(audio.get('sample_rate')) if isinstance(audio, dict) else 0,
+            _to_int(audio.get('channels')) if isinstance(audio, dict) else 0,
+        )
+
+        self.probe_cache[file_path] = (mtime, signature)
+        return signature
+
+    def filter_copy_compatible_files(self, files: list[str]) -> tuple[list[str], list[str]]:
+        """Keep the largest set of files that can be concatenated in copy mode."""
+        if len(files) < 2:
+            return files, []
+
+        by_signature: dict[tuple[Any, ...], int] = {}
+        signatures_by_file: dict[str, Optional[tuple[Any, ...]]] = {}
+        for file_path in files:
+            signature = self.probe_signature(file_path)
+            signatures_by_file[file_path] = signature
+            if signature is not None:
+                by_signature[signature] = by_signature.get(signature, 0) + 1
+
+        if not by_signature:
+            return [], [Path(f).name for f in files]
+
+        best_signature = max(by_signature.items(), key=lambda item: item[1])[0]
+
+        compatible = [
+            file_path for file_path in files
+            if signatures_by_file[file_path] == best_signature
+        ]
+        skipped = [
+            Path(file_path).name for file_path in files
+            if signatures_by_file[file_path] != best_signature
+        ]
+        return compatible, skipped
+
     def shuffle_playlist(self) -> list[str]:
         """Refresh and shuffle the playlist."""
         files = self.get_video_files()
+        self.known_files = set(files)
         if files:
             random.shuffle(files)
-            self.shuffled_files = files
-            logger.info(f"[{self.name}] Shuffled playlist with {len(files)} files")
+            if self.transcode:
+                self.shuffled_files = files
+            else:
+                self.shuffled_files, skipped = self.filter_copy_compatible_files(files)
+                if skipped:
+                    preview = ', '.join(skipped[:5])
+                    suffix = '...' if len(skipped) > 5 else ''
+                    logger.warning(
+                        f"[{self.name}] Skipping {len(skipped)} file(s) not compatible "
+                        f"with copy-mode concat: {preview}{suffix}"
+                    )
+                if not self.shuffled_files:
+                    logger.warning(
+                        f"[{self.name}] No copy-compatible files available. "
+                        "Add homogeneous files or remux to MPEG-TS."
+                    )
+            logger.info(f"[{self.name}] Shuffled playlist with {len(self.shuffled_files)} files")
+        else:
+            self.shuffled_files = []
         return self.shuffled_files
 
     def create_concat_file(self) -> str:
@@ -140,6 +262,11 @@ def watch_channel_files(channel: Channel):
         for f in removed:
             logger.info(f"[{channel.name}] File removed: {Path(f).name}")
         channel.known_files = current_files
+        if channel.probe_cache:
+            channel.probe_cache = {
+                path: cached for path, cached in channel.probe_cache.items()
+                if path in current_files
+            }
         channel.restart_event.set()
 
 
@@ -171,12 +298,13 @@ def run_channel_ffmpeg(channel: Channel):
     waiting_for_files = False
     while not (stop_event.is_set() or channel.stop_event.is_set()):
         channel.shuffle_playlist()
-        channel.known_files = set(channel.shuffled_files)
         channel.restart_event.clear()
 
         if not channel.shuffled_files:
             if not waiting_for_files:
-                logger.info(f"[{channel.name}] No video files found. Waiting for files...")
+                logger.info(
+                    f"[{channel.name}] No playable files found. Waiting for compatible files..."
+                )
                 waiting_for_files = True
             # Wait for file watcher to detect new files or for stop requests
             channel.restart_event.wait(timeout=SCAN_INTERVAL)
@@ -194,6 +322,8 @@ def run_channel_ffmpeg(channel: Channel):
         cmd = [
             'ffmpeg',
             '-re',
+            '-fflags', '+genpts',
+            '-avoid_negative_ts', 'make_zero',
             '-f', 'concat',
             '-safe', '0',
             '-stream_loop', '-1',
