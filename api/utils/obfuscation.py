@@ -9,9 +9,9 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
     """
     Obfuscate a hostname or IP address for display.
 
-    For IPs with reverse DNS: shows first part and last 2 parts, obfuscates middle parts
+    For IPs with reverse DNS: obfuscates all labels except last 2, first label partially masked
     For IPs without reverse DNS or "unknown": shows IP with last two octets obfuscated
-    For hostnames: obfuscates the middle parts
+    For hostnames: obfuscates all labels except last 2, first label partially masked
 
     Args:
         hostname: The hostname or IP address to obfuscate
@@ -37,12 +37,12 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
             reverse_dns = socket.gethostbyaddr(ip_to_check)[0]
             parts = reverse_dns.split('.')
             if len(parts) >= 4:
-                # Keep first part and last 2 parts, obfuscate middle
+                # Obfuscate first label and middle, keep last 2
                 middle_count = len(parts) - 3
                 obfuscated_middle = ['***'] * middle_count
-                return f"{parts[0]}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
+                return f"{_obfuscate_part(parts[0])}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
             elif len(parts) == 3:
-                return f"{parts[0]}.{_obfuscate_part(parts[1])}.{parts[2]}"
+                return f"{_obfuscate_part(parts[0])}.{_obfuscate_part(parts[1])}.{parts[2]}"
             elif len(parts) == 2:
                 return f"{_obfuscate_part(parts[0])}.{parts[1]}"
             else:
@@ -73,9 +73,9 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
     if len(parts) >= 4:
         middle_count = len(parts) - 3
         obfuscated_middle = ['***'] * middle_count
-        return f"{parts[0]}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
+        return f"{_obfuscate_part(parts[0])}.{'.'.join(obfuscated_middle)}.{parts[-2]}.{parts[-1]}"
     elif len(parts) == 3:
-        return f"{parts[0]}.{_obfuscate_part(parts[1])}.{parts[2]}"
+        return f"{_obfuscate_part(parts[0])}.{_obfuscate_part(parts[1])}.{parts[2]}"
     elif len(parts) == 2:
         return f"{_obfuscate_part(parts[0])}.{parts[1]}"
     else:
