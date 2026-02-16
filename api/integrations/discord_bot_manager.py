@@ -5,7 +5,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import discord
-from discord.ext.commands import Bot, CheckFailure, has_role
+from discord.ext.commands import Bot, CheckFailure, check
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from utils.obfuscation import obfuscate_hostname
 
@@ -157,6 +157,26 @@ class DiscordBotManager:
                 return p
         return None
 
+    def _require_any_role(self, *role_names: str):
+        """Create a role check using case-insensitive role name matching."""
+        normalized_roles = {
+            role_name.strip().casefold()
+            for role_name in role_names
+            if role_name and role_name.strip()
+        }
+
+        async def predicate(ctx):
+            if ctx.guild is None:
+                return False
+
+            author_roles = getattr(ctx.author, 'roles', [])
+            for role in author_roles:
+                if role.name.strip().casefold() in normalized_roles:
+                    return True
+            return False
+
+        return check(predicate)
+
     def _setup_bot_events(self):
         """Setup Discord bot events."""
 
@@ -185,7 +205,7 @@ class DiscordBotManager:
         """Setup Discord bot commands."""
 
         @self.bot.command(name='streams', help='List all Restreamer processes and their states')
-        @has_role(self.boss_role_name)
+        @self._require_any_role(self.boss_role_name)
         async def streams(ctx):
             process_list = self.stream_manager.get_core_process_list()
             if not process_list:
@@ -258,21 +278,21 @@ class DiscordBotManager:
                 await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
-        @has_role(self.boss_role_name)
+        @self._require_any_role(self.boss_role_name)
         async def start(ctx, *, identifier: str = None):
             await _process_command(ctx, identifier, 'start')
 
         start.error(_access_denied)
 
         @self.bot.command(name='stop', help='Stop a Restreamer process. Usage: .stop <name or process_id>')
-        @has_role(self.boss_role_name)
+        @self._require_any_role(self.boss_role_name)
         async def stop(ctx, *, identifier: str = None):
             await _process_command(ctx, identifier, 'stop')
 
         stop.error(_access_denied)
 
         @self.bot.command(name='hello', help='Say hello to the bot')
-        @has_role(self.worshipper_role_name)
+        @self._require_any_role(self.worshipper_role_name, self.boss_role_name)
         async def hello(ctx):
             author_name = ctx.author.name
             embed = self._make_embed(
@@ -361,7 +381,7 @@ class DiscordBotManager:
             await ctx.channel.send(embed=embed)
 
         @self.bot.command(name='rnd', help='Switch to a random stream from the database')
-        @has_role(self.boss_role_name)
+        @self._require_any_role(self.boss_role_name)
         async def rnd(ctx):
             # Check if there's only one stream (or none) in the database
             if len(self.stream_manager.database) <= 1:
@@ -402,7 +422,7 @@ class DiscordBotManager:
         rnd.error(_access_denied)
 
         @self.bot.command(name='clearlog', help='Delete previous bot messages in this channel')
-        @has_role(self.boss_role_name)
+        @self._require_any_role(self.boss_role_name)
         async def clearlog(ctx):
             try:
                 await ctx.message.add_reaction('🧹')
