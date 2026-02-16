@@ -224,8 +224,13 @@ class StreamManager:
         """Remove channel from database and handle cleanup."""
         if stream_id not in self.database:
             return
-        
-        self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {state["exec"]}')
+
+        if isinstance(state, dict):
+            reason = state.get('exec', 'unknown')
+        else:
+            reason = 'unknown'
+
+        self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {reason}')
         self.database.pop(stream_id)
 
         if self.on_channel_removed:

@@ -13,6 +13,19 @@ from utils.obfuscation import obfuscate_hostname
 class DiscordBotManager:
     """Manages Discord bot functionality integrated with the Flask API."""
 
+    @staticmethod
+    def _read_int_env(name: str, default: int, logger: logging.Logger) -> int:
+        """Read an integer environment variable with fallback."""
+        raw_value = os.environ.get(name)
+        if raw_value in (None, ''):
+            return default
+
+        try:
+            return int(raw_value)
+        except ValueError:
+            logger.warning(f'Invalid integer for {name}: {raw_value!r}. Using default {default}.')
+            return default
+
     def __init__(self, config, logger: logging.Logger, stream_manager):
         self.config = config
         self.logger = logger
@@ -20,9 +33,9 @@ class DiscordBotManager:
 
         # Read Discord-specific env variables
         self.bot_token = os.environ.get('DISCORDBOT_TOKEN', 'token')
-        self.live_channel_id = os.environ.get('DISCORDBOT_LIVE_CHANNEL_ID', 0)
-        self.timecode_channel_id = os.environ.get('DISCORDBOT_TIMECODE_CHANNEL_ID', 0)
-        self.live_channel_update = os.environ.get('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440)
+        self.live_channel_id = self._read_int_env('DISCORDBOT_LIVE_CHANNEL_ID', 0, self.logger)
+        self.timecode_channel_id = self._read_int_env('DISCORDBOT_TIMECODE_CHANNEL_ID', 0, self.logger)
+        self.live_channel_update = self._read_int_env('DISCORDBOT_LIVE_CHANNEL_UPDATE', 1440, self.logger)
         self.scheduler_hostname = os.environ.get('SERVER_NAME', 'example.com')
 
         # Discord client
@@ -562,7 +575,7 @@ class DiscordBotManager:
                     self.scheduler.add_job(
                         func=self.announce_live_channel,
                         trigger='interval',
-                        minutes=int(self.live_channel_update),
+                        minutes=self.live_channel_update,
                         id='announce_live_channel',
                         args=(stream_name, stream_details)
                     )
@@ -579,7 +592,7 @@ class DiscordBotManager:
     async def announce_live_channel(self, stream_name, stream_details):
         """Announce live stream to Discord channel."""
         if self.live_channel_id != 0:
-            live_channel = self.bot.get_channel(int(self.live_channel_id))
+            live_channel = self.bot.get_channel(self.live_channel_id)
             await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
@@ -601,7 +614,7 @@ class DiscordBotManager:
                                               prio: int = None, added: bool = True):
         """Internal async method to announce channel addition/removal to Discord."""
         try:
-            channel = self.bot.get_channel(int(self.live_channel_id))
+            channel = self.bot.get_channel(self.live_channel_id)
             if channel is None:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
                 return
@@ -657,7 +670,7 @@ class DiscordBotManager:
     async def _send_timecode_async(self, obfuscated_hostname: str, timecode: str):
         """Internal async method to send timecode message to Discord."""
         try:
-            channel = self.bot.get_channel(int(self.timecode_channel_id))
+            channel = self.bot.get_channel(self.timecode_channel_id)
             if channel is None:
                 self.logger.error(f'Could not find Discord channel with ID {self.timecode_channel_id}')
                 return
@@ -718,7 +731,7 @@ class DiscordBotManager:
         If no visitors are connected, deletes the previous message instead.
         """
         try:
-            channel = self.bot.get_channel(int(self.live_channel_id))
+            channel = self.bot.get_channel(self.live_channel_id)
             if channel is None:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
                 return
