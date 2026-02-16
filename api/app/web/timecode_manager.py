@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
-from obfuscation import obfuscate_hostname as _obfuscate_hostname
+from utils.obfuscation import obfuscate_hostname as _obfuscate_hostname
 
 
 class TimecodeManager:

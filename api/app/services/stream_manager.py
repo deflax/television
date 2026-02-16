@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 from typing import Callable, Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
-from core_api import CoreAPIClient
+from services.core_api import CoreAPIClient
 
 
 
