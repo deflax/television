@@ -59,6 +59,7 @@ class DiscordBotManager:
         # Track bot messages per channel (keep last N message IDs)
         self.max_channel_messages = 1
         self._channel_messages = {}  # channel_id -> deque of discord.Message
+        self._startup_greeting_sent = False
 
         # Setup bot commands and events
         self._setup_bot_events()
@@ -171,6 +172,13 @@ class DiscordBotManager:
                 id='query_database'
             )
             self.scheduler.get_job('query_database').modify(next_run_time=datetime.now())
+
+            if not self._startup_greeting_sent and self.live_channel_id != 0:
+                live_channel = self.bot.get_channel(self.live_channel_id)
+                if live_channel is not None:
+                    await live_channel.send('🌍 ( 🧘🏻 ) 🌕')
+                    self._startup_greeting_sent = True
+
             self.logger.info(f'Discord bot logged in as {self.bot.user}')
 
     def _setup_bot_commands(self):
