@@ -426,7 +426,7 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 
 To reduce noise in logs, successful (200 OK) responses are filtered from access logs:
 
-**API Service** (`api/app/flask_api.py`):
+**API Service** (`api/app/main.py`):
 - All 200 OK and 404 Not Found responses are hidden from uvicorn/hypercorn access logs
 - Only other status codes (3xx, 4xx, 5xx) appear in logs
 
@@ -462,14 +462,20 @@ television/
 │   │   │   ├── base.html        # Base template with modals
 │   │   │   ├── index_mux.html   # Mux mode template
 │   │   │   └── index_legacy.html # Legacy mode template
-│   │   ├── flask_api.py         # Application entry point
-│   │   ├── frontend.py          # Routes and views
-│   │   ├── stream_manager.py    # Stream orchestration
-│   │   ├── core_api.py          # Restreamer Core API client
-│   │   ├── discord_bot_manager.py
-│   │   ├── timecode_manager.py
-│   │   ├── visitor_tracker.py   # SSE visitor tracking
-│   │   └── obfuscation.py       # Hostname obfuscation
+│   │   ├── main.py              # Application entry point
+│   │   ├── services/            # Core/backend service layer
+│   │   │   ├── core_api.py      # Restreamer Core API client
+│   │   │   └── stream_manager.py # Stream orchestration
+│   │   ├── integrations/
+│   │   │   └── discord_bot_manager.py
+│   │   ├── web/                 # HTTP route layer
+│   │   │   ├── frontend_routes.py
+│   │   │   ├── api_routes.py
+│   │   │   ├── playlist_routes.py
+│   │   │   ├── sse_routes.py
+│   │   │   └── ingest_routes.py
+│   │   └── utils/
+│   │       └── obfuscation.py   # Hostname obfuscation
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── replay/

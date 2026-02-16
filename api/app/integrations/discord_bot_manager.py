@@ -2,12 +2,12 @@ import os
 import asyncio
 import logging
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import discord
 from discord.ext.commands import Bot, CheckFailure, has_role
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from obfuscation import obfuscate_hostname
+from utils.obfuscation import obfuscate_hostname
 
 
 class DiscordBotManager:
@@ -37,6 +37,11 @@ class DiscordBotManager:
         self.database = {}
         self.visitor_tracker = None
         self.hls_viewer_ips: set = set()  # IPs of HLS-only viewers (not connected via SSE)
+
+        # Clear log deletion pacing to avoid Discord API spam
+        self.clearlog_bulk_size = 100
+        self.clearlog_bulk_pause_seconds = 1.0
+        self.clearlog_single_pause_seconds = 0.4
 
         # Track bot messages per channel (keep last N message IDs)
         self.max_channel_messages = 1
@@ -375,6 +380,36 @@ class DiscordBotManager:
 
         rnd.error(_access_denied)
 
+        @self.bot.command(name='clearlog', help='Delete previous bot messages in this channel')
+        @has_role(self.boss_role_name)
+        async def clearlog(ctx):
+            try:
+                await ctx.message.add_reaction('🧹')
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            deleted_count, failed_count = await self._clear_bot_messages(ctx.channel)
+
+            status_emoji = '✅' if failed_count == 0 else '⚠️'
+            try:
+                await ctx.message.add_reaction(status_emoji)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            color = self.COLOR_SUCCESS if failed_count == 0 else self.COLOR_WARNING
+            description = f'Deleted `{deleted_count}` bot messages.'
+            if failed_count > 0:
+                description += f'\nSkipped `{failed_count}` messages due to permissions or API errors.'
+
+            embed = self._make_embed(
+                title='🧹 Clear Log Complete',
+                description=description,
+                color=color
+            )
+            await ctx.channel.send(embed=embed, delete_after=10)
+
+        clearlog.error(_access_denied)
+
     async def _send_and_prune(self, channel, content=None, embed=None):
         """Send a message to a channel and delete oldest messages beyond the limit.
 
@@ -410,6 +445,88 @@ class DiscordBotManager:
                 await old_msg.delete()
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 self.logger.warning(f'Failed to delete old message {old_msg.id}: {e}')
+
+    async def _delete_single_message(self, message) -> bool:
+        """Delete one message with error handling."""
+        try:
+            await message.delete()
+            return True
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            self.logger.warning(f'Failed to delete message {message.id}: {e}')
+            return False
+
+    async def _delete_message_batch(self, channel, messages: list) -> tuple[int, int]:
+        """Delete up to 100 recent messages in one API call, with fallback."""
+        if not messages:
+            return 0, 0
+
+        try:
+            await channel.delete_messages(messages)
+            return len(messages), 0
+        except (discord.Forbidden, discord.HTTPException) as e:
+            self.logger.warning(f'Bulk delete failed ({len(messages)} messages): {e}')
+
+        deleted_count = 0
+        failed_count = 0
+        for message in messages:
+            deleted = await self._delete_single_message(message)
+            if deleted:
+                deleted_count += 1
+            else:
+                failed_count += 1
+            await asyncio.sleep(self.clearlog_single_pause_seconds)
+
+        return deleted_count, failed_count
+
+    async def _clear_bot_messages(self, channel) -> tuple[int, int]:
+        """Remove all messages previously sent by this bot in a channel.
+
+        Uses bulk deletion for messages newer than 14 days and throttled single
+        deletes for older messages to reduce API pressure.
+        """
+        if self.bot.user is None:
+            return 0, 0
+
+        bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+        bulk_batch = []
+        deleted_count = 0
+        failed_count = 0
+
+        async for message in channel.history(limit=None, oldest_first=False):
+            if message.author.id != self.bot.user.id:
+                continue
+
+            if message.created_at > bulk_cutoff:
+                bulk_batch.append(message)
+                if len(bulk_batch) >= self.clearlog_bulk_size:
+                    deleted, failed = await self._delete_message_batch(channel, bulk_batch)
+                    deleted_count += deleted
+                    failed_count += failed
+                    bulk_batch.clear()
+                    await asyncio.sleep(self.clearlog_bulk_pause_seconds)
+                continue
+
+            if bulk_batch:
+                deleted, failed = await self._delete_message_batch(channel, bulk_batch)
+                deleted_count += deleted
+                failed_count += failed
+                bulk_batch.clear()
+                await asyncio.sleep(self.clearlog_bulk_pause_seconds)
+
+            deleted = await self._delete_single_message(message)
+            if deleted:
+                deleted_count += 1
+            else:
+                failed_count += 1
+            await asyncio.sleep(self.clearlog_single_pause_seconds)
+
+        if bulk_batch:
+            deleted, failed = await self._delete_message_batch(channel, bulk_batch)
+            deleted_count += deleted
+            failed_count += failed
+
+        self._channel_messages[channel.id] = deque()
+        return deleted_count, failed_count
 
     async def query_playhead(self):
         """Query the playhead from stream_manager."""

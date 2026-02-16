@@ -8,11 +8,10 @@ from datetime import datetime
 from typing import Optional
 from quart import Quart
 from apscheduler.schedulers.background import BackgroundScheduler
-from core_api import CoreAPIClient
-
-from stream_manager import StreamManager
-from frontend import register_routes
-from discord_bot_manager import DiscordBotManager
+from services.core_api import CoreAPIClient
+from services.stream_manager import StreamManager
+from web.routes import register_routes
+from integrations.discord_bot_manager import DiscordBotManager
 
 
 # Constants
