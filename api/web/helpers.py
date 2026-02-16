@@ -14,7 +14,28 @@ def get_client_address(req) -> str:
 
 def get_client_hostname(req) -> str:
     """Get client hostname from request headers."""
-    return 'unknown'
+    hostname = (
+        req.headers.get('X-Forwarded-Host')
+        or req.headers.get('Host')
+        or req.environ.get('HTTP_HOST')
+        or req.environ.get('SERVER_NAME')
+        or ''
+    ).strip()
+
+    if not hostname:
+        return 'unknown'
+
+    hostname = hostname.split(',')[0].strip()
+
+    if hostname.startswith('['):
+        closing_bracket = hostname.find(']')
+        if closing_bracket > 1:
+            hostname = hostname[1:closing_bracket]
+    elif hostname.count(':') == 1:
+        hostname = hostname.split(':', 1)[0]
+
+    hostname = hostname.strip().lower()
+    return hostname if hostname else 'unknown'
 
 
 def get_request_base_url(req) -> str:
