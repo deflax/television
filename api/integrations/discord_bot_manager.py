@@ -196,7 +196,7 @@ class DiscordBotManager:
             if not self._startup_greeting_sent and self.live_channel_id != 0:
                 live_channel = self.bot.get_channel(self.live_channel_id)
                 if live_channel is not None:
-                    await live_channel.send('🌍 ( 🧘🏻 ) 🌕')
+                    await live_channel.send('🌍 (🧘) 🌕')
                     self._startup_greeting_sent = True
 
             self.logger.info(f'Discord bot logged in as {self.bot.user}')
