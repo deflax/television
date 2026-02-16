@@ -2,8 +2,8 @@
 
 set -e
 
-# If there's a init.sh script in the /app directory, run it before starting
-PRE_START_PATH=/app/init.sh
+# If there's an init.sh script in the /api directory, run it before starting
+PRE_START_PATH=/api/init.sh
 if [ -f $PRE_START_PATH ] ; then
     . "$PRE_START_PATH"
 else
@@ -19,4 +19,3 @@ exec uvicorn "$APP_MODULE" \
     --port 8080 \
     --workers 1 \
     --timeout-keep-alive 30
-

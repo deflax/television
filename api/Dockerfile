@@ -15,13 +15,12 @@ RUN chmod +x /entrypoint.sh
 COPY ./scripts/run.sh /run.sh
 RUN chmod +x /run.sh
 
-COPY ./app /app
-WORKDIR /app/
+COPY . /api
+WORKDIR /api/
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/api
 
 EXPOSE 8080
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/run.sh"]
-
