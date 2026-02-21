@@ -624,49 +624,6 @@ class DiscordBotManager:
             await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
-    def announce_channel_added(self, stream_name: str, start_at: str, prio: int) -> bool:
-        """Announce a channel addition to Discord (thread-safe)."""
-        return self._schedule_async(
-            self._announce_channel_change_async(stream_name, start_at, prio, added=True),
-            'Failed to schedule channel added announcement'
-        )
-
-    def announce_channel_removed(self, stream_name: str) -> bool:
-        """Announce a channel removal to Discord (thread-safe)."""
-        return self._schedule_async(
-            self._announce_channel_change_async(stream_name, added=False),
-            'Failed to schedule channel removed announcement'
-        )
-
-    async def _announce_channel_change_async(self, stream_name: str, start_at: str = None,
-                                              prio: int = None, added: bool = True):
-        """Internal async method to announce channel addition/removal to Discord."""
-        try:
-            channel = self.bot.get_channel(self.live_channel_id)
-            if channel is None:
-                self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
-                return
-
-            if added:
-                embed = self._make_embed(
-                    title=':satellite_orbital: Channel Added',
-                    description=f'**{stream_name}**',
-                    color=self.COLOR_SUCCESS,
-                    fields=[
-                        {'name': 'Schedule', 'value': self._format_schedule_time(start_at), 'inline': True},
-                        {'name': 'Priority', 'value': str(prio), 'inline': True},
-                    ]
-                )
-            else:
-                embed = self._make_embed(
-                    title=':satellite_orbital: Channel Removed',
-                    description=f'**{stream_name}**',
-                    color=self.COLOR_NEUTRAL,
-                )
-
-            await channel.send(embed=embed)
-        except Exception as e:
-            self.logger.error(f'Failed to send channel change announcement to Discord: {e}')
 
     def send_timecode_message(self, obfuscated_hostname: str, timecode: str) -> bool:
         """Send timecode message to Discord channel (thread-safe, sync method).

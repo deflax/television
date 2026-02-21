@@ -188,10 +188,6 @@ def create_app() -> Quart:
     # Initialize Discord bot (if enabled) - must be after stream_manager
     discord_bot_manager = _initialize_discord_bot(config, loggers.discord, stream_manager)
 
-    # Wire up Discord announcements for channel changes
-    if discord_bot_manager:
-        stream_manager.on_channel_added = discord_bot_manager.announce_channel_added
-        stream_manager.on_channel_removed = discord_bot_manager.announce_channel_removed
 
     # Register frontend routes
     register_routes(app, stream_manager, config, loggers, discord_bot_manager)
