@@ -729,7 +729,7 @@ class DiscordBotManager:
                 return
 
             embed = self._build_visitors_embed()
-            await channel.send(embed=embed)
+            await self._send_and_prune(channel, embed=embed)
         except Exception as e:
             self.logger.error(f'Failed to send visitors embed to Discord: {e}')
 
