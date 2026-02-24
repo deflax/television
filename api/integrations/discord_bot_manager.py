@@ -711,7 +711,7 @@ class DiscordBotManager:
         )
 
     async def _send_visitors_embed(self):
-        """Send the visitors embed to the live channel using send_and_prune.
+        """Send the visitors embed to the live channel.
 
         If no visitors are connected, deletes the previous message instead.
         """
@@ -729,7 +729,7 @@ class DiscordBotManager:
                 return
 
             embed = self._build_visitors_embed()
-            await self._send_and_prune(channel, embed=embed)
+            await channel.send(embed=embed)
         except Exception as e:
             self.logger.error(f'Failed to send visitors embed to Discord: {e}')
 
