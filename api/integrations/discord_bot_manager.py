@@ -60,6 +60,8 @@ class DiscordBotManager:
         self.max_channel_messages = 1
         self._channel_messages = {}  # channel_id -> deque of discord.Message
         self._startup_greeting_sent = False
+        self._visitor_debounce_handle = None  # asyncio.TimerHandle for debounced visitor updates
+        self._visitor_debounce_seconds = 5.0  # coalesce rapid visitor changes into one Discord update
 
         # Setup bot commands and events
         self._setup_bot_events()
@@ -667,10 +669,38 @@ class DiscordBotManager:
             self.logger.error(f'Failed to send timecode message to Discord: {e}')
 
     def log_visitor_change(self) -> bool:
-        """Send updated visitors embed on connect/disconnect (thread-safe)."""
-        return self._schedule_async(
-            self._send_visitors_embed(),
-            'Failed to schedule visitor change message'
+        """Debounced: schedule visitors embed update after a short delay.
+
+        Rapid connect/disconnect events (e.g. fast page reloads) are coalesced
+        into a single Discord API call to avoid rate limiting.
+        """
+        return self._schedule_debounced_visitor_update()
+
+    def _schedule_debounced_visitor_update(self) -> bool:
+        """Cancel any pending visitor update and schedule a new one after the debounce delay.
+
+        This is thread-safe: it schedules the debounce on the bot's event loop.
+        """
+        if self.live_channel_id == 0:
+            return False
+        if not self.bot.is_ready():
+            self.logger.warning('Discord bot is not ready yet')
+            return False
+        try:
+            loop = self.bot.loop
+            loop.call_soon_threadsafe(self._debounce_visitor_update, loop)
+            return True
+        except Exception as e:
+            self.logger.error(f'Failed to schedule debounced visitor update: {e}')
+            return False
+
+    def _debounce_visitor_update(self, loop) -> None:
+        """Reset the debounce timer (must be called on the bot's event loop)."""
+        if self._visitor_debounce_handle is not None:
+            self._visitor_debounce_handle.cancel()
+        self._visitor_debounce_handle = loop.call_later(
+            self._visitor_debounce_seconds,
+            lambda: asyncio.ensure_future(self._send_visitors_embed())
         )
 
     def _build_visitors_embed(self) -> discord.Embed:
@@ -739,10 +769,7 @@ class DiscordBotManager:
         self.hls_viewer_ips = new_ips
 
         if new_ips != old_ips:
-            self._schedule_async(
-                self._send_visitors_embed(),
-                'Failed to schedule HLS visitors embed'
-            )
+            self._schedule_debounced_visitor_update()
 
     async def start(self):
         """Start the Discord bot."""
