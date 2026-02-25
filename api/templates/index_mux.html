@@ -38,8 +38,8 @@
                   <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
                 </div>
                 <div class="d-flex gap-2 ms-3">
-                  <button id="audio-only-btn" class="btn btn-sm btn-outline-secondary" title="Toggle video decoding on/off">
-                    <i class="fa fa-video"></i> toggle video
+                  <button id="audio-only-btn" class="btn btn-sm btn-outline-secondary" title="Toggle video">
+                    <i class="fa fa-headphones"></i> audio only
                   </button>
                   <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-secondary" target="_blank">live.hls</a>
                   <!-- <a href="/live/stream.mp3" class="btn btn-sm btn-outline-secondary" target="_blank">live.mp3</a> -->
@@ -309,19 +309,96 @@ document.addEventListener('DOMContentLoaded', () => {
   connectSSE();
 
   // ---------------------------------------------------------------------------
-  //  Audio-Only Toggle (disables video track decoding to save CPU)
+  //  Audio-Only Toggle (detach video, use <audio> element to save CPU)
   // ---------------------------------------------------------------------------
 
   const audioOnlyBtn = document.getElementById('audio-only-btn');
   let audioOnly = false;
+  let audioHls = null;
+  let audioEl = null;
+  let plyrInstance = null;
 
-  function setAudioOnly(enabled) {
-    audioOnly = enabled;
-    const tracks = video.videoTracks;
-    if (tracks && tracks.length > 0) {
-      tracks[0].selected = !enabled;
+  // Keep a reference to the current Plyr instance
+  // Plyr creates itself inside initPlayer, so we observe it
+  const plyrObserver = new MutationObserver(() => {
+    const el = document.querySelector('.plyr');
+    if (el && el.plyr) plyrInstance = el.plyr;
+  });
+  plyrObserver.observe(video.parentElement, { childList: true, subtree: true });
+
+  function enableAudioOnly() {
+    if (audioOnly) return;
+    audioOnly = true;
+
+    // 1. Create a hidden <audio> element
+    audioEl = document.createElement('audio');
+    audioEl.id = 'audio-only-player';
+    audioEl.style.display = 'none';
+    document.body.appendChild(audioEl);
+
+    // 2. Attach HLS.js to the audio element
+    if (Hls.isSupported()) {
+      audioHls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90
+      });
+      audioHls.loadSource(hlsSource);
+      audioHls.attachMedia(audioEl);
+      audioHls.on(Hls.Events.MANIFEST_PARSED, () => {
+        audioEl.play().catch(() => console.warn('Audio-only: autoplay blocked'));
+      });
+      audioHls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          audioHls.startLoad();
+        } else if (data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          audioHls.recoverMediaError();
+        }
+      });
+    } else if (audioEl.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      audioEl.src = hlsSource;
+      audioEl.play().catch(() => console.warn('Audio-only: autoplay blocked'));
     }
-    // Update button appearance
+
+    // 3. Pause and hide the video player (stops video decoding)
+    video.pause();
+    if (window.hls) {
+      window.hls.stopLoad();
+    }
+    video.closest('.plyr, .content').style.setProperty('display', 'none');
+
+    updateAudioOnlyButton(true);
+    console.log('Audio-only mode: ON');
+  }
+
+  function disableAudioOnly() {
+    if (!audioOnly) return;
+    audioOnly = false;
+
+    // 1. Destroy the audio element
+    if (audioHls) {
+      audioHls.destroy();
+      audioHls = null;
+    }
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.remove();
+      audioEl = null;
+    }
+
+    // 2. Show the video player and resume
+    video.closest('.plyr, .content').style.removeProperty('display');
+    if (window.hls) {
+      window.hls.startLoad();
+    }
+    video.play().catch(() => console.warn('Video resume: autoplay blocked'));
+
+    updateAudioOnlyButton(false);
+    console.log('Audio-only mode: OFF');
+  }
+
+  function updateAudioOnlyButton(enabled) {
     const icon = audioOnlyBtn.querySelector('i');
     if (enabled) {
       audioOnlyBtn.classList.remove('btn-outline-secondary');
@@ -334,39 +411,18 @@ document.addEventListener('DOMContentLoaded', () => {
       audioOnlyBtn.classList.add('btn-outline-secondary');
       icon.classList.remove('fa-headphones');
       icon.classList.add('fa-video');
-      audioOnlyBtn.title = 'Audio Only (disable video decoding)';
+      audioOnlyBtn.title = 'Toggle video';
     }
   }
 
   if (audioOnlyBtn) {
     audioOnlyBtn.addEventListener('click', () => {
-      // Check browser support on first click (videoTracks may not exist until HLS attaches)
-      if (typeof video.videoTracks === 'undefined' || !video.videoTracks || video.videoTracks.length === 0) {
-        console.warn('Audio-only toggle: videoTracks API not available (unsupported browser or no tracks yet)');
-        return;
+      if (audioOnly) {
+        disableAudioOnly();
+      } else {
+        enableAudioOnly();
       }
-      setAudioOnly(!audioOnly);
     });
-
-    // Re-apply audio-only state when tracks change (e.g. after HLS level switch)
-    // Use polling since videoTracks may not exist at page load
-    function bindTrackListener() {
-      if (video.videoTracks) {
-        video.videoTracks.addEventListener('addtrack', () => {
-          if (audioOnly) setAudioOnly(true);
-        });
-        return true;
-      }
-      return false;
-    }
-    if (!bindTrackListener()) {
-      // Retry after HLS.js has had time to attach
-      const poll = setInterval(() => {
-        if (bindTrackListener()) clearInterval(poll);
-      }, 1000);
-      // Stop polling after 30s
-      setTimeout(() => clearInterval(poll), 30000);
-    }
   }
 
 });
