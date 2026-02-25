@@ -134,6 +134,9 @@ window.StreamApp = window.StreamApp || {};
     audioEl.id = 'audio-only-player';
     audioEl.style.display = 'none';
     document.body.appendChild(audioEl);
+    // Carry over volume and mute state from the video player
+    audioEl.volume = video.volume;
+    audioEl.muted = video.muted;
 
     // 2. Attach HLS.js to the audio element
     if (Hls.isSupported()) {
@@ -185,6 +188,12 @@ window.StreamApp = window.StreamApp || {};
       audioEl.pause();
       audioEl.remove();
       audioEl = null;
+    }
+
+    // Carry over volume and mute state from the audio element
+    if (audioEl) {
+      video.volume = audioEl.volume;
+      video.muted = audioEl.muted;
     }
 
     // 2. Show the video player and resume
