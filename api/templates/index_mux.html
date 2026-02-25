@@ -339,18 +339,33 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (audioOnlyBtn) {
-    // Check browser support and hide button if unsupported
-    if (typeof video.videoTracks === 'undefined') {
-      audioOnlyBtn.style.display = 'none';
-      console.warn('Audio-only toggle: videoTracks API not supported in this browser');
-    } else {
-      audioOnlyBtn.addEventListener('click', () => {
-        setAudioOnly(!audioOnly);
-      });
-      // Re-apply audio-only state when tracks change (e.g. after HLS level switch)
-      video.videoTracks.addEventListener('addtrack', () => {
-        if (audioOnly) setAudioOnly(true);
-      });
+    audioOnlyBtn.addEventListener('click', () => {
+      // Check browser support on first click (videoTracks may not exist until HLS attaches)
+      if (typeof video.videoTracks === 'undefined' || !video.videoTracks || video.videoTracks.length === 0) {
+        console.warn('Audio-only toggle: videoTracks API not available (unsupported browser or no tracks yet)');
+        return;
+      }
+      setAudioOnly(!audioOnly);
+    });
+
+    // Re-apply audio-only state when tracks change (e.g. after HLS level switch)
+    // Use polling since videoTracks may not exist at page load
+    function bindTrackListener() {
+      if (video.videoTracks) {
+        video.videoTracks.addEventListener('addtrack', () => {
+          if (audioOnly) setAudioOnly(true);
+        });
+        return true;
+      }
+      return false;
+    }
+    if (!bindTrackListener()) {
+      // Retry after HLS.js has had time to attach
+      const poll = setInterval(() => {
+        if (bindTrackListener()) clearInterval(poll);
+      }, 1000);
+      // Stop polling after 30s
+      setTimeout(() => clearInterval(poll), 30000);
     }
   }
 
