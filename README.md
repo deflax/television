@@ -518,4 +518,4 @@ television/
 
 ## License
 
-[Unlicense](LICENSE) - Public Domain
+[MIT License](LICENSE)
