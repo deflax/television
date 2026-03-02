@@ -42,20 +42,8 @@ window.StreamApp = window.StreamApp || {};
 
   function initPlayer() {
     // For more options, see: https://github.com/sampotts/plyr/#options
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS (Safari)
-      video.src = hlsSource;
-      const player = new Plyr(video, defaultOptions);
-      
-      // Native HLS error handling
-      video.addEventListener('error', function(e) {
-        console.warn('Video error, attempting reload in 3s...', e);
-        setTimeout(() => {
-          video.load();
-          video.play().catch(() => console.warn('Auto-play blocked'));
-        }, 3000);
-      });
-    } else if (Hls.isSupported()) {
+    // Prefer HLS.js over native HLS — it provides quality switching and better error recovery
+    if (Hls.isSupported()) {
       const hls = new Hls({
         // Enable more aggressive error recovery
         enableWorker: true,
@@ -130,6 +118,18 @@ window.StreamApp = window.StreamApp || {};
       hls.attachMedia(video);
 
       window.hls = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS fallback (Safari without HLS.js support)
+      video.src = hlsSource;
+      const player = new Plyr(video, defaultOptions);
+
+      video.addEventListener('error', function(e) {
+        console.warn('Video error, attempting reload in 3s...', e);
+        setTimeout(() => {
+          video.load();
+          video.play().catch(() => console.warn('Auto-play blocked'));
+        }, 3000);
+      });
     }
   }
 
