@@ -7,7 +7,21 @@ window.StreamApp = window.StreamApp || {};
 (function() {
   const video = document.querySelector("video");
   const hlsSource = '/live/stream.m3u8';
-  const defaultOptions = {};
+  const defaultOptions = {
+    controls: [
+      'play-large',
+      'play',
+      'progress',
+      'current-time',
+      'mute',
+      'volume',
+      'captions',
+      'settings',
+      'pip',
+      'fullscreen',
+    ],
+    settings: ['captions', 'quality', 'speed'],
+  };
 
   // Expose for SSE and audio-only toggle
   window.StreamApp.video = video;
@@ -50,7 +64,6 @@ window.StreamApp = window.StreamApp || {};
       });
 
       hls.loadSource(hlsSource);
-      hls.attachMedia(video);
 
       // HLS.js error handling with automatic recovery
       hls.on(Hls.Events.ERROR, function (event, data) {
@@ -80,11 +93,10 @@ window.StreamApp = window.StreamApp || {};
       // From the m3u8 playlist, hls parses the manifest and returns
       // all available video qualities.
       hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-        console.log("HLS.js: manifest parsed");
-
         // Transform available levels into an array of integers (height values).
         const availableQualities = hls.levels.map((l) => l.height);
         availableQualities.unshift(0); //prepend 0 to quality array
+        console.log("HLS.js: manifest parsed, qualities:", availableQualities);
 
         defaultOptions.quality = {
           default: 0, //Default - AUTO
@@ -99,18 +111,23 @@ window.StreamApp = window.StreamApp || {};
           },
         };
 
+        // Update the Auto label with current resolution when HLS switches levels
         hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-          console.log("HLS.js: level switched");
           var span = document.querySelector(".plyr__menu__container [data-plyr='quality'][value='0'] span");
-          if (hls.autoLevelEnabled) {
-            span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
-          } else {
-            span.innerHTML = `AUTO`;
+          if (span) {
+            if (hls.autoLevelEnabled) {
+              span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
+            } else {
+              span.innerHTML = `AUTO`;
+            }
           }
         });
 
         const player = new Plyr(video, defaultOptions);
       });
+
+      // Attach media AFTER registering event handlers to avoid race conditions
+      hls.attachMedia(video);
 
       window.hls = hls;
     }
