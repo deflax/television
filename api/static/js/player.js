@@ -179,7 +179,13 @@ window.StreamApp = window.StreamApp || {};
     if (!audioOnly) return;
     audioOnly = false;
 
-    // 1. Destroy the audio element
+    // 1. Carry over volume and mute state before destroying
+    if (audioEl) {
+      video.volume = audioEl.volume;
+      video.muted = audioEl.muted;
+    }
+
+    // 2. Destroy the audio element
     if (audioHls) {
       audioHls.destroy();
       audioHls = null;
@@ -190,13 +196,7 @@ window.StreamApp = window.StreamApp || {};
       audioEl = null;
     }
 
-    // Carry over volume and mute state from the audio element
-    if (audioEl) {
-      video.volume = audioEl.volume;
-      video.muted = audioEl.muted;
-    }
-
-    // 2. Show the video player and resume
+    // 3. Show the video player and resume
     document.getElementById('audio-only-poster').style.display = 'none';
     video.closest('.plyr, .content').style.removeProperty('display');
     if (window.hls) {
