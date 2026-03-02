@@ -71,7 +71,6 @@ ABR_GOP_SIZE = _parse_env('ABR_GOP_SIZE', 48, int, min_val=1, max_val=300)
 
 # ABR variants configuration
 DEFAULT_ABR_VARIANTS = [
-    {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
     {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
     {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"},
 ]
