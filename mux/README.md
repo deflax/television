@@ -92,7 +92,6 @@ This eliminates the "back and forth" playback issue caused by overlapping FFmpeg
 Default ABR variants:
 ```json
 [
-  {"height": 1080, "video_bitrate": "5000k", "audio_bitrate": "192k"},
   {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
   {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"}
 ]
