@@ -41,6 +41,13 @@ class StreamManager:
         self.playhead: Dict[str, Any] = {}
         self.priority = 0
 
+        # Discord-initiated command tracking: stream_id -> {action, actor_name}
+        # When a Discord user runs .start/.stop, the stream reference is recorded here.
+        # When core_api_sync later adds/removes the channel from the database,
+        # the on_db_change callback fires only for these tracked entries.
+        self._pending_discord_actions: Dict[str, Dict[str, str]] = {}
+        self._on_db_change_callback = None  # callable(action, stream_name, stream_id, actor_name)
+
     
     def get_core_process_list(self) -> list:
         """Get all processes from Core API with their names and states."""
@@ -159,6 +166,13 @@ class StreamManager:
         }
         self.logger.info(f'{stream_id} ({stream_name}) added to database. Config: {api_settings}')
 
+        # Fire callback if this was a Discord-initiated start
+        pending = self._pending_discord_actions.pop(stream_id, None)
+        if pending and self._on_db_change_callback:
+            self._on_db_change_callback(
+                'added', stream_name, stream_id, pending.get('actor_name', 'Unknown')
+            )
+
 
         # Preempt: if this stream outranks the current playhead, execute immediately
         if self.playhead and stream_prio > self.playhead.get('prio', 0):
@@ -226,6 +240,13 @@ class StreamManager:
 
         self.logger.warning(f'{stream_id} ({stream_name}) will be removed. Reason: {reason}')
         self.database.pop(stream_id)
+
+        # Fire callback if this was a Discord-initiated stop
+        pending = self._pending_discord_actions.pop(stream_id, None)
+        if pending and self._on_db_change_callback:
+            self._on_db_change_callback(
+                'removed', stream_name, stream_id, pending.get('actor_name', 'Unknown')
+            )
 
 
         try:
@@ -428,3 +449,22 @@ class StreamManager:
                 self.scheduler.remove_job(orphan_key)
             except Exception as e:
                 self.logger.error(f'Error removing orphan job {orphan_key}: {e}')
+
+    def register_db_change_callback(self, callback) -> None:
+        """Register a callback for Discord-initiated database changes.
+
+        The callback is called as: callback(action, stream_name, stream_id, actor_name)
+        where action is 'added' or 'removed'.
+        """
+        self._on_db_change_callback = callback
+
+    def track_discord_command(self, stream_id: str, action: str, actor_name: str) -> None:
+        """Record that a Discord user initiated a start/stop for a stream.
+
+        The stream_id is the reference ID used as the database key.
+        When core_api_sync detects the resulting state change, the announcement fires.
+        """
+        self._pending_discord_actions[stream_id] = {
+            'action': action,
+            'actor_name': actor_name,
+        }
