@@ -249,6 +249,44 @@ class DiscordBotManager:
                 embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
                 await ctx.channel.send(embed=embed)
 
+        async def _announce_live_channel_state_change(
+            action: str,
+            stream_name: str,
+            process_id: str,
+            actor_name: str,
+            source_channel_id: int | None = None,
+        ) -> None:
+            """Announce stream state changes to the configured live channel."""
+            if self.live_channel_id == 0:
+                return
+
+            live_channel = self.bot.get_channel(self.live_channel_id)
+            if live_channel is None:
+                self.logger.warning(
+                    f'Could not find live Discord channel with ID {self.live_channel_id}'
+                )
+                return
+
+            if source_channel_id is not None and live_channel.id == source_channel_id:
+                return
+
+            if action == 'start':
+                title = '🟢 Stream Started'
+                color = self.COLOR_SUCCESS
+                verb = 'started'
+            else:
+                title = '⏹️ Stream Stopped'
+                color = self.COLOR_WARNING
+                verb = 'stopped'
+
+            embed = self._make_embed(
+                title=title,
+                description=f'**{stream_name}** was {verb} by **{actor_name}**.',
+                color=color,
+                footer=f'ID: {process_id}'
+            )
+            await live_channel.send(embed=embed)
+
         async def _process_command(ctx, identifier, command):
             """Shared handler for .start and .stop commands."""
             if not identifier:
@@ -278,6 +316,30 @@ class DiscordBotManager:
                     color=self.COLOR_ERROR, footer=f'ID: {process_id}'
                 )
                 await ctx.channel.send(embed=embed)
+                return
+
+            if command == 'start':
+                title = '✅ Start Requested'
+                color = self.COLOR_SUCCESS
+            else:
+                title = '✅ Stop Requested'
+                color = self.COLOR_WARNING
+
+            embed = self._make_embed(
+                title=title,
+                description=f'**{display_name}**\n{result["message"]}',
+                color=color,
+                footer=f'ID: {process_id}'
+            )
+            await ctx.channel.send(embed=embed)
+
+            await _announce_live_channel_state_change(
+                action=command,
+                stream_name=display_name,
+                process_id=process_id,
+                actor_name=ctx.author.display_name,
+                source_channel_id=ctx.channel.id,
+            )
 
         @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
         @self._require_any_role(self.boss_role_name)
@@ -292,6 +354,116 @@ class DiscordBotManager:
             await _process_command(ctx, identifier, 'stop')
 
         stop.error(_access_denied)
+
+        @self.bot.command(name='play', help='Switch playhead to a stream. If stopped, it will be started first. Usage: .play <name or process_id>')
+        @self._require_any_role(self.boss_role_name)
+        async def play(ctx, *, identifier: str = None):
+            if not identifier:
+                embed = self._make_embed(
+                    title='⚠️ Usage',
+                    description='`.play <name or process_id>`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
+                return
+
+            process = self._resolve_process(identifier)
+            if not process:
+                embed = self._make_embed(
+                    title='⚠️ Not Found',
+                    description=f'No stream found matching `{identifier}`\nUse `.streams` to list available streams.',
+                    color=self.COLOR_WARNING
+                )
+                await ctx.channel.send(embed=embed)
+                return
+
+            process_id = process['id']
+            stream_name = process['name']
+            stream_state = process.get('state', 'unknown')
+
+            if stream_state != 'running':
+                start_result = self.stream_manager.process_command(process_id, 'start')
+                if not start_result['success']:
+                    embed = self._make_embed(
+                        title='❌ Play Failed',
+                        description=f'**{stream_name}**\n{start_result["message"]}',
+                        color=self.COLOR_ERROR,
+                        footer=f'ID: {process_id}'
+                    )
+                    await ctx.channel.send(embed=embed)
+                    return
+
+                embed = self._make_embed(
+                    title='▶️ Start Requested',
+                    description=(
+                        f'**{stream_name}** is not running yet. Start command sent.\n'
+                        'Run `.play` again once the stream is running to switch playhead immediately.'
+                    ),
+                    color=self.COLOR_INFO,
+                    footer=f'ID: {process_id}'
+                )
+                await ctx.channel.send(embed=embed)
+                await _announce_live_channel_state_change(
+                    action='start',
+                    stream_name=stream_name,
+                    process_id=process_id,
+                    actor_name=ctx.author.display_name,
+                    source_channel_id=ctx.channel.id,
+                )
+                return
+
+            stream_id = process.get('reference') or process_id
+            stream_entry = self.stream_manager.database.get(stream_id, {})
+
+            stream_prio = int(stream_entry.get('prio', 0))
+            stream_hls_url = stream_entry.get('src')
+
+            if not stream_hls_url:
+                details = self.stream_manager.get_core_process_details(process_id)
+                if not details:
+                    embed = self._make_embed(
+                        title='❌ Play Failed',
+                        description='Could not load process details from Core API.',
+                        color=self.COLOR_ERROR,
+                        footer=f'ID: {process_id}'
+                    )
+                    await ctx.channel.send(embed=embed)
+                    return
+
+                meta = details.get('metadata') or {}
+                hls_meta = (
+                    meta.get('restreamer-ui', {})
+                    .get('control', {})
+                    .get('hls', {})
+                )
+                storage = hls_meta.get('storage')
+                if not storage:
+                    embed = self._make_embed(
+                        title='❌ Play Failed',
+                        description='Could not determine HLS storage path for this stream.',
+                        color=self.COLOR_ERROR,
+                        footer=f'ID: {process_id}'
+                    )
+                    await ctx.channel.send(embed=embed)
+                    return
+                stream_hls_url = f'https://{self.config.core_hostname}/{storage}/{stream_id}.m3u8'
+
+            self.stream_manager.update_playhead(
+                stream_id=stream_id,
+                stream_name=stream_name,
+                stream_prio=stream_prio,
+                stream_hls_url=stream_hls_url,
+            )
+
+            embed = self._make_embed(
+                title='▶️ Playhead Switched',
+                description=f'Now playing: **{stream_name}**',
+                color=self.COLOR_SUCCESS,
+                footer=f'ID: {process_id}'
+            )
+            await ctx.channel.send(embed=embed)
+
+        play.error(_access_denied)
 
         @self.bot.command(name='hello', help='Say hello to the bot')
         @self._require_any_role(self.worshipper_role_name, self.boss_role_name)
