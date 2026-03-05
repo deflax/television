@@ -76,6 +76,12 @@ services:
     volumes:
       - "./data/recorder:/recordings:ro"
       - "./data/library:/library:ro"
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - "/dev/fuse"
+    security_opt:
+      - apparmor:unconfined
     restart: unless-stopped
     networks:
       - net
