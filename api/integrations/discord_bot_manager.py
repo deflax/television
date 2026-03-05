@@ -67,6 +67,9 @@ class DiscordBotManager:
         self._setup_bot_events()
         self._setup_bot_commands()
 
+        # Register callback for Discord-initiated database changes
+        self.stream_manager.register_db_change_callback(self._on_stream_db_change)
+
     # Embed color constants
     COLOR_SUCCESS = 0x2ecc71  # Green
     COLOR_ERROR = 0xe74c3c    # Red
@@ -140,6 +143,42 @@ class DiscordBotManager:
         except Exception as e:
             self.logger.error(f'{error_msg}: {e}')
             return False
+
+    def _on_stream_db_change(self, action: str, stream_name: str, stream_id: str, actor_name: str) -> None:
+        """Called by StreamManager when a Discord-initiated DB change occurs.
+
+        This runs on the scheduler thread, so we schedule the async announcement
+        on the bot's event loop.
+        """
+        coro = self._announce_db_change(action, stream_name, stream_id, actor_name)
+        self._schedule_async(coro, f'Failed to announce {action} for {stream_name}')
+
+    async def _announce_db_change(self, action: str, stream_name: str, stream_id: str, actor_name: str) -> None:
+        """Send an embed announcing a stream was added to or removed from the database."""
+        if self.live_channel_id == 0:
+            return
+
+        channel = self.bot.get_channel(self.live_channel_id)
+        if channel is None:
+            self.logger.warning(f'Could not find live Discord channel with ID {self.live_channel_id}')
+            return
+
+        if action == 'added':
+            title = '🟢 Channel Started'
+            description = f'**{stream_name}** was started by **{actor_name}**.'
+            color = self.COLOR_SUCCESS
+        else:
+            title = '⏹️ Channel Stopped'
+            description = f'**{stream_name}** was stopped by **{actor_name}**.'
+            color = self.COLOR_WARNING
+
+        embed = self._make_embed(
+            title=title,
+            description=description,
+            color=color,
+            footer=f'ID: {stream_id}'
+        )
+        await channel.send(embed=embed)
 
     def _resolve_process(self, identifier: str) -> Optional[dict]:
         """Resolve a stream name or process ID to a process dict.
@@ -249,44 +288,6 @@ class DiscordBotManager:
                 embed = self._make_embed(title='🚫 Access Denied', color=self.COLOR_ERROR)
                 await ctx.channel.send(embed=embed)
 
-        async def _announce_live_channel_state_change(
-            action: str,
-            stream_name: str,
-            process_id: str,
-            actor_name: str,
-            source_channel_id: int | None = None,
-        ) -> None:
-            """Announce stream state changes to the configured live channel."""
-            if self.live_channel_id == 0:
-                return
-
-            live_channel = self.bot.get_channel(self.live_channel_id)
-            if live_channel is None:
-                self.logger.warning(
-                    f'Could not find live Discord channel with ID {self.live_channel_id}'
-                )
-                return
-
-            if source_channel_id is not None and live_channel.id == source_channel_id:
-                return
-
-            if action == 'start':
-                title = '🟢 Stream Started'
-                color = self.COLOR_SUCCESS
-                verb = 'started'
-            else:
-                title = '⏹️ Stream Stopped'
-                color = self.COLOR_WARNING
-                verb = 'stopped'
-
-            embed = self._make_embed(
-                title=title,
-                description=f'**{stream_name}** was {verb} by **{actor_name}**.',
-                color=color,
-                footer=f'ID: {process_id}'
-            )
-            await live_channel.send(embed=embed)
-
         async def _process_command(ctx, identifier, command):
             """Shared handler for .start and .stop commands."""
             if not identifier:
@@ -308,6 +309,7 @@ class DiscordBotManager:
                 return
             process_id = process['id']
             display_name = process['name']
+            stream_ref = process.get('reference', process_id)
             result = self.stream_manager.process_command(process_id, command)
             if not result['success']:
                 embed = self._make_embed(
@@ -318,27 +320,11 @@ class DiscordBotManager:
                 await ctx.channel.send(embed=embed)
                 return
 
-            if command == 'start':
-                title = '✅ Start Requested'
-                color = self.COLOR_SUCCESS
-            else:
-                title = '✅ Stop Requested'
-                color = self.COLOR_WARNING
-
-            embed = self._make_embed(
-                title=title,
-                description=f'**{display_name}**\n{result["message"]}',
-                color=color,
-                footer=f'ID: {process_id}'
-            )
-            await ctx.channel.send(embed=embed)
-
-            await _announce_live_channel_state_change(
+            # Track this command so the announcement fires when the DB actually changes
+            self.stream_manager.track_discord_command(
+                stream_id=stream_ref,
                 action=command,
-                stream_name=display_name,
-                process_id=process_id,
                 actor_name=ctx.author.display_name,
-                source_channel_id=ctx.channel.id,
             )
 
         @self.bot.command(name='start', help='Start a Restreamer process. Usage: .start <name or process_id>')
@@ -382,6 +368,7 @@ class DiscordBotManager:
             stream_state = process.get('state', 'unknown')
 
             if stream_state != 'running':
+                stream_ref = process.get('reference') or process_id
                 start_result = self.stream_manager.process_command(process_id, 'start')
                 if not start_result['success']:
                     embed = self._make_embed(
@@ -393,6 +380,13 @@ class DiscordBotManager:
                     await ctx.channel.send(embed=embed)
                     return
 
+                # Track so announcement fires when DB picks it up
+                self.stream_manager.track_discord_command(
+                    stream_id=stream_ref,
+                    action='start',
+                    actor_name=ctx.author.display_name,
+                )
+
                 embed = self._make_embed(
                     title='▶️ Start Requested',
                     description=(
@@ -403,13 +397,6 @@ class DiscordBotManager:
                     footer=f'ID: {process_id}'
                 )
                 await ctx.channel.send(embed=embed)
-                await _announce_live_channel_state_change(
-                    action='start',
-                    stream_name=stream_name,
-                    process_id=process_id,
-                    actor_name=ctx.author.display_name,
-                    source_channel_id=ctx.channel.id,
-                )
                 return
 
             stream_id = process.get('reference') or process_id
