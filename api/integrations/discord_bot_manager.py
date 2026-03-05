@@ -52,9 +52,9 @@ class DiscordBotManager:
         self.hls_viewer_ips: set = set()  # IPs of HLS-only viewers (not connected via SSE)
 
         # Clear log deletion pacing to avoid Discord API spam
-        self.clearlog_bulk_size = 100
-        self.clearlog_bulk_pause_seconds = 1.0
-        self.clearlog_single_pause_seconds = 0.4
+        self.clearlog_bulk_size = 25
+        self.clearlog_bulk_pause_seconds = 3.0
+        self.clearlog_single_pause_seconds = 1.2
 
         # Track bot messages per channel (keep last N message IDs)
         self.max_channel_messages = 1
