@@ -202,6 +202,27 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `REPLAY_PORT` | `8090` | HTTP server port |
 | `REPLAY_SCAN_INTERVAL` | `60` | Directory scan interval (seconds) |
 
+#### S3/MinIO Storage (Optional)
+
+The replay service can read video files from S3-compatible storage (e.g., MinIO) instead of local volume mounts. When enabled, the S3 bucket is mounted as a local filesystem using s3fs-fuse, so ffmpeg and ffprobe work transparently.
+
+The bucket root is the library itself — each subdirectory in the bucket is a channel (e.g., `s3://library/music/`, `s3://library/movies/`). The recorder channel still uses the local `/recordings` mount.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `S3_ENABLED` | `false` | Enable S3/MinIO storage for replay service |
+| `S3_ENDPOINT` | - | S3 endpoint URL (e.g., `http://minio:9000`) |
+| `S3_ACCESS_KEY` | - | S3 access key |
+| `S3_SECRET_KEY` | - | S3 secret key |
+| `S3_BUCKET` | `library` | Bucket name (root = library, subdirs = channels) |
+| `S3_MOUNT_OPTIONS` | - | Extra s3fs mount options (comma-separated) |
+
+**Notes:**
+- When `S3_ENABLED=false` (default), the service uses local volume mounts as before
+- The Docker container requires `SYS_ADMIN` capability and `/dev/fuse` device access for FUSE mounts
+- The recorder channel always uses the local `/recordings` volume mount
+- The bucket must exist in MinIO before starting the service
+
 ### Mux Service Variables
 
 | Variable | Default | Description |
