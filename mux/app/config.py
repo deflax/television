@@ -103,14 +103,6 @@ def parse_abr_variants() -> list[dict]:
 
 ABR_VARIANTS = parse_abr_variants()
 
-# Icecast audio streaming configuration
-ICECAST_ENABLED = os.environ.get('ICECAST_ENABLED', 'true').lower() in ('true', '1', 'yes')
-ICECAST_HOST = os.environ.get('ICECAST_HOST', 'icecast')
-ICECAST_PORT = _parse_env('ICECAST_PORT', 8000, int, min_val=1, max_val=65535)
-ICECAST_SOURCE_PASSWORD = os.environ.get('ICECAST_SOURCE_PASSWORD', 'hackme')
-ICECAST_MOUNT = os.environ.get('ICECAST_MOUNT', '/stream.mp3')
-ICECAST_AUDIO_BITRATE = os.environ.get('ICECAST_AUDIO_BITRATE', '128k')
-ICECAST_AUDIO_FORMAT = os.environ.get('ICECAST_AUDIO_FORMAT', 'mp3')
 
 # Logging
 _VALID_LOG_LEVELS = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
