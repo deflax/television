@@ -24,7 +24,7 @@ from segment_store import segment_store
 # Configure logging
 logging.basicConfig(
     level=LOG_LEVEL,
-    format='%(name)s - %(levelname)s - %(message)s',
+    format='[%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
 
