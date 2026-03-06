@@ -55,7 +55,7 @@ class LoggerManager:
         """Initialize and configure loggers."""
         # Create a shared handler and formatter
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+        handler.setFormatter(logging.Formatter('%(levelname)s: [%(name)s] %(message)s'))
         handler.setLevel(logging.DEBUG)
 
         # Set root logger to WARNING to suppress noisy third-party logs (httpcore, etc.)
