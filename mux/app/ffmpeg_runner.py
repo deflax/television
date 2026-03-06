@@ -16,9 +16,6 @@ from typing import Optional, Callable, Awaitable
 from config import (
     HLS_OUTPUT_DIR, HLS_SEGMENT_TIME, HLS_LIST_SIZE,
     MUX_MODE, ABR_VARIANTS, ABR_PRESET, ABR_GOP_SIZE,
-    ICECAST_ENABLED, ICECAST_HOST, ICECAST_PORT,
-    ICECAST_SOURCE_PASSWORD, ICECAST_MOUNT,
-    ICECAST_AUDIO_BITRATE, ICECAST_AUDIO_FORMAT,
     NUM_VARIANTS, SEGMENT_STABILITY_DELAY,
     parse_bitrate,
 )
@@ -109,35 +106,6 @@ async def probe_stream(url: str, timeout: float = 10.0) -> Optional[StreamInfo]:
         return None
 
 
-def _build_icecast_output(cmd: list[str]) -> None:
-    """Append Icecast audio-only output arguments to cmd."""
-    if not ICECAST_ENABLED:
-        return
-    
-    icecast_url = (
-        f'icecast://source:{ICECAST_SOURCE_PASSWORD}'
-        f'@{ICECAST_HOST}:{ICECAST_PORT}{ICECAST_MOUNT}'
-    )
-    
-    if ICECAST_AUDIO_FORMAT == 'aac':
-        cmd.extend([
-            '-map', '0:a',
-            '-c:a', 'aac',
-            '-b:a', ICECAST_AUDIO_BITRATE,
-            '-f', 'adts',
-            '-content_type', 'audio/aac',
-            icecast_url,
-        ])
-    else:
-        cmd.extend([
-            '-map', '0:a',
-            '-c:a', 'libmp3lame',
-            '-b:a', ICECAST_AUDIO_BITRATE,
-            '-f', 'mp3',
-            '-content_type', 'audio/mpeg',
-            icecast_url,
-        ])
-
 
 def build_ffmpeg_command(input_url: str, start_number: int = 0) -> list[str]:
     """Build the FFmpeg command based on MUX_MODE."""
@@ -164,7 +132,6 @@ def _build_copy_command(input_url: str, start_number: int) -> list[str]:
         '-hls_segment_filename', f'{HLS_OUTPUT_DIR}/segment_%05d.ts',
         f'{HLS_OUTPUT_DIR}/stream.m3u8',
     ]
-    _build_icecast_output(cmd)
     return cmd
 
 
@@ -239,7 +206,6 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
         f'{HLS_OUTPUT_DIR}/stream_%v/playlist.m3u8',
     ])
     
-    _build_icecast_output(cmd)
     return cmd
 
 

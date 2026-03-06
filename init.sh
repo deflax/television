@@ -18,9 +18,3 @@ mkdir -v -p data/recorder/thumb
 # replay library
 mkdir -v -p data/library
 
-# icecast
-mkdir -v -p logs/icecast
-touch logs/icecast/access.log
-touch logs/icecast/error.log
-chown 1000:1000 logs/icecast/access.log
-chown 1000:1000 logs/icecast/error.log

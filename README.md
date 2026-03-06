@@ -247,23 +247,6 @@ The bucket root is the library itself — each subdirectory in the bucket is a c
 
 Each variant specifies a resolution height (source is capped at this), video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
 
-### Icecast Audio Streaming Variables
-
-> **Note:** Icecast is disabled by default. The icecast service is commented out in `docker-compose.yml`. To enable it, uncomment the icecast service, set `ICECAST_ENABLED=true` in `variables.env`, and uncomment the icecast backend in `haproxy.cfg`.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ICECAST_ENABLED` | `false` | Enable audio-only streaming via Icecast |
-| `ICECAST_SOURCE_PASSWORD` | - | Password for FFmpeg to connect to Icecast |
-| `ICECAST_ADMIN_PASSWORD` | - | Icecast admin interface password |
-| `ICECAST_RELAY_PASSWORD` | - | Icecast relay password |
-| `ICECAST_HOST` | `icecast` | Internal Icecast hostname |
-| `ICECAST_PORT` | `8000` | Icecast server port |
-| `ICECAST_MOUNT` | `/stream.mp3` | Mount point for audio stream |
-| `ICECAST_AUDIO_BITRATE` | `128k` | Audio encoding bitrate (`320k` in `variables.env.dist`) |
-| `ICECAST_AUDIO_FORMAT` | `mp3` | Audio format: `mp3` or `aac` |
-
-When enabled, the mux service automatically extracts audio from the muxed live stream and sends it to Icecast. The audio stream is available at `https://example.com/live/stream.mp3`.
 
 ## Services
 

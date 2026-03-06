@@ -7,7 +7,6 @@ HLS stream multiplexer that monitors an API playhead via SSE and switches betwee
 - **Clean stream transitions** - Switches happen at segment boundaries, no playback glitches
 - **ABR support** - Adaptive bitrate with source passthrough + transcoded variants
 - **Copy mode** - Simple passthrough for single-quality output
-- **Icecast output** - Optional audio-only stream to Icecast server
 - **Dynamic playlists** - Generated on-demand from segment store for consistency
 - **Crash recovery** - Auto-restarts FFmpeg on failures with discontinuity markers
 
@@ -96,18 +95,6 @@ Default ABR variants:
   {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"}
 ]
 ```
-
-### Icecast Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ICECAST_ENABLED` | `true` | Enable Icecast audio output |
-| `ICECAST_HOST` | `icecast` | Icecast server hostname |
-| `ICECAST_PORT` | `8000` | Icecast server port |
-| `ICECAST_SOURCE_PASSWORD` | `hackme` | Source password |
-| `ICECAST_MOUNT` | `/stream.mp3` | Mount point |
-| `ICECAST_AUDIO_BITRATE` | `128k` | Audio bitrate |
-| `ICECAST_AUDIO_FORMAT` | `mp3` | `mp3` or `aac` |
 
 ### URL Rewriting
 
