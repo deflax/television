@@ -156,7 +156,7 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
     cmd = [
         'ffmpeg',
         '-y',
-        '-re',
+        # No -re flag: input is a live HLS stream already paced in realtime.
         '-threads', str(ABR_THREADS),
         '-i', input_url,
         '-filter_complex', filter_complex,
