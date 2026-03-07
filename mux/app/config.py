@@ -68,6 +68,7 @@ MUX_MODE = os.environ.get('MUX_MODE', 'copy').lower()
 # ABR encoding settings
 ABR_PRESET = os.environ.get('ABR_PRESET', 'veryfast')
 ABR_GOP_SIZE = _parse_env('ABR_GOP_SIZE', 48, int, min_val=1, max_val=300)
+ABR_THREADS = _parse_env('ABR_THREADS', 2, int, min_val=0, max_val=64)
 
 # ABR variants configuration
 DEFAULT_ABR_VARIANTS = [

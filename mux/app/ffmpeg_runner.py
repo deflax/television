@@ -15,7 +15,7 @@ from typing import Optional, Callable, Awaitable
 
 from config import (
     HLS_OUTPUT_DIR, HLS_SEGMENT_TIME, HLS_LIST_SIZE,
-    MUX_MODE, ABR_VARIANTS, ABR_PRESET, ABR_GOP_SIZE,
+    MUX_MODE, ABR_VARIANTS, ABR_PRESET, ABR_GOP_SIZE, ABR_THREADS,
     NUM_VARIANTS, SEGMENT_STABILITY_DELAY,
     parse_bitrate,
 )
@@ -157,6 +157,7 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
         'ffmpeg',
         '-y',
         '-re',
+        '-threads', str(ABR_THREADS),
         '-i', input_url,
         '-filter_complex', filter_complex,
         '-map', '0:v',
@@ -179,6 +180,8 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
             '-map', f'[v_{i}]',
             f'-c:v:{idx}', 'libx264',
             '-preset', ABR_PRESET,
+            '-tune', 'zerolatency',
+            f'-threads:v:{idx}', str(ABR_THREADS),
             f'-b:v:{idx}', vb,
             f'-maxrate:v:{idx}', maxrate,
             f'-bufsize:v:{idx}', bufsize,
