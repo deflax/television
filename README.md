@@ -235,6 +235,7 @@ The bucket root is the library itself — each subdirectory in the bucket is a c
 | `HLS_LIST_SIZE` | `20` | Number of segments in playlist |
 | `ABR_PRESET` | `veryfast` | x264 encoder preset (ABR mode only) |
 | `ABR_GOP_SIZE` | `48` | Keyframe interval in frames (ABR mode only) |
+| `ABR_THREADS` | `2` | Threads per encoder, 0=auto (ABR mode only) |
 | `ABR_VARIANTS` | See below | JSON array of ABR variants (ABR mode only) |
 
 **ABR_VARIANTS format:**

@@ -86,6 +86,7 @@ This eliminates the "back and forth" playback issue caused by overlapping FFmpeg
 |----------|---------|-------------|
 | `ABR_PRESET` | `veryfast` | x264 encoding preset |
 | `ABR_GOP_SIZE` | `48` | Keyframe interval |
+| `ABR_THREADS` | `2` | Threads per encoder (0=auto) |
 | `ABR_VARIANTS` | (see below) | JSON array of variant definitions |
 
 Default ABR variants:
@@ -186,7 +187,10 @@ The `head` field contains the HLS stream URL to switch to. The `name` field is u
 
 ### High CPU usage
 - In ABR mode, transcoding requires significant CPU
+- Lower `ABR_THREADS` (default: 2) to reduce thread count per encoder (0=auto/unlimited)
 - Consider using `ABR_PRESET=ultrafast` for lower CPU at cost of quality
+- `-tune zerolatency` is applied automatically to skip lookahead and B-frames
+- Reduce ABR variants to a single lower resolution to halve encoding work
 - In copy mode, CPU usage should be minimal
 
 ### Segments not cleaning up
