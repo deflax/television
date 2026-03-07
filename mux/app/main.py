@@ -37,20 +37,31 @@ shutdown_event = asyncio.Event()
 # Playhead monitor (set in main())
 _monitor: PlayheadMonitor | None = None
 
+# Track the latest playhead to cancel stale retries
+_current_playhead_url: str | None = None
+
 
 async def on_playhead_change(new_url: str, stream_name: str) -> None:
     """Handle playhead change from API.
     
-    Always calls switch() which handles both IDLE state (starts fresh)
-    and RUNNING state (performs transition).
+    Delegates to stream_manager.switch_with_retry() which handles both
+    IDLE state (starts fresh) and RUNNING state (performs transition)
+    with exponential backoff on failure.
+    
+    A stale-check callback aborts retries when a newer playhead arrives.
     """
+    global _current_playhead_url
+    _current_playhead_url = new_url
+    
     logger.info(f'Switching to stream: {stream_name}')
     
-    success = await stream_manager.switch(new_url)
+    success = await stream_manager.switch_with_retry(
+        new_url,
+        should_abort=lambda: _current_playhead_url != new_url,
+    )
     
     if not success:
         logger.error(f'Failed to switch to {stream_name}')
-
 
 async def run_server() -> None:
     """Run the HTTP server."""
