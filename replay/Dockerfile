@@ -2,15 +2,11 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    s3fs \
-    fuse \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY ./scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 COPY ./scripts/run.sh /run.sh
 RUN chmod +x /run.sh
@@ -22,5 +18,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8090
 
-ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/run.sh"]

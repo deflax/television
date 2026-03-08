@@ -17,9 +17,7 @@ from config import (
     channels_lock,
     PORT,
     SCAN_INTERVAL,
-    RECORDINGS_DIR,
     LIBRARY_DIR,
-    RESERVED_CHANNEL,
 )
 from channel import (
     Channel,
@@ -27,7 +25,6 @@ from channel import (
     stop_all_channels,
     watch_library,
 )
-from s3_mount import mount_s3_buckets, unmount_s3_buckets
 
 
 app = Quart(__name__)
@@ -138,14 +135,7 @@ async def index():
 
 @app.before_serving
 async def startup():
-    """Initialize S3 mounts (if configured) and channels on startup."""
-    # Mount S3 buckets if configured (must happen before channel init)
-    if not mount_s3_buckets():
-        logger.error("S3 mount failed — channels may not have access to video files")
-
-    # Start the recorder channel (always present)
-    start_channel(RESERVED_CHANNEL, RECORDINGS_DIR)
-
+    """Initialize channels on startup."""
     # Start library watcher in background
     watcher_thread = threading.Thread(target=watch_library, daemon=True)
     watcher_thread.start()
@@ -161,7 +151,6 @@ async def shutdown():
     """Cleanup on shutdown."""
     logger.info("Shutting down...")
     stop_all_channels()
-    unmount_s3_buckets()
 
 
 def create_app():
