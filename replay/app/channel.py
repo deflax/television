@@ -23,7 +23,6 @@ from config import (
     SCAN_INTERVAL,
     SEGMENT_RETAIN_SECONDS,
     LIBRARY_DIR,
-    RESERVED_CHANNEL,
 )
 
 
@@ -451,11 +450,7 @@ def discover_library_channels() -> list[str]:
     channel_names = []
     for entry in library_path.iterdir():
         if entry.is_dir():
-            name = entry.name
-            if name == RESERVED_CHANNEL:
-                logger.error(f"CONFLICT: '{LIBRARY_DIR}/{name}' conflicts with reserved channel 'recorder'. Skipping.")
-                continue
-            channel_names.append(name)
+            channel_names.append(entry.name)
     return sorted(channel_names)
 
 

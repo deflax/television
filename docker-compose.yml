@@ -17,7 +17,6 @@ services:
     depends_on:
       - "restreamer"
       - "api"
-      - "replay"
       - "mux"
     restart: unless-stopped
     networks:
@@ -67,26 +66,6 @@ services:
       - net
     labels:
       - meta.role=api
-
-  replay:
-    build: ./replay
-    image: tv-replay:latest
-    env_file:
-      - "variables.env"
-    volumes:
-      - "./data/recorder:/recordings:ro"
-      - "./data/library:/library:ro"
-    cap_add:
-      - SYS_ADMIN
-    devices:
-      - "/dev/fuse"
-    security_opt:
-      - apparmor:unconfined
-    restart: unless-stopped
-    networks:
-      - net
-    labels:
-      - meta.role=replay
 
   mux:
     depends_on:

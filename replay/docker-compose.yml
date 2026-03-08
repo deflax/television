@@ -1,0 +1,11 @@
+services:
+  replay:
+    build: .
+    image: tv-replay:latest
+    env_file:
+      - "variables.env"
+    volumes:
+      - "./data/library:/library:ro"
+    restart: unless-stopped
+    labels:
+      - meta.role=replay

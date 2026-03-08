@@ -2,7 +2,11 @@
 set -e
 
 echo "Starting Replay Service..."
-echo "Recordings directory: ${RECORDINGS_DIR:-/recordings}"
+echo "Library directory: ${LIBRARY_DIR:-/library}"
+
+# Create directories
+mkdir -p /tmp/hls
+mkdir -p "${LIBRARY_DIR:-/library}"
 
 exec uvicorn main:app \
     --host 0.0.0.0 \

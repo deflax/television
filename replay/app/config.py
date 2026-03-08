@@ -27,7 +27,6 @@ class QuietAccessFilter(logging.Filter):
 logging.getLogger('uvicorn.access').addFilter(QuietAccessFilter())
 
 # Configuration from environment
-RECORDINGS_DIR = os.environ.get('RECORDINGS_DIR', '/recordings')
 LIBRARY_DIR = os.environ.get('LIBRARY_DIR', '/library')
 HLS_BASE_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = int(os.environ.get('HLS_SEGMENT_TIME', '4'))
@@ -37,17 +36,6 @@ AUDIO_BITRATE = os.environ.get('AUDIO_BITRATE', '128k')
 PORT = int(os.environ.get('REPLAY_PORT', '8090'))
 SCAN_INTERVAL = int(os.environ.get('REPLAY_SCAN_INTERVAL', '60'))
 SEGMENT_RETAIN_SECONDS = HLS_SEGMENT_TIME * HLS_LIST_SIZE * 3
-
-# S3/MinIO configuration
-S3_ENABLED = os.environ.get('S3_ENABLED', 'false').lower() == 'true'
-S3_ENDPOINT = os.environ.get('S3_ENDPOINT', '')  # e.g. http://minio:9000
-S3_ACCESS_KEY = os.environ.get('S3_ACCESS_KEY', '')
-S3_SECRET_KEY = os.environ.get('S3_SECRET_KEY', '')
-S3_BUCKET = os.environ.get('S3_BUCKET', 'library')  # bucket root = library, subdirs = channels
-S3_MOUNT_OPTIONS = os.environ.get('S3_MOUNT_OPTIONS', '')  # extra s3fs mount options
-
-# Reserved channel name (data/recorder is always mounted here)
-RESERVED_CHANNEL = 'recorder'
 
 # Global state
 stop_event = threading.Event()

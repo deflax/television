@@ -8,7 +8,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 - **Automatic Fallback** - Falls back to nearest scheduled stream when current ends
 - **Discord Bot Integration** - Live notifications, EPG commands, and stream control
 - **Protected Video Archive** - HMAC-based timecode authentication for secure access
-- **Replay Service** - Multi-channel endless shuffled HLS playback of recorded videos
 - **Mux Service** - Seamless stream multiplexer with adaptive bitrate output and crash recovery
 - **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player and automatic error recovery
 - **Automated SSL** - Let's Encrypt certificates via acme.sh
@@ -40,34 +39,14 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
        │ - Schedule  │              │ - Playhead  │              │ - Ingest    │
        │ - Discord   │              │   switching │              │ - Transcode │
        │ - Archive   │              │             │              │ - HLS out   │
-       └─────────────┘              └─────────────┘              └──────┬──────┘
-                                                                        │
-                                                                        │ HLS
-                                                                        │ (internal)
-                                                                        │
-                                                                 ┌──────▼──────┐
-                                                                 │   Replay    │
-                                                                 │    :8090    │
-                                                                 │             │
-                                                                 │ - Multi-ch  │
-                                                                 │ - Auto-disc │
-                                                                 │ - Shuffled  │
-                                                                 │   playback  │
-                                                                 └──────┬──────┘
-                                                                        │
-                                                           ┌────────────┴────────────┐
-                                                           │                         │
-                                                     /recordings               /library
-                                                    (data/recorder)        (data/library/*)
-```
+       └─────────────┘              └─────────────┘              └─────────────┘
 
 **Data Flow:**
 1. **Ingest** → Streamers push to Restreamer via SRT/RTMP
-2. **Replay** → Serves recorded/library content as endless shuffled HLS channels
-3. **Restreamer** → Ingests live streams + Replay HLS, transcodes, outputs unified HLS
-4. **Scheduling** → API tracks schedule, broadcasts playhead via SSE
-5. **Muxing** → Mux service follows playhead, switches Restreamer HLS inputs, outputs ABR stream
-6. **Delivery** → HAProxy routes requests, terminates SSL, serves to viewers
+2. **Restreamer** → Ingests live streams, transcodes, outputs unified HLS
+3. **Scheduling** → API tracks schedule, broadcasts playhead via SSE
+4. **Muxing** → Mux service follows playhead, switches Restreamer HLS inputs, outputs ABR stream
+5. **Delivery** → HAProxy routes requests, terminates SSL, serves to viewers
 
 ## Tech Stack
 
@@ -76,7 +55,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Backend | Python 3.13, Quart (async Flask) |
 | Frontend | Bootstrap 5, Plyr.js, HLS.js |
 | Streaming | Datarhei Restreamer 2.12 |
-| Replay | FFmpeg HLS, multi-channel |
 | Mux | FFmpeg ABR (720p + 576p) |
 | Proxy | HAProxy (HTTP/2, health checks) |
 | ASGI Server | Uvicorn |
@@ -189,40 +167,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `DISCORDBOT_LIVE_CHANNEL_UPDATE` | Live announcement interval in minutes (default: `1440`) |
 | `FRONTEND_MODE` | `mux` (default) or `legacy` - see [Frontend Modes](#frontend-modes) |
 
-### Replay Service Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RECORDINGS_DIR` | `/recordings` | Path to recorder MP4/MKV files |
-| `LIBRARY_DIR` | `/library` | Path to library directories (auto-discovered) |
-| `HLS_SEGMENT_TIME` | `4` | HLS segment duration (seconds) |
-| `HLS_LIST_SIZE` | `20` | Number of segments in playlist |
-| `VIDEO_BITRATE` | `4000k` | Video encoding bitrate (when transcoding) |
-| `AUDIO_BITRATE` | `128k` | Audio encoding bitrate (when transcoding) |
-| `REPLAY_PORT` | `8090` | HTTP server port |
-| `REPLAY_SCAN_INTERVAL` | `60` | Directory scan interval (seconds) |
-
-#### S3/MinIO Storage (Optional)
-
-The replay service can read video files from S3-compatible storage (e.g., MinIO) instead of local volume mounts. When enabled, the S3 bucket is mounted as a local filesystem using s3fs-fuse, so ffmpeg and ffprobe work transparently.
-
-The bucket root is the library itself — each subdirectory in the bucket is a channel (e.g., `s3://library/music/`, `s3://library/movies/`). The recorder channel still uses the local `/recordings` mount.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `S3_ENABLED` | `false` | Enable S3/MinIO storage for replay service |
-| `S3_ENDPOINT` | - | S3 endpoint URL (e.g., `http://minio:9000`) |
-| `S3_ACCESS_KEY` | - | S3 access key |
-| `S3_SECRET_KEY` | - | S3 secret key |
-| `S3_BUCKET` | `library` | Bucket name (root = library, subdirs = channels) |
-| `S3_MOUNT_OPTIONS` | - | Extra s3fs mount options (comma-separated) |
-
-**Notes:**
-- When `S3_ENABLED=false` (default), the service uses local volume mounts as before
-- The Docker container requires `SYS_ADMIN` capability and `/dev/fuse` device access for FUSE mounts
-- The recorder channel always uses the local `/recordings` volume mount
-- The bucket must exist in MinIO before starting the service
-
 ### Mux Service Variables
 
 | Variable | Default | Description |
@@ -250,37 +194,6 @@ Each variant specifies a resolution height (source is capped at this), video bit
 
 
 ## Services
-
-### Replay Service
-
-Multi-channel HLS streaming service that serves video files as endless shuffled streams.
-
-**Features:**
-- **Multi-channel support** - One channel per directory
-- **Auto-discovery** - Automatically detects new directories in `/library`
-- **Per-channel config** - Optional `channel.json` for transcoding settings
-- **File watching** - Detects added/removed files and updates playlist
-- **Copy mode** (default) - No transcoding, minimal CPU usage
-
-**Channels:**
-- `/replay/recorder/` - Always present, serves `data/recorder`
-- `/replay/<name>/` - Auto-discovered from `data/library/<name>`
-
-**Per-channel configuration** (`channel.json` in the channel directory):
-```json
-{
-    "transcode": false
-}
-```
-- `transcode: false` (default) - Copy mode, passthrough without re-encoding
-- `transcode: true` - Full transcoding to configured bitrate
-
-**Copy mode compatibility:**
-- Smooth file-to-file transitions in copy mode require compatible source streams (codec, resolution, fps, and audio layout).
-- The replay service keeps the largest compatible subset and skips incompatible files (with warnings in logs) to avoid stream breaks.
-- For best non-transcoding results, remux files to MPEG-TS (`.ts`) with aligned stream parameters.
-
-**Conflict detection:** If `data/library/recorder` exists, it's skipped to avoid conflict with the reserved `recorder` channel.
 
 ### Mux Service
 
@@ -349,26 +262,6 @@ Set via `FRONTEND_MODE` environment variable.
    | `prio` | Priority level (higher takes precedence) |
    | `details` | Optional description for Discord announcements |
 
-### Adding Replay Content
-
-**Recorder channel** (always present):
-```bash
-# Add files to data/recorder/
-cp video.mp4 data/recorder/
-```
-
-**Library channels** (auto-discovered):
-```bash
-# Create a new channel
-mkdir -p data/library/mychannel
-
-# Add files
-cp video.mp4 data/library/mychannel/
-
-# Optional: configure transcoding
-echo '{"transcode": true}' > data/library/mychannel/channel.json
-```
-
 ### Streaming URLs
 
 **SRT (recommended):**
@@ -420,7 +313,6 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `/video/<file>` | GET | Timecode | Stream video file |
 | `/video/download/<file>` | GET | Timecode | Download video file |
 | `/thumb/<file>` | GET | Timecode | Serve thumbnail image |
-| `/replay/<channel>/playlist.m3u8` | GET | Public | HLS replay stream for channel |
 | `/live/stream.m3u8` | GET | Public | Mux stream (master playlist) |
 
 ## Logging and Monitoring
@@ -480,16 +372,6 @@ television/
 │   │   └── obfuscation.py       # Hostname obfuscation
 │   ├── Dockerfile
 │   └── requirements.txt
-├── replay/
-│   ├── app/
-│   │   ├── main.py              # HTTP server & lifecycle
-│   │   ├── channel.py           # Channel class & ffmpeg
-│   │   └── config.py            # Configuration
-│   ├── scripts/
-│   │   └── run.sh
-│   ├── channel.json.dist        # Example channel config
-│   ├── Dockerfile
-│   └── requirements.txt
 ├── mux/
 │   ├── app/
 │   │   ├── main.py              # Application orchestration
@@ -513,7 +395,6 @@ television/
 │   ├── certificates/
 │   ├── restreamer/
 │   ├── recorder/                # Recorder channel files (vod/, thumb/)
-│   └── library/                 # Library channels (auto-discovered)
 ├── docker-compose.yml
 ├── variables.env.dist
 └── init.sh
