@@ -42,6 +42,7 @@ def register_frontend_routes(app, config, loggers, state: WebRouteState) -> None
         return {
             'server_name': config.server_name or 'localhost',
             'core_hostname': config.core_hostname or 'localhost',
+            'archive_enabled': config.archive_enabled,
         }
 
     @app.route('/privacy-policy', methods=['GET'])
@@ -64,6 +65,9 @@ def register_frontend_routes(app, config, loggers, state: WebRouteState) -> None
     @app.route('/archive', methods=['GET', 'POST'])
     async def archive_route():
         """Archive page with timecode authentication."""
+        if not config.archive_enabled:
+            abort(404)
+
         client_ip = get_client_address(request)
         client_hostname = get_client_hostname(request)
 
