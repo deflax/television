@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     {% block metadata %}{% endblock %}
 
@@ -7,6 +7,7 @@
 
     <link rel='shortcut icon' type='image/x-icon' href='/static/images/favicon.ico' />
     <link rel="stylesheet" href="/static/css/root.css">
+    {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.8.4/dist/plyr.min.css">
@@ -42,6 +43,7 @@
           id="weatherIframe"
           src=""
           style="width: 100%; height: 100%; border: none;"
+          title="Weather map"
           allowfullscreen
           loading="lazy"
           referrerpolicy="no-referrer">
@@ -106,7 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = doc.querySelector('.content-container');
         if (content) {
           modalBody.innerHTML = content.innerHTML;
-          modalBody.querySelectorAll('script').forEach(s => s.remove());
+          modalBody.querySelectorAll('script').forEach(s => {
+            s.remove();
+          });
           bindArchiveInteractions(modalBody);
         } else {
           modalBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load archive content.</div>';
@@ -137,7 +141,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const respContent = respDoc.querySelector('.content-container');
         if (respContent) {
           modalBody.innerHTML = respContent.innerHTML;
-          modalBody.querySelectorAll('script').forEach(s => s.remove());
+          modalBody.querySelectorAll('script').forEach(s => {
+            s.remove();
+          });
           bindArchiveInteractions(modalBody);
         }
       });
@@ -148,11 +154,11 @@ document.addEventListener('DOMContentLoaded', () => {
       let cooldownRemaining = 0;
       let cooldownInterval = null;
 
-      function updateCooldownText() {
+      const updateCooldownText = () => {
         requestBtn.textContent = `Wait ${cooldownRemaining}s`;
-      }
+      };
 
-      function startCooldown() {
+      const startCooldown = () => {
         cooldownRemaining = 60;
         requestBtn.disabled = true;
         updateCooldownText();
@@ -167,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCooldownText();
           }
         }, 1000);
-      }
+      };
 
       requestBtn.addEventListener('click', async () => {
         if (cooldownRemaining > 0) return;
@@ -193,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             requestBtn.disabled = false;
             requestBtn.textContent = 'Request Timecode';
           }
-        } catch (error) {
+        } catch {
           statusDiv.innerHTML = '<div class="alert alert-danger">Error requesting timecode. Please try again.</div>';
           requestBtn.disabled = false;
           requestBtn.textContent = 'Request Timecode';
@@ -215,6 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 </script>
+
+{% block extra_scripts %}{% endblock %}
 
 </body>
 </html>

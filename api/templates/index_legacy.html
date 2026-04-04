@@ -16,6 +16,10 @@
 
 {% block title %}▷ Stream{% endblock %}
 
+{% block extra_head %}
+    <link rel="stylesheet" href="/static/css/sheep.css">
+{% endblock %}
+
 {% block content %}
 <!-- Live Stream - Public Access -->
 <div class="content-container bg-dark text-white">
@@ -26,6 +30,7 @@
       <div class="col-12 col-lg-10">
           <div class="content">
               <video controls crossorigin playsinline poster="static/images/poster.png">
+                <track kind="captions" srclang="en" label="Decorative empty captions" src="/static/empty.vtt" default>
               </video>
               <div class="d-flex justify-content-between align-items-center mt-1 mb-2">
                 <p class="mb-0 text-secondary" id="epg-now-playing" style="display:none;">
@@ -289,4 +294,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
 </script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/sheep.js"></script>
 {% endblock %}

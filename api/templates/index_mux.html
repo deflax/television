@@ -16,6 +16,10 @@
 
 {% block title %}▷ Stream{% endblock %}
 
+{% block extra_head %}
+    <link rel="stylesheet" href="/static/css/sheep.css">
+{% endblock %}
+
 {% block content %}
 <!-- Live Stream - Public Access -->
 <div class="content-container bg-dark text-white">
@@ -26,6 +30,7 @@
       <div class="col-12 col-lg-10">
           <div class="content">
               <video controls crossorigin playsinline poster="static/images/poster.png">
+                <track kind="captions" srclang="en" label="Decorative empty captions" src="/static/empty.vtt" default>
               </video>
               <img id="audio-only-poster" src="/static/images/odeala.jpg" alt="Audio Only" style="display:none; width:100%; border-radius:4px;">
               <div class="d-flex justify-content-between align-items-center mt-1 mb-2">
@@ -39,13 +44,15 @@
                   <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
                 </div>
                 <div class="d-flex gap-2 ms-3">
-                  <button id="audio-only-btn" class="btn btn-sm btn-outline-secondary" title="Toggle video">
+                  <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary" title="Toggle video">
                     <i class="fa fa-headphones"></i> audio only
                   </button>
                   <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-secondary" target="_blank">live.hls</a>
                   <!-- <a href="/live/stream.mp3" class="btn btn-sm btn-outline-secondary" target="_blank">live.mp3</a> -->
-              </div>
-	        </div>
+                 </div>
+               </div>
+           </div>
+               </div>
       </div>
       <div class="col-md-1 d-none d-md-block">
       </div>
@@ -56,4 +63,8 @@
 <script src="/static/js/epg.js"></script>
 <script src="/static/js/player.js"></script>
 <script src="/static/js/sse.js"></script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/sheep.js"></script>
 {% endblock %}
