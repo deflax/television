@@ -29,13 +29,13 @@
     top: 0;
     left: 0;
     width: var(--sheep-size);
-    height: auto;
-    aspect-ratio: 16 / 11;
+    height: var(--sheep-size);
     pointer-events: none;
     user-select: none;
-    -webkit-user-drag: none;
     opacity: var(--sheep-sprite-opacity);
     filter: var(--sheep-shadow);
+    background-repeat: no-repeat;
+    background-position: 0 0;
     transform-origin: center center;
     will-change: transform;
 }
