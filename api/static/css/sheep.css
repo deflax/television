@@ -5,6 +5,7 @@
     --sheep-safe-bottom: 16px;
     --sheep-layer-z: 20;
     --sheep-sprite-opacity: 0.94;
+    --sheep-prop-opacity: 0.9;
     --sheep-hidden-opacity: 0;
     --sheep-visible-opacity: 1;
     --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
@@ -24,7 +25,8 @@
     opacity: var(--sheep-hidden-opacity);
 }
 
-.sheep-layer__sprite {
+.sheep-layer__sprite,
+.sheep-layer__prop {
     position: absolute;
     top: 0;
     left: 0;
@@ -38,6 +40,14 @@
     background-position: 0 0;
     transform-origin: center center;
     will-change: transform;
+}
+
+.sheep-layer__sprite {
+    opacity: var(--sheep-sprite-opacity);
+}
+
+.sheep-layer__prop {
+    opacity: var(--sheep-prop-opacity);
 }
 
 @media (prefers-reduced-motion: reduce) {
