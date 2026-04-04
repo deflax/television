@@ -1,5 +1,5 @@
 :root {
-    --sheep-size: clamp(56px, 7vw, 88px);
+    --sheep-size: clamp(40px, 4.5vw, 52px);
     --sheep-edge-padding: 16px;
     --sheep-safe-top: 68px;
     --sheep-safe-bottom: 16px;

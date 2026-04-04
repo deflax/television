@@ -48,6 +48,10 @@ window.SheepApp = window.SheepApp || {};
     return min + (Math.random() * (max - min));
   }
 
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
   function readCssPixels(name, fallback) {
     const rootStyles = getComputedStyle(document.documentElement);
     const value = parseFloat(rootStyles.getPropertyValue(name));
@@ -71,8 +75,20 @@ window.SheepApp = window.SheepApp || {};
 
   function clampPosition() {
     const bounds = getBounds();
-    state.x = Math.min(bounds.maxX, Math.max(bounds.minX, state.x));
-    state.y = Math.min(bounds.maxY, Math.max(bounds.minY, state.y));
+
+    const nextX = clamp(state.x, bounds.minX, bounds.maxX);
+    const nextY = clamp(state.y, bounds.minY, bounds.maxY);
+    const hitBounds = {
+      left: nextX === bounds.minX && state.x < bounds.minX,
+      right: nextX === bounds.maxX && state.x > bounds.maxX,
+      top: nextY === bounds.minY && state.y < bounds.minY,
+      bottom: nextY === bounds.maxY && state.y > bounds.maxY
+    };
+
+    state.x = nextX;
+    state.y = nextY;
+
+    return hitBounds;
   }
 
   function applyPosition() {
@@ -101,8 +117,7 @@ window.SheepApp = window.SheepApp || {};
     sprite.style.backgroundPosition = `${-column * frameSize}px ${-row * frameSize}px`;
   }
 
-  function pickTarget() {
-    const bounds = getBounds();
+  function pickTarget(bounds = getBounds()) {
     const attempts = 8;
 
     for (let index = 0; index < attempts; index += 1) {
@@ -120,6 +135,36 @@ window.SheepApp = window.SheepApp || {};
       x: randomBetween(bounds.minX, bounds.maxX),
       y: randomBetween(bounds.minY, bounds.maxY)
     };
+  }
+
+  function didHitActiveBound(hitBounds, dx, dy) {
+    return (hitBounds.left && dx < 0)
+      || (hitBounds.right && dx > 0)
+      || (hitBounds.top && dy < 0)
+      || (hitBounds.bottom && dy > 0);
+  }
+
+  function retargetFromBounds(hitBounds) {
+    const bounds = getBounds();
+    const horizontalInset = Math.min(
+      (bounds.maxX - bounds.minX) / 2,
+      Math.max(DEFAULTS.minTravelDistance * 0.6, 48)
+    );
+    const verticalInset = Math.min(
+      (bounds.maxY - bounds.minY) / 2,
+      Math.max(DEFAULTS.minTravelDistance * 0.45, 40)
+    );
+
+    const targetBounds = {
+      minX: hitBounds.left ? Math.min(bounds.maxX, bounds.minX + horizontalInset) : bounds.minX,
+      maxX: hitBounds.right ? Math.max(bounds.minX, bounds.maxX - horizontalInset) : bounds.maxX,
+      minY: hitBounds.top ? Math.min(bounds.maxY, bounds.minY + verticalInset) : bounds.minY,
+      maxY: hitBounds.bottom ? Math.max(bounds.minY, bounds.maxY - verticalInset) : bounds.maxY
+    };
+
+    state.target = pickTarget(targetBounds);
+    state.walkFrameElapsed = 0;
+    setFrame(FRAMES.walkA);
   }
 
   function scheduleNextWalk(timestamp) {
@@ -144,6 +189,8 @@ window.SheepApp = window.SheepApp || {};
 
   function tick(timestamp) {
     state.animationFrame = 0;
+    let movementDx = 0;
+    let movementDy = 0;
 
     if (state.modalOpen || state.reducedMotion || !sprite) {
       state.lastTimestamp = 0;
@@ -182,13 +229,20 @@ window.SheepApp = window.SheepApp || {};
         scheduleNextWalk(timestamp);
       } else {
         const step = Math.min(distance, state.speed * deltaSeconds);
-        state.direction = dx < 0 ? -1 : 1;
+        movementDx = dx;
+        movementDy = dy;
+        state.direction = dx < 0 ? 1 : -1;
         state.x += (dx / distance) * step;
         state.y += (dy / distance) * step;
       }
     }
 
-    clampPosition();
+    const hitBounds = clampPosition();
+
+    if (state.mode === 'walk' && state.target && didHitActiveBound(hitBounds, movementDx, movementDy)) {
+      retargetFromBounds(hitBounds);
+    }
+
     applyPosition();
     state.animationFrame = window.requestAnimationFrame(tick);
   }
@@ -289,7 +343,7 @@ window.SheepApp = window.SheepApp || {};
     const bounds = getBounds();
     state.x = bounds.maxX;
     state.y = randomBetween(bounds.minY, bounds.maxY);
-    state.direction = -1;
+    state.direction = 1;
     scheduleNextWalk(performance.now());
     applyPosition();
   }
