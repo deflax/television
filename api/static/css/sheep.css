@@ -1,0 +1,47 @@
+:root {
+    --sheep-size: clamp(56px, 7vw, 88px);
+    --sheep-edge-padding: 16px;
+    --sheep-safe-top: 68px;
+    --sheep-safe-bottom: 16px;
+    --sheep-layer-z: 20;
+    --sheep-sprite-opacity: 0.94;
+    --sheep-hidden-opacity: 0;
+    --sheep-visible-opacity: 1;
+    --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+}
+
+.sheep-layer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: var(--sheep-layer-z);
+    opacity: var(--sheep-visible-opacity);
+    transition: opacity 160ms ease-out;
+}
+
+.sheep-layer.is-suspended {
+    opacity: var(--sheep-hidden-opacity);
+}
+
+.sheep-layer__sprite {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--sheep-size);
+    height: auto;
+    aspect-ratio: 16 / 11;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    opacity: var(--sheep-sprite-opacity);
+    filter: var(--sheep-shadow);
+    transform-origin: center center;
+    will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sheep-layer {
+        transition: none;
+    }
+}
