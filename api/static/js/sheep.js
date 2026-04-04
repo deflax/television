@@ -11,36 +11,304 @@ window.SheepApp = window.SheepApp || {};
   const SPRITE_COLUMNS = 16;
   const SPRITE_ROWS = 11;
   const NEUTRAL_FRAME = 3;
+
+  function freezeAction(definition) {
+    return Object.freeze({
+      frames: Object.freeze(definition.frames.slice()),
+      frameMs: definition.frameMs,
+      frameDurations: definition.frameDurations ? Object.freeze(definition.frameDurations.slice()) : null,
+      frameEvents: definition.frameEvents ? Object.freeze({ ...definition.frameEvents }) : null,
+      loop: definition.loop,
+      onStart: typeof definition.onStart === 'function' ? definition.onStart : null,
+      onComplete: typeof definition.onComplete === 'function' ? definition.onComplete : null,
+      keepPlayingOnArrival: Boolean(definition.keepPlayingOnArrival)
+    });
+  }
+
+  function createSequence() {
+    return {
+      frames: [],
+      frameDurations: [],
+      frameEvents: {}
+    };
+  }
+
+  function addSequenceFrame(sequence, frame, durationMs, onEnter) {
+    const index = sequence.frames.length;
+
+    sequence.frames.push(frame);
+    sequence.frameDurations.push(durationMs);
+
+    if (typeof onEnter === 'function') {
+      sequence.frameEvents[index] = onEnter;
+    }
+  }
+
+  function addRepeatedFrames(sequence, frames, repeats, durationMs, onEnterFactory) {
+    for (let repeatIndex = 0; repeatIndex < repeats; repeatIndex += 1) {
+      for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
+        const frame = frames[frameIndex];
+        const onEnter = typeof onEnterFactory === 'function'
+          ? onEnterFactory(frame, repeatIndex, frameIndex)
+          : null;
+
+        addSequenceFrame(sequence, frame, durationMs, onEnter);
+      }
+    }
+  }
+
+  function finalizeSequenceAction(sequence, options) {
+    const settings = options || {};
+
+    return freezeAction({
+      frames: sequence.frames,
+      frameMs: settings.frameMs ?? null,
+      frameDurations: sequence.frameDurations,
+      frameEvents: sequence.frameEvents,
+      loop: false,
+      onStart: settings.onStart,
+      onComplete: settings.onComplete,
+      keepPlayingOnArrival: settings.keepPlayingOnArrival
+    });
+  }
+
+  function createCallAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 200);
+    addSequenceFrame(sequence, 73, 2000);
+    addRepeatedFrames(sequence, [71, 72], 4, 200);
+    addSequenceFrame(sequence, 73, 2000);
+    addRepeatedFrames(sequence, [71, 72], 4, 200);
+    addSequenceFrame(sequence, 73, 200);
+    addSequenceFrame(sequence, 74, 200);
+    addSequenceFrame(sequence, 75, 200);
+    addSequenceFrame(sequence, 76, 5000);
+    addSequenceFrame(sequence, 73, 200);
+    addSequenceFrame(sequence, 3, 200);
+
+    return finalizeSequenceAction(sequence);
+  }
+
+  function createYawnAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 200);
+    addSequenceFrame(sequence, 31, 2000);
+    addSequenceFrame(sequence, 107, 200);
+    addSequenceFrame(sequence, 108, 2000);
+    addRepeatedFrames(sequence, [110, 111], 4, 200);
+    addSequenceFrame(sequence, 109, 7000);
+    addSequenceFrame(sequence, 31, 200);
+    addSequenceFrame(sequence, 3, 200);
+
+    return finalizeSequenceAction(sequence);
+  }
+
+  function createStareAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 9, 400);
+    addSequenceFrame(sequence, 10, 400);
+    addSequenceFrame(sequence, 34, 5000);
+    addSequenceFrame(sequence, 36, 400);
+    addSequenceFrame(sequence, 34, 5000);
+    addSequenceFrame(sequence, 10, 400);
+    addSequenceFrame(sequence, 9, 400);
+
+    return finalizeSequenceAction(sequence);
+  }
+
+  function createRollAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 200);
+    addSequenceFrame(sequence, 9, 200);
+    addSequenceFrame(sequence, 10, 200);
+    addSequenceFrame(sequence, 126, 3000);
+
+    for (let frame = 125; frame >= 112; frame -= 1) {
+      addSequenceFrame(sequence, frame, 200);
+    }
+
+    addSequenceFrame(sequence, 10, 200);
+    addSequenceFrame(sequence, 9, 200);
+    addSequenceFrame(sequence, 3, 200);
+
+    return finalizeSequenceAction(sequence, {
+      keepPlayingOnArrival: true
+    });
+  }
+
+  function createBathAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 400);
+    addSequenceFrame(sequence, 9, 400);
+    addSequenceFrame(sequence, 10, 400, () => {
+      showProp(146, PROP_PRESETS.bath);
+    });
+    addRepeatedFrames(sequence, [54, 55], 5, 400, (frame) => () => {
+      showProp(frame === 54 ? 147 : 148, PROP_PRESETS.bath);
+    });
+    addSequenceFrame(sequence, 10, 400, hideProp);
+    addSequenceFrame(sequence, 54, 3000);
+    addSequenceFrame(sequence, 10, 400);
+    addSequenceFrame(sequence, 9, 400);
+    addSequenceFrame(sequence, 3, 400, hideProp);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: hideProp
+    });
+  }
+
+  function createEatAction() {
+    const sequence = createSequence();
+    const leafFrames = [149, 150, 151, 152];
+
+    addSequenceFrame(sequence, 3, 1000, () => {
+      showProp(153, PROP_PRESETS.eat);
+    });
+
+    for (let cycleIndex = 0; cycleIndex < leafFrames.length; cycleIndex += 1) {
+      addSequenceFrame(sequence, 58, 300);
+      addSequenceFrame(sequence, 59, 300);
+      addSequenceFrame(sequence, 60, 300, () => {
+        showProp(leafFrames[cycleIndex], PROP_PRESETS.eat);
+      });
+      addSequenceFrame(sequence, 61, 300);
+      addSequenceFrame(sequence, 60, 300);
+      addSequenceFrame(sequence, 61, 300);
+      addSequenceFrame(sequence, 60, 300);
+      addSequenceFrame(sequence, 61, 300);
+
+      if (cycleIndex < leafFrames.length - 1) {
+        addSequenceFrame(sequence, 3, 1000);
+      }
+    }
+
+    addSequenceFrame(sequence, 3, 2000);
+    addSequenceFrame(sequence, 50, 300);
+    addSequenceFrame(sequence, 51, 300);
+    addSequenceFrame(sequence, 50, 300);
+    addSequenceFrame(sequence, 51, 300);
+    addSequenceFrame(sequence, 50, 300);
+    addSequenceFrame(sequence, 3, 300, hideProp);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: hideProp
+    });
+  }
+
+  function createWaterAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 1000, () => {
+      showProp(152, PROP_PRESETS.water);
+    });
+    addSequenceFrame(sequence, 12, 300);
+    addSequenceFrame(sequence, 13, 300, (action) => {
+      action.startDirection = action.startDirection ?? state.direction;
+      state.direction = action.startDirection * -1;
+    });
+    addSequenceFrame(sequence, 103, 300);
+    addSequenceFrame(sequence, 104, 300);
+
+    [151, 150, 149, 153].forEach((propFrame, index) => {
+      addSequenceFrame(sequence, index % 2 === 0 ? 105 : 106, 300, () => {
+        showProp(propFrame, PROP_PRESETS.water);
+      });
+    });
+
+    addSequenceFrame(sequence, 104, 300);
+    addSequenceFrame(sequence, 103, 300);
+    addSequenceFrame(sequence, 13, 300, (action) => {
+      state.direction = action.startDirection ?? state.direction;
+    });
+    addSequenceFrame(sequence, 12, 300);
+    addSequenceFrame(sequence, 3, 1000);
+    addSequenceFrame(sequence, 8, 300);
+    addSequenceFrame(sequence, 3, 1000, hideProp);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: (action) => {
+        if (typeof action.startDirection === 'number') {
+          state.direction = action.startDirection;
+        }
+
+        hideProp();
+      }
+    });
+  }
+
   const ACTIONS = Object.freeze({
-    walk: Object.freeze({
-      frames: Object.freeze([2, 3]),
+    walk: freezeAction({
+      frames: [2, 3],
       frameMs: 180,
       loop: true
     }),
-    sleep: Object.freeze({
-      frames: Object.freeze([0, 1]),
+    sleep: freezeAction({
+      frames: [0, 1],
       frameMs: 420,
       loop: true
     }),
-    run: Object.freeze({
-      frames: Object.freeze([4, 5]),
+    run: freezeAction({
+      frames: [4, 5],
       frameMs: 110,
       loop: true
     }),
-    direction: Object.freeze({
-      frames: Object.freeze([3, 9, 10, 11, 3]),
+    direction: freezeAction({
+      frames: [3, 9, 10, 11, 3],
       frameMs: 90,
       loop: false
     }),
-    directionBack: Object.freeze({
-      frames: Object.freeze([3, 12, 13, 14, 3]),
+    directionBack: freezeAction({
+      frames: [3, 12, 13, 14, 3],
       frameMs: 90,
       loop: false
     }),
-    bump: Object.freeze({
-      frames: Object.freeze([62, 63, 64, 65, 66, 67, 68, 69, 70, 63]),
+    bump: freezeAction({
+      frames: [62, 63, 64, 65, 66, 67, 68, 69, 70, 63],
       frameMs: 72,
       loop: false
+    }),
+    call: createCallAction(),
+    yawn: createYawnAction(),
+    stare: createStareAction(),
+    roll: createRollAction(),
+    bath: createBathAction(),
+    eat: createEatAction(),
+    water: createWaterAction()
+  });
+
+  const SPECIAL_ACTIONS = Object.freeze([
+    Object.freeze({ name: 'call', weight: 1 }),
+    Object.freeze({ name: 'yawn', weight: 1 }),
+    Object.freeze({ name: 'stare', weight: 0.8 }),
+    Object.freeze({ name: 'roll', weight: 0.55 }),
+    Object.freeze({ name: 'bath', weight: 0.7 }),
+    Object.freeze({ name: 'eat', weight: 0.9 }),
+    Object.freeze({ name: 'water', weight: 0.7 })
+  ]);
+
+  const PROP_PRESETS = Object.freeze({
+    bath: Object.freeze({
+      offsetX: 0,
+      offsetY: -4,
+      attachToFacing: false,
+      flipWithDirection: false
+    }),
+    eat: Object.freeze({
+      offsetX: 18,
+      offsetY: 8,
+      attachToFacing: true,
+      flipWithDirection: true
+    }),
+    water: Object.freeze({
+      offsetX: 20,
+      offsetY: 10,
+      attachToFacing: true,
+      flipWithDirection: true
     })
   });
 
@@ -55,8 +323,12 @@ window.SheepApp = window.SheepApp || {};
     sleepMaxMs: 3000,
     edgeRetargetMinInset: 48,
     edgeRetargetVerticalInset: 40,
+    specialActionChance: 0.28,
     runChance: 0.2,
-    sleepChance: 0.42
+    sleepChance: 0.42,
+    rollTravelDistance: 220,
+    rollTravelMs: 3000,
+    minRollDistance: 96
   });
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -71,11 +343,20 @@ window.SheepApp = window.SheepApp || {};
     modalOpen: false,
     activeAction: null,
     actionQueue: [],
-    lastTurnAction: 'directionBack'
+    lastTurnAction: 'directionBack',
+    prop: {
+      visible: false,
+      currentFrame: null,
+      offsetX: 0,
+      offsetY: 0,
+      attachToFacing: false,
+      flipWithDirection: false
+    }
   };
 
   let layer = null;
   let sprite = null;
+  let propSprite = null;
 
   function randomBetween(min, max) {
     return min + (Math.random() * (max - min));
@@ -129,24 +410,100 @@ window.SheepApp = window.SheepApp || {};
     }
 
     sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
+
+    if (!propSprite) {
+      return;
+    }
+
+    if (!state.prop.visible) {
+      propSprite.hidden = true;
+      return;
+    }
+
+    const propOffsetX = state.prop.attachToFacing
+      ? state.prop.offsetX * state.direction * -1
+      : state.prop.offsetX;
+    const propScaleX = state.prop.flipWithDirection ? state.direction : 1;
+
+    propSprite.hidden = false;
+    propSprite.style.transform = `translate3d(${state.x + propOffsetX}px, ${state.y + state.prop.offsetY}px, 0) scaleX(${propScaleX})`;
   }
 
-  function setFrame(frame, force) {
-    if (!sprite) {
-      return;
+  function applyAtlasFrame(element, frame, force, previousFrame) {
+    if (!element) {
+      return previousFrame;
     }
 
-    if (!force && state.currentFrame === frame) {
-      return;
+    if (!force && previousFrame === frame) {
+      return previousFrame;
     }
 
-    state.currentFrame = frame;
-
-    const frameSize = sprite.offsetWidth || 72;
+    const frameSize = element.offsetWidth || 72;
     const column = frame % SPRITE_COLUMNS;
     const row = Math.floor(frame / SPRITE_COLUMNS);
 
-    sprite.style.backgroundPosition = `${-column * frameSize}px ${-row * frameSize}px`;
+    element.style.backgroundPosition = `${-column * frameSize}px ${-row * frameSize}px`;
+    return frame;
+  }
+
+  function setFrame(frame, force) {
+    state.currentFrame = applyAtlasFrame(sprite, frame, force, state.currentFrame);
+  }
+
+  function setPropFrame(frame, force) {
+    state.prop.currentFrame = applyAtlasFrame(propSprite, frame, force, state.prop.currentFrame);
+  }
+
+  function showProp(frame, preset) {
+    const nextPreset = preset || PROP_PRESETS.bath;
+
+    state.prop.visible = true;
+    state.prop.offsetX = nextPreset.offsetX;
+    state.prop.offsetY = nextPreset.offsetY;
+    state.prop.attachToFacing = nextPreset.attachToFacing;
+    state.prop.flipWithDirection = nextPreset.flipWithDirection;
+    setPropFrame(frame, false);
+  }
+
+  function hideProp() {
+    state.prop.visible = false;
+    state.prop.currentFrame = null;
+
+    if (propSprite) {
+      propSprite.hidden = true;
+    }
+  }
+
+  function composeCallbacks(...callbacks) {
+    const activeCallbacks = callbacks.filter((callback) => typeof callback === 'function');
+
+    if (!activeCallbacks.length) {
+      return;
+    }
+
+    return (...args) => {
+      activeCallbacks.forEach((callback) => {
+        callback(...args);
+      });
+    };
+  }
+
+  function enterActionFrame(action, force) {
+    if (!action) {
+      return;
+    }
+
+    setFrame(action.frames[action.frameIndex], force);
+
+    const onEnter = action.frameEvents?.[action.frameIndex];
+
+    if (typeof onEnter === 'function') {
+      onEnter(action, action.frames[action.frameIndex]);
+    }
+  }
+
+  function getCurrentFrameDuration(action) {
+    return action.frameDurations?.[action.frameIndex] ?? action.frameMs;
   }
 
   function buildAction(name, overrides) {
@@ -157,12 +514,16 @@ window.SheepApp = window.SheepApp || {};
       name: name,
       frames: definition.frames.slice(),
       frameMs: definition.frameMs,
+      frameDurations: definition.frameDurations ? definition.frameDurations.slice() : null,
+      frameEvents: definition.frameEvents ? { ...definition.frameEvents } : null,
       loop: definition.loop,
       durationMs: options.durationMs ?? null,
       speed: options.speed ?? 0,
       target: options.target ?? null,
       direction: typeof options.direction === 'number' ? options.direction : null,
-      onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
+      keepPlayingOnArrival: options.keepPlayingOnArrival ?? definition.keepPlayingOnArrival,
+      onStart: composeCallbacks(definition.onStart, options.onStart),
+      onComplete: composeCallbacks(definition.onComplete, options.onComplete)
     };
   }
 
@@ -184,11 +545,15 @@ window.SheepApp = window.SheepApp || {};
       name: action.name,
       frames: action.frames,
       frameMs: action.frameMs,
+      frameDurations: action.frameDurations,
+      frameEvents: action.frameEvents,
       loop: action.loop,
       durationMs: action.durationMs,
       speed: action.speed,
       target: action.target,
       direction: action.direction,
+      keepPlayingOnArrival: action.keepPlayingOnArrival,
+      onStart: action.onStart,
       onComplete: action.onComplete,
       frameIndex: 0,
       frameElapsedMs: 0,
@@ -196,7 +561,11 @@ window.SheepApp = window.SheepApp || {};
       lastVector: { dx: 0, dy: 0 }
     };
 
-    setFrame(state.activeAction.frames[0], true);
+    if (typeof state.activeAction.onStart === 'function') {
+      state.activeAction.onStart(state.activeAction);
+    }
+
+    enterActionFrame(state.activeAction, true);
   }
 
   function finishActiveAction(timestamp, reason) {
@@ -211,6 +580,8 @@ window.SheepApp = window.SheepApp || {};
     if (typeof action.onComplete === 'function') {
       action.onComplete(action, timestamp, reason);
     }
+
+    applyPosition();
   }
 
   function cancelActiveAction() {
@@ -270,6 +641,62 @@ window.SheepApp = window.SheepApp || {};
     });
   }
 
+  function pickWeightedAction(entries) {
+    const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
+    let cursor = Math.random() * totalWeight;
+
+    for (let index = 0; index < entries.length; index += 1) {
+      cursor -= entries[index].weight;
+
+      if (cursor <= 0) {
+        return entries[index].name;
+      }
+    }
+
+    return entries[entries.length - 1].name;
+  }
+
+  function queueRollAction() {
+    const bounds = getBounds();
+    const leftSpace = Math.max(0, state.x - bounds.minX);
+    const rightSpace = Math.max(0, bounds.maxX - state.x);
+    const preferredDirection = state.direction === 1
+      ? (leftSpace >= DEFAULTS.minRollDistance ? 1 : -1)
+      : (rightSpace >= DEFAULTS.minRollDistance ? -1 : 1);
+    const targetDirection = preferredDirection === 1 && leftSpace >= rightSpace
+      ? 1
+      : preferredDirection === -1 && rightSpace >= leftSpace
+        ? -1
+        : (leftSpace >= rightSpace ? 1 : -1);
+    const availableDistance = targetDirection === 1 ? leftSpace : rightSpace;
+    const travelDistance = Math.min(DEFAULTS.rollTravelDistance, availableDistance);
+
+    if (travelDistance < DEFAULTS.minRollDistance) {
+      queueTravel('walk');
+      return;
+    }
+
+    queueTurn(targetDirection);
+    queueAction('roll', {
+      speed: travelDistance / (DEFAULTS.rollTravelMs / 1000),
+      target: {
+        x: state.x + (targetDirection === 1 ? -travelDistance : travelDistance),
+        y: state.y
+      }
+    });
+  }
+
+  function queueSpecialActionPlan() {
+    const actionName = pickWeightedAction(SPECIAL_ACTIONS);
+
+    if (actionName === 'roll') {
+      queueRollAction();
+      return;
+    }
+
+    queueAction(actionName);
+  }
+
   function getTravelSpeed(mode) {
     if (mode === 'run') {
       return randomBetween(DEFAULTS.minRunSpeed, DEFAULTS.maxRunSpeed);
@@ -303,6 +730,11 @@ window.SheepApp = window.SheepApp || {};
       return;
     }
 
+    if (Math.random() < DEFAULTS.specialActionChance) {
+      queueSpecialActionPlan();
+      return;
+    }
+
     queueTravel(Math.random() < DEFAULTS.runChance ? 'run' : 'walk');
   }
 
@@ -321,6 +753,13 @@ window.SheepApp = window.SheepApp || {};
     if (distance <= 2) {
       state.x = action.target.x;
       state.y = action.target.y;
+
+      if (action.keepPlayingOnArrival) {
+        action.target = null;
+        action.lastVector = { dx: 0, dy: 0 };
+        return;
+      }
+
       finishActiveAction(timestamp, 'arrived');
       return;
     }
@@ -336,7 +775,7 @@ window.SheepApp = window.SheepApp || {};
     action.elapsedMs += deltaMs;
     action.frameElapsedMs += deltaMs;
 
-    if (action.name === 'walk' || action.name === 'run') {
+    if (action.target && action.speed > 0) {
       moveAction(action, deltaMs / 1000, timestamp);
 
       if (!state.activeAction) {
@@ -344,28 +783,29 @@ window.SheepApp = window.SheepApp || {};
       }
     }
 
-    while (action.frameElapsedMs >= action.frameMs) {
-      action.frameElapsedMs -= action.frameMs;
+    while (action.frameElapsedMs >= getCurrentFrameDuration(action)) {
+      const currentFrameDuration = getCurrentFrameDuration(action);
+
+      action.frameElapsedMs -= currentFrameDuration;
 
       if (action.loop) {
         action.frameIndex = (action.frameIndex + 1) % action.frames.length;
-        setFrame(action.frames[action.frameIndex]);
+        enterActionFrame(action, false);
         continue;
       }
 
       if (action.frameIndex < action.frames.length - 1) {
         action.frameIndex += 1;
-        setFrame(action.frames[action.frameIndex]);
+        enterActionFrame(action, false);
+        continue;
       }
+
+      finishActiveAction(timestamp, 'complete');
+      return;
     }
 
     if (action.loop && action.durationMs !== null && action.elapsedMs >= action.durationMs) {
       finishActiveAction(timestamp, 'timeout');
-      return;
-    }
-
-    if (!action.loop && action.elapsedMs >= action.frames.length * action.frameMs) {
-      finishActiveAction(timestamp, 'complete');
     }
   }
 
@@ -530,12 +970,20 @@ window.SheepApp = window.SheepApp || {};
     layer.className = 'sheep-layer';
     layer.setAttribute('aria-hidden', 'true');
 
+    propSprite = document.createElement('div');
+    propSprite.className = 'sheep-layer__prop';
+    propSprite.setAttribute('aria-hidden', 'true');
+    propSprite.style.backgroundImage = `url('${SPRITE_SHEET_URL}')`;
+    propSprite.style.backgroundSize = `calc(var(--sheep-size) * ${SPRITE_COLUMNS}) calc(var(--sheep-size) * ${SPRITE_ROWS})`;
+    propSprite.hidden = true;
+
     sprite = document.createElement('div');
     sprite.className = 'sheep-layer__sprite';
     sprite.setAttribute('aria-hidden', 'true');
     sprite.style.backgroundImage = `url('${SPRITE_SHEET_URL}')`;
     sprite.style.backgroundSize = `calc(var(--sheep-size) * ${SPRITE_COLUMNS}) calc(var(--sheep-size) * ${SPRITE_ROWS})`;
 
+    layer.appendChild(propSprite);
     layer.appendChild(sprite);
     document.body.appendChild(layer);
   }
