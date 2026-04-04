@@ -7,9 +7,13 @@ window.SheepApp = window.SheepApp || {};
 
   app.initialized = true;
 
-  const ASSETS = Object.freeze({
-    idle: '/static/vendor/sheep/rsc/sheep.png',
-    walk: '/static/vendor/sheep/rsc/sheep.gif'
+  const SPRITE_SHEET_URL = '/static/vendor/sheep/rsc/sheep.png';
+  const SPRITE_COLUMNS = 16;
+  const SPRITE_ROWS = 11;
+  const FRAMES = Object.freeze({
+    idle: 3,
+    walkA: 2,
+    walkB: 3
   });
 
   const DEFAULTS = Object.freeze({
@@ -29,9 +33,10 @@ window.SheepApp = window.SheepApp || {};
     speed: DEFAULTS.minSpeed,
     target: null,
     restUntil: 0,
-    currentAsset: '',
+    currentFrame: null,
     lastTimestamp: 0,
     animationFrame: 0,
+    walkFrameElapsed: 0,
     reducedMotion: prefersReducedMotion.matches,
     modalOpen: false
   };
@@ -78,13 +83,22 @@ window.SheepApp = window.SheepApp || {};
     sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
   }
 
-  function setAsset(name) {
-    if (!sprite || state.currentAsset === name) {
+  function setFrame(frame, force = false) {
+    if (!sprite) {
       return;
     }
 
-    state.currentAsset = name;
-    sprite.src = ASSETS[name];
+    if (!force && state.currentFrame === frame) {
+      return;
+    }
+
+    state.currentFrame = frame;
+
+    const frameSize = sprite.offsetWidth || 72;
+    const column = frame % SPRITE_COLUMNS;
+    const row = Math.floor(frame / SPRITE_COLUMNS);
+
+    sprite.style.backgroundPosition = `${-column * frameSize}px ${-row * frameSize}px`;
   }
 
   function pickTarget() {
@@ -112,7 +126,8 @@ window.SheepApp = window.SheepApp || {};
     state.mode = 'rest';
     state.target = null;
     state.restUntil = timestamp + randomBetween(DEFAULTS.restMinMs, DEFAULTS.restMaxMs);
-    setAsset('idle');
+    state.walkFrameElapsed = 0;
+    setFrame(FRAMES.idle);
   }
 
   function ensureWalkingState() {
@@ -123,7 +138,8 @@ window.SheepApp = window.SheepApp || {};
     state.mode = 'walk';
     state.speed = randomBetween(DEFAULTS.minSpeed, DEFAULTS.maxSpeed);
     state.target = pickTarget();
-    setAsset('walk');
+    state.walkFrameElapsed = 0;
+    setFrame(FRAMES.walkA);
   }
 
   function tick(timestamp) {
@@ -142,13 +158,20 @@ window.SheepApp = window.SheepApp || {};
     state.lastTimestamp = timestamp;
 
     if (state.mode === 'rest') {
-      setAsset('idle');
+      setFrame(FRAMES.idle);
       if (timestamp >= state.restUntil) {
         ensureWalkingState();
       }
     }
 
     if (state.mode === 'walk' && state.target) {
+      state.walkFrameElapsed += deltaSeconds;
+
+      if (state.walkFrameElapsed >= 0.18) {
+        state.walkFrameElapsed = 0;
+        setFrame(state.currentFrame === FRAMES.walkA ? FRAMES.walkB : FRAMES.walkA);
+      }
+
       const dx = state.target.x - state.x;
       const dy = state.target.y - state.y;
       const distance = Math.hypot(dx, dy);
@@ -199,7 +222,7 @@ window.SheepApp = window.SheepApp || {};
 
     if (shouldSuspend) {
       stopLoop();
-      setAsset('idle');
+      setFrame(FRAMES.idle);
       return;
     }
 
@@ -243,6 +266,7 @@ window.SheepApp = window.SheepApp || {};
 
   function onResize() {
     clampPosition();
+    setFrame(state.currentFrame ?? FRAMES.idle, true);
     applyPosition();
   }
 
@@ -251,11 +275,11 @@ window.SheepApp = window.SheepApp || {};
     layer.className = 'sheep-layer';
     layer.setAttribute('aria-hidden', 'true');
 
-    sprite = document.createElement('img');
+    sprite = document.createElement('div');
     sprite.className = 'sheep-layer__sprite';
-    sprite.alt = '';
-    sprite.decoding = 'async';
-    sprite.draggable = false;
+    sprite.setAttribute('aria-hidden', 'true');
+    sprite.style.backgroundImage = `url('${SPRITE_SHEET_URL}')`;
+    sprite.style.backgroundSize = `calc(var(--sheep-size) * ${SPRITE_COLUMNS}) calc(var(--sheep-size) * ${SPRITE_ROWS})`;
 
     layer.appendChild(sprite);
     document.body.appendChild(layer);
