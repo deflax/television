@@ -11,6 +11,38 @@ window.SheepApp = window.SheepApp || {};
   const SPRITE_COLUMNS = 16;
   const SPRITE_ROWS = 11;
   const NEUTRAL_FRAME = 3;
+  const SURFACE_SELECTOR = '.sheep-surface';
+  const GROUND_SURFACE_ID = 'ground';
+  const SURFACE_ACTION_CONFIG = Object.freeze({
+    jumpTo: Object.freeze({
+      motionStartIndex: 1,
+      minimumSpeed: 220,
+      arcLift: 92
+    }),
+    jumpDown: Object.freeze({
+      motionStartIndex: 1,
+      minimumSpeed: 210,
+      arcLift: 54
+    }),
+    climbDown: Object.freeze({
+      motionStartIndex: 5,
+      minimumSpeed: 118,
+      edgeOffset: 14,
+      verticalLead: 18
+    }),
+    climbDown2: Object.freeze({
+      motionStartIndex: 7,
+      minimumSpeed: 126,
+      edgeOffset: 10,
+      verticalLead: 14
+    }),
+    climbUp: Object.freeze({
+      motionStartIndex: 2,
+      minimumSpeed: 128,
+      edgeOffset: 12,
+      verticalLead: 16
+    })
+  });
 
   function freezeAction(definition) {
     return Object.freeze({
@@ -241,6 +273,68 @@ window.SheepApp = window.SheepApp || {};
     });
   }
 
+  function createTraversalAction(name, frames, frameDurations) {
+    const sequence = createSequence();
+    const actionConfig = SURFACE_ACTION_CONFIG[name];
+
+    frames.forEach((frame, index) => {
+      addSequenceFrame(
+        sequence,
+        frame,
+        frameDurations[index],
+        index === actionConfig.motionStartIndex
+          ? (action) => {
+            action.motionEnabled = true;
+          }
+          : null
+      );
+    });
+
+    return finalizeSequenceAction(sequence, {
+      keepPlayingOnArrival: true,
+      onStart: (action) => {
+        action.motionEnabled = false;
+        action.path = null;
+        action.target = null;
+        action.speed = 0;
+        action.arrivalPoint = null;
+        action.arrivalSurfaceId = null;
+      }
+    });
+  }
+
+  function createJumpToAction() {
+    return createTraversalAction('jumpTo', [76, 30, 24], [140, 170, 220]);
+  }
+
+  function createJumpDownAction() {
+    return createTraversalAction('jumpDown', [78, 77, 24, 84], [140, 150, 210, 160]);
+  }
+
+  function createClimbDownAction() {
+    return createTraversalAction(
+      'climbDown',
+      [3, 9, 10, 11, 3, 31, 40, 41, 40, 41, 40, 45, 48],
+      [80, 80, 80, 80, 90, 90, 90, 90, 90, 90, 90, 110, 120]
+    );
+  }
+
+  function createClimbDown2Action() {
+    return createTraversalAction(
+      'climbDown2',
+      [9, 10, 81, 10, 81, 10, 9, 3, 12, 13, 49, 42, 46, 47, 46, 47, 48],
+      [80, 80, 80, 80, 80, 80, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 120]
+    );
+  }
+
+  function createClimbUpAction() {
+    return createTraversalAction(
+      'climbUp',
+      [12, 13, 49, 132, 131, 132, 131, 132, 131, 132, 131, 133, 47, 48],
+      [90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 100, 100, 120]
+    );
+  }
+
   const ACTIONS = Object.freeze({
     walk: freezeAction({
       frames: [2, 3],
@@ -278,7 +372,12 @@ window.SheepApp = window.SheepApp || {};
     roll: createRollAction(),
     bath: createBathAction(),
     eat: createEatAction(),
-    water: createWaterAction()
+    water: createWaterAction(),
+    jumpTo: createJumpToAction(),
+    jumpDown: createJumpDownAction(),
+    climbDown: createClimbDownAction(),
+    climbDown2: createClimbDown2Action(),
+    climbUp: createClimbUpAction()
   });
 
   const SPECIAL_ACTIONS = Object.freeze([
@@ -326,9 +425,19 @@ window.SheepApp = window.SheepApp || {};
     specialActionChance: 0.28,
     runChance: 0.2,
     sleepChance: 0.42,
+    surfaceActionChance: 0.26,
     rollTravelDistance: 220,
     rollTravelMs: 3000,
-    minRollDistance: 96
+    minRollDistance: 96,
+    minSurfaceWidth: 36,
+    minSurfaceGap: 24,
+    maxJumpHorizontalDistance: 280,
+    maxJumpUpDistance: 260,
+    maxJumpDownDistance: 280,
+    maxClimbDistance: 300,
+    maxEdgeLandingDelta: 28,
+    surfaceEdgeApproachThreshold: 12,
+    surfaceHorizontalPadding: 8
   });
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -344,6 +453,7 @@ window.SheepApp = window.SheepApp || {};
     activeAction: null,
     actionQueue: [],
     lastTurnAction: 'directionBack',
+    currentSurfaceId: GROUND_SURFACE_ID,
     prop: {
       visible: false,
       currentFrame: null,
@@ -357,6 +467,7 @@ window.SheepApp = window.SheepApp || {};
   let layer = null;
   let sprite = null;
   let propSprite = null;
+  let markedSurfaces = [];
 
   function randomBetween(min, max) {
     return min + (Math.random() * (max - min));
@@ -366,6 +477,13 @@ window.SheepApp = window.SheepApp || {};
     return Math.min(max, Math.max(min, value));
   }
 
+  function getSpriteMetrics() {
+    return {
+      width: sprite ? (sprite.offsetWidth || 72) : 72,
+      height: sprite ? (sprite.offsetHeight || 50) : 50
+    };
+  }
+
   function readCssPixels(name, fallback) {
     const rootStyles = getComputedStyle(document.documentElement);
     const value = parseFloat(rootStyles.getPropertyValue(name));
@@ -373,8 +491,7 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function getBounds() {
-    const spriteWidth = sprite ? (sprite.offsetWidth || 72) : 72;
-    const spriteHeight = sprite ? (sprite.offsetHeight || 50) : 50;
+    const { width: spriteWidth, height: spriteHeight } = getSpriteMetrics();
     const edgePadding = readCssPixels('--sheep-edge-padding', 16);
     const safeTop = readCssPixels('--sheep-safe-top', 68);
     const safeBottom = readCssPixels('--sheep-safe-bottom', 16);
@@ -385,6 +502,425 @@ window.SheepApp = window.SheepApp || {};
     const maxY = Math.max(minY, window.innerHeight - spriteHeight - safeBottom);
 
     return { minX, minY, maxX, maxY };
+  }
+
+  function getGroundSurface(bounds) {
+    const viewportBounds = bounds || getBounds();
+    const { height: spriteHeight } = getSpriteMetrics();
+
+    return {
+      id: GROUND_SURFACE_ID,
+      type: 'ground',
+      element: null,
+      minX: viewportBounds.minX,
+      maxX: viewportBounds.maxX,
+      edgeLeftX: viewportBounds.minX,
+      edgeRightX: viewportBounds.maxX,
+      landY: viewportBounds.maxY,
+      lineY: viewportBounds.maxY + spriteHeight,
+      centerX: (viewportBounds.minX + viewportBounds.maxX) / 2
+    };
+  }
+
+  function getMarkedSurfaceById(surfaceId) {
+    return markedSurfaces.find((surface) => surface.id === surfaceId) || null;
+  }
+
+  function resolveSurfaceById(surfaceId) {
+    if (!surfaceId || surfaceId === GROUND_SURFACE_ID) {
+      return getGroundSurface();
+    }
+
+    return getMarkedSurfaceById(surfaceId) || getGroundSurface();
+  }
+
+  function getCurrentSurface() {
+    return resolveSurfaceById(state.currentSurfaceId);
+  }
+
+  function setCurrentSurface(surface) {
+    state.currentSurfaceId = surface?.id || GROUND_SURFACE_ID;
+  }
+
+  function buildSurfaceFromElement(element, index, bounds, spriteMetrics) {
+    const rect = element.getBoundingClientRect();
+
+    if (
+      rect.width <= 0
+      || rect.height <= 0
+      || rect.bottom <= 0
+      || rect.top >= window.innerHeight
+      || rect.right <= 0
+      || rect.left >= window.innerWidth
+    ) {
+      return null;
+    }
+
+    const minX = clamp(rect.left, bounds.minX, bounds.maxX);
+    const maxX = clamp(rect.right - spriteMetrics.width, bounds.minX, bounds.maxX);
+
+    if ((maxX - minX) < DEFAULTS.minSurfaceWidth) {
+      return null;
+    }
+
+    const landY = clamp(rect.top - spriteMetrics.height, bounds.minY, bounds.maxY);
+    const surfaceId = element.id
+      ? `surface:${element.id}`
+      : `surface:${index}`;
+
+    return {
+      id: surfaceId,
+      type: 'marked',
+      element: element,
+      minX: minX,
+      maxX: maxX,
+      edgeLeftX: minX,
+      edgeRightX: maxX,
+      landY: landY,
+      lineY: landY + spriteMetrics.height,
+      centerX: (minX + maxX) / 2
+    };
+  }
+
+  function refreshSurfaces() {
+    const bounds = getBounds();
+    const spriteMetrics = getSpriteMetrics();
+
+    markedSurfaces = Array.from(document.querySelectorAll(SURFACE_SELECTOR))
+      .map((element, index) => buildSurfaceFromElement(element, index, bounds, spriteMetrics))
+      .filter(Boolean)
+      .sort((left, right) => left.lineY - right.lineY || left.minX - right.minX);
+
+    if (state.currentSurfaceId !== GROUND_SURFACE_ID && !getMarkedSurfaceById(state.currentSurfaceId)) {
+      state.currentSurfaceId = GROUND_SURFACE_ID;
+    }
+  }
+
+  function clampXToSurface(surface, x) {
+    return clamp(x, surface.minX, surface.maxX);
+  }
+
+  function snapToCurrentSurface() {
+    const surface = getCurrentSurface();
+
+    state.x = clampXToSurface(surface, state.x);
+    state.y = surface.landY;
+  }
+
+  function sumDurations(values) {
+    return values.reduce((total, value) => total + value, 0);
+  }
+
+  function getTraversalMotionBudgetMs(name) {
+    const definition = ACTIONS[name];
+    const actionConfig = SURFACE_ACTION_CONFIG[name];
+
+    if (!definition || !actionConfig) {
+      return 0;
+    }
+
+    const frameDurations = definition.frameDurations || definition.frames.map(() => definition.frameMs);
+    return sumDurations(frameDurations.slice(actionConfig.motionStartIndex));
+  }
+
+  function getPathLength(origin, waypoints) {
+    let cursor = origin;
+    let length = 0;
+
+    waypoints.forEach((point) => {
+      length += Math.hypot(point.x - cursor.x, point.y - cursor.y);
+      cursor = point;
+    });
+
+    return length;
+  }
+
+  function configureTraversalMotion(action, name, targetSurface, waypoints, landingPoint) {
+    const path = waypoints.map((point) => ({ x: point.x, y: point.y }));
+    const pathLength = getPathLength({ x: state.x, y: state.y }, path);
+    const motionBudgetSeconds = Math.max(0.22, getTraversalMotionBudgetMs(name) / 1000);
+
+    action.target = path.shift() || null;
+    action.path = path;
+    action.speed = Math.max(
+      SURFACE_ACTION_CONFIG[name].minimumSpeed,
+      pathLength / motionBudgetSeconds
+    );
+    action.arrivalPoint = landingPoint;
+    action.arrivalSurfaceId = targetSurface.id;
+  }
+
+  function buildJumpPath(targetPoint, arcLift) {
+    const bounds = getBounds();
+    const apexY = clamp(
+      Math.min(state.y, targetPoint.y) - arcLift,
+      bounds.minY,
+      bounds.maxY
+    );
+
+    return [
+      {
+        x: (state.x + targetPoint.x) / 2,
+        y: apexY
+      },
+      targetPoint
+    ];
+  }
+
+  function buildClimbPath(name, edgeX, edgeDirection, landingPoint) {
+    const bounds = getBounds();
+    const actionConfig = SURFACE_ACTION_CONFIG[name];
+    const sideOffset = edgeDirection === 1
+      ? actionConfig.edgeOffset * -1
+      : actionConfig.edgeOffset;
+    const sideX = clamp(edgeX + sideOffset, bounds.minX, bounds.maxX);
+    const exitY = clamp(state.y + actionConfig.verticalLead, bounds.minY, bounds.maxY);
+    const settleY = clamp(
+      landingPoint.y + (landingPoint.y < state.y ? actionConfig.verticalLead : actionConfig.verticalLead * -1),
+      bounds.minY,
+      bounds.maxY
+    );
+
+    if (name === 'climbUp') {
+      return [
+        { x: sideX, y: clamp(state.y + actionConfig.verticalLead, bounds.minY, bounds.maxY) },
+        { x: sideX, y: settleY },
+        landingPoint
+      ];
+    }
+
+    return [
+      { x: sideX, y: exitY },
+      { x: sideX, y: settleY },
+      landingPoint
+    ];
+  }
+
+  function getEdgeDirection(edge) {
+    return edge === 'left' ? 1 : -1;
+  }
+
+  function buildSurfaceTarget(surface, preferredX) {
+    return {
+      x: clampXToSurface(surface, preferredX),
+      y: surface.landY
+    };
+  }
+
+  function pickBestSurfaceCandidate(candidates) {
+    const [bestCandidate] = candidates.sort((left, right) => left.score - right.score);
+    return bestCandidate || null;
+  }
+
+  function pickJumpUpCandidate(sourceSurface) {
+    const candidates = markedSurfaces
+      .filter((surface) => surface.id !== sourceSurface.id)
+      .map((surface) => {
+        const verticalDistance = sourceSurface.landY - surface.landY;
+        const targetX = clampXToSurface(surface, state.x);
+        const horizontalDistance = Math.abs(targetX - state.x);
+
+        if (
+          verticalDistance < DEFAULTS.minSurfaceGap
+          || verticalDistance > DEFAULTS.maxJumpUpDistance
+          || horizontalDistance > DEFAULTS.maxJumpHorizontalDistance
+        ) {
+          return null;
+        }
+
+        return {
+          name: 'jumpTo',
+          targetSurfaceId: surface.id,
+          score: horizontalDistance + (verticalDistance * 1.1)
+        };
+      })
+      .filter(Boolean);
+
+    return pickBestSurfaceCandidate(candidates);
+  }
+
+  function pickJumpDownCandidate(sourceSurface) {
+    if (sourceSurface.id === GROUND_SURFACE_ID) {
+      return null;
+    }
+
+    const candidates = [...markedSurfaces, getGroundSurface()]
+      .filter((surface) => surface.id !== sourceSurface.id)
+      .map((surface) => {
+        const verticalDistance = surface.landY - sourceSurface.landY;
+        const targetX = clampXToSurface(surface, state.x);
+        const horizontalDistance = Math.abs(targetX - state.x);
+
+        if (
+          verticalDistance < DEFAULTS.minSurfaceGap
+          || verticalDistance > DEFAULTS.maxJumpDownDistance
+          || horizontalDistance > DEFAULTS.maxJumpHorizontalDistance
+        ) {
+          return null;
+        }
+
+        return {
+          name: 'jumpDown',
+          targetSurfaceId: surface.id,
+          score: horizontalDistance + verticalDistance
+        };
+      })
+      .filter(Boolean);
+
+    return pickBestSurfaceCandidate(candidates);
+  }
+
+  function pickEdgeTraversalCandidate(sourceSurface, actionName, direction) {
+    if (sourceSurface.id === GROUND_SURFACE_ID) {
+      return null;
+    }
+
+    const edge = direction === 1 ? 'left' : 'right';
+    const edgeX = edge === 'left' ? sourceSurface.edgeLeftX : sourceSurface.edgeRightX;
+    const wantsUpperSurface = actionName === 'climbUp';
+    const candidates = [...markedSurfaces, getGroundSurface()]
+      .filter((surface) => surface.id !== sourceSurface.id)
+      .map((surface) => {
+        const verticalDistance = wantsUpperSurface
+          ? sourceSurface.landY - surface.landY
+          : surface.landY - sourceSurface.landY;
+        const landingX = clampXToSurface(surface, edgeX);
+        const horizontalDelta = Math.abs(landingX - edgeX);
+
+        if (
+          verticalDistance < DEFAULTS.minSurfaceGap
+          || verticalDistance > DEFAULTS.maxClimbDistance
+          || horizontalDelta > DEFAULTS.maxEdgeLandingDelta
+          || (wantsUpperSurface && surface.id === GROUND_SURFACE_ID)
+        ) {
+          return null;
+        }
+
+        return {
+          name: actionName,
+          edge: edge,
+          targetSurfaceId: surface.id,
+          score: verticalDistance + (horizontalDelta * 2)
+        };
+      })
+      .filter(Boolean);
+
+    return pickBestSurfaceCandidate(candidates);
+  }
+
+  function pickSurfaceTraversalPlan() {
+    const currentSurface = getCurrentSurface();
+    const candidates = [];
+
+    const jumpUp = pickJumpUpCandidate(currentSurface);
+    if (jumpUp) {
+      candidates.push({ ...jumpUp, weight: currentSurface.id === GROUND_SURFACE_ID ? 1.6 : 1 });
+    }
+
+    if (currentSurface.id !== GROUND_SURFACE_ID) {
+      const climbUpLeft = pickEdgeTraversalCandidate(currentSurface, 'climbUp', 1);
+      const climbUpRight = pickEdgeTraversalCandidate(currentSurface, 'climbUp', -1);
+      const climbUp = pickBestSurfaceCandidate([climbUpLeft, climbUpRight].filter(Boolean));
+
+      if (climbUp) {
+        candidates.push({ ...climbUp, weight: 0.75 });
+      }
+
+      const jumpDown = pickJumpDownCandidate(currentSurface);
+      if (jumpDown) {
+        candidates.push({ ...jumpDown, weight: 1.1 });
+      }
+
+      const climbDownLeft = pickEdgeTraversalCandidate(currentSurface, 'climbDown', 1);
+      const climbDownRight = pickEdgeTraversalCandidate(currentSurface, 'climbDown', -1);
+      const climbDown = pickBestSurfaceCandidate([climbDownLeft, climbDownRight].filter(Boolean));
+
+      if (climbDown) {
+        candidates.push({ ...climbDown, weight: 1.35 });
+      }
+
+      const climbDown2Left = pickEdgeTraversalCandidate(currentSurface, 'climbDown2', 1);
+      const climbDown2Right = pickEdgeTraversalCandidate(currentSurface, 'climbDown2', -1);
+      const climbDown2 = pickBestSurfaceCandidate([climbDown2Left, climbDown2Right].filter(Boolean));
+
+      if (climbDown2) {
+        candidates.push({ ...climbDown2, weight: 1.05 });
+      }
+    }
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
+    let cursor = Math.random() * totalWeight;
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      cursor -= candidates[index].weight;
+
+      if (cursor <= 0) {
+        return candidates[index];
+      }
+    }
+
+    return candidates[candidates.length - 1];
+  }
+
+  function queueSurfaceTraversalPlan(plan) {
+    if (!plan) {
+      return false;
+    }
+
+    if (plan.name === 'jumpTo' || plan.name === 'jumpDown') {
+      const targetSurface = resolveSurfaceById(plan.targetSurfaceId);
+      const targetPoint = buildSurfaceTarget(targetSurface, state.x);
+      const targetDirection = Math.abs(targetPoint.x - state.x) <= 1
+        ? state.direction
+        : (targetPoint.x < state.x ? 1 : -1);
+
+      queueTurn(targetDirection);
+      queueAction(plan.name, {
+        onStart: (action) => {
+          refreshSurfaces();
+
+          const liveTargetSurface = resolveSurfaceById(plan.targetSurfaceId);
+          const landingPoint = buildSurfaceTarget(liveTargetSurface, state.x);
+          const path = buildJumpPath(landingPoint, SURFACE_ACTION_CONFIG[plan.name].arcLift);
+
+          configureTraversalMotion(action, plan.name, liveTargetSurface, path, landingPoint);
+        }
+      });
+
+      return true;
+    }
+
+    const sourceSurface = getCurrentSurface();
+    const edgeX = plan.edge === 'left' ? sourceSurface.edgeLeftX : sourceSurface.edgeRightX;
+    const edgePoint = buildSurfaceTarget(sourceSurface, edgeX);
+
+    if (Math.abs(state.x - edgePoint.x) > DEFAULTS.surfaceEdgeApproachThreshold) {
+      queueTravel('walk', edgePoint);
+    } else if (state.direction !== getEdgeDirection(plan.edge)) {
+      queueTurn(getEdgeDirection(plan.edge));
+    }
+
+    queueAction(plan.name, {
+      onStart: (action) => {
+        refreshSurfaces();
+
+        const liveSourceSurface = getCurrentSurface();
+        const liveTargetSurface = resolveSurfaceById(plan.targetSurfaceId);
+        const liveEdgeX = plan.edge === 'left'
+          ? liveSourceSurface.edgeLeftX
+          : liveSourceSurface.edgeRightX;
+        const landingPoint = buildSurfaceTarget(liveTargetSurface, liveEdgeX);
+        const path = buildClimbPath(plan.name, liveEdgeX, getEdgeDirection(plan.edge), landingPoint);
+
+        configureTraversalMotion(action, plan.name, liveTargetSurface, path, landingPoint);
+      }
+    });
+
+    return true;
   }
 
   function clampPosition() {
@@ -520,7 +1056,11 @@ window.SheepApp = window.SheepApp || {};
       durationMs: options.durationMs ?? null,
       speed: options.speed ?? 0,
       target: options.target ?? null,
+      path: options.path ? options.path.map((point) => ({ x: point.x, y: point.y })) : null,
       direction: typeof options.direction === 'number' ? options.direction : null,
+      motionEnabled: options.motionEnabled ?? true,
+      arrivalPoint: options.arrivalPoint ?? null,
+      arrivalSurfaceId: options.arrivalSurfaceId ?? null,
       keepPlayingOnArrival: options.keepPlayingOnArrival ?? definition.keepPlayingOnArrival,
       onStart: composeCallbacks(definition.onStart, options.onStart),
       onComplete: composeCallbacks(definition.onComplete, options.onComplete)
@@ -551,7 +1091,11 @@ window.SheepApp = window.SheepApp || {};
       durationMs: action.durationMs,
       speed: action.speed,
       target: action.target,
+      path: action.path,
       direction: action.direction,
+      motionEnabled: action.motionEnabled,
+      arrivalPoint: action.arrivalPoint,
+      arrivalSurfaceId: action.arrivalSurfaceId,
       keepPlayingOnArrival: action.keepPlayingOnArrival,
       onStart: action.onStart,
       onComplete: action.onComplete,
@@ -563,6 +1107,10 @@ window.SheepApp = window.SheepApp || {};
 
     if (typeof state.activeAction.onStart === 'function') {
       state.activeAction.onStart(state.activeAction);
+    }
+
+    if (!state.activeAction.target && state.activeAction.path?.length) {
+      state.activeAction.target = state.activeAction.path.shift();
     }
 
     enterActionFrame(state.activeAction, true);
@@ -577,6 +1125,15 @@ window.SheepApp = window.SheepApp || {};
 
     state.activeAction = null;
 
+    if (action.arrivalSurfaceId) {
+      state.currentSurfaceId = action.arrivalSurfaceId;
+    }
+
+    if (action.arrivalPoint) {
+      state.x = action.arrivalPoint.x;
+      state.y = action.arrivalPoint.y;
+    }
+
     if (typeof action.onComplete === 'function') {
       action.onComplete(action, timestamp, reason);
     }
@@ -589,24 +1146,25 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function pickTarget(bounds, minDistance) {
-    const targetBounds = bounds || getBounds();
-    const requiredDistance = minDistance ?? DEFAULTS.minWalkDistance;
+    const targetSurface = bounds || getCurrentSurface();
+    const availableDistance = Math.max(24, targetSurface.maxX - targetSurface.minX);
+    const requiredDistance = Math.min(minDistance ?? DEFAULTS.minWalkDistance, availableDistance);
     const attempts = 8;
 
     for (let index = 0; index < attempts; index += 1) {
       const candidate = {
-        x: randomBetween(targetBounds.minX, targetBounds.maxX),
-        y: randomBetween(targetBounds.minY, targetBounds.maxY)
+        x: randomBetween(targetSurface.minX, targetSurface.maxX),
+        y: targetSurface.landY
       };
 
-      if (Math.hypot(candidate.x - state.x, candidate.y - state.y) >= requiredDistance) {
+      if (Math.abs(candidate.x - state.x) >= requiredDistance) {
         return candidate;
       }
     }
 
     return {
-      x: randomBetween(targetBounds.minX, targetBounds.maxX),
-      y: randomBetween(targetBounds.minY, targetBounds.maxY)
+      x: randomBetween(targetSurface.minX, targetSurface.maxX),
+      y: targetSurface.landY
     };
   }
 
@@ -657,9 +1215,9 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function queueRollAction() {
-    const bounds = getBounds();
-    const leftSpace = Math.max(0, state.x - bounds.minX);
-    const rightSpace = Math.max(0, bounds.maxX - state.x);
+    const surface = getCurrentSurface();
+    const leftSpace = Math.max(0, state.x - surface.minX);
+    const rightSpace = Math.max(0, surface.maxX - state.x);
     const preferredDirection = state.direction === 1
       ? (leftSpace >= DEFAULTS.minRollDistance ? 1 : -1)
       : (rightSpace >= DEFAULTS.minRollDistance ? -1 : 1);
@@ -681,7 +1239,7 @@ window.SheepApp = window.SheepApp || {};
       speed: travelDistance / (DEFAULTS.rollTravelMs / 1000),
       target: {
         x: state.x + (targetDirection === 1 ? -travelDistance : travelDistance),
-        y: state.y
+        y: surface.landY
       }
     });
   }
@@ -708,10 +1266,13 @@ window.SheepApp = window.SheepApp || {};
   function queueTravel(mode, target, options) {
     const overrides = options || {};
     const travelTarget = target || pickTarget(
-      null,
+      getCurrentSurface(),
       mode === 'run' ? DEFAULTS.minRunDistance : DEFAULTS.minWalkDistance
     );
-    const nextDirection = travelTarget.x < state.x ? 1 : -1;
+    const horizontalDistance = travelTarget.x - state.x;
+    const nextDirection = Math.abs(horizontalDistance) <= 1
+      ? state.direction
+      : (horizontalDistance < 0 ? 1 : -1);
 
     queueTurn(nextDirection, overrides.forceBackTurn);
     queueAction(mode, {
@@ -725,8 +1286,14 @@ window.SheepApp = window.SheepApp || {};
       return;
     }
 
+    refreshSurfaces();
+
     if (Math.random() < DEFAULTS.sleepChance) {
       queueSleep();
+      return;
+    }
+
+    if (Math.random() < DEFAULTS.surfaceActionChance && queueSurfaceTraversalPlan(pickSurfaceTraversalPlan())) {
       return;
     }
 
@@ -754,6 +1321,12 @@ window.SheepApp = window.SheepApp || {};
       state.x = action.target.x;
       state.y = action.target.y;
 
+       if (action.path?.length) {
+        action.target = action.path.shift();
+        action.lastVector = { dx: 0, dy: 0 };
+        return;
+      }
+
       if (action.keepPlayingOnArrival) {
         action.target = null;
         action.lastVector = { dx: 0, dy: 0 };
@@ -775,7 +1348,7 @@ window.SheepApp = window.SheepApp || {};
     action.elapsedMs += deltaMs;
     action.frameElapsedMs += deltaMs;
 
-    if (action.target && action.speed > 0) {
+    if (action.target && action.speed > 0 && action.motionEnabled !== false) {
       moveAction(action, deltaMs / 1000, timestamp);
 
       if (!state.activeAction) {
@@ -817,24 +1390,22 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function pickEscapeTarget(hitBounds, mode) {
-    const bounds = getBounds();
+    const currentSurface = getCurrentSurface();
     const minimumDistance = mode === 'run' ? DEFAULTS.minRunDistance : DEFAULTS.minWalkDistance;
     const horizontalInset = Math.min(
-      (bounds.maxX - bounds.minX) / 2,
+      (currentSurface.maxX - currentSurface.minX) / 2,
       Math.max(minimumDistance * 0.6, DEFAULTS.edgeRetargetMinInset)
     );
-    const verticalInset = Math.min(
-      (bounds.maxY - bounds.minY) / 2,
-      Math.max(minimumDistance * 0.45, DEFAULTS.edgeRetargetVerticalInset)
-    );
-    const targetBounds = {
-      minX: hitBounds.left ? Math.min(bounds.maxX, bounds.minX + horizontalInset) : bounds.minX,
-      maxX: hitBounds.right ? Math.max(bounds.minX, bounds.maxX - horizontalInset) : bounds.maxX,
-      minY: hitBounds.top ? Math.min(bounds.maxY, bounds.minY + verticalInset) : bounds.minY,
-      maxY: hitBounds.bottom ? Math.max(bounds.minY, bounds.maxY - verticalInset) : bounds.maxY
-    };
 
-    return pickTarget(targetBounds, minimumDistance);
+    return pickTarget({
+      minX: hitBounds.left
+        ? Math.min(currentSurface.maxX, currentSurface.minX + horizontalInset)
+        : currentSurface.minX,
+      maxX: hitBounds.right
+        ? Math.max(currentSurface.minX, currentSurface.maxX - horizontalInset)
+        : currentSurface.maxX,
+      landY: currentSurface.landY
+    }, minimumDistance);
   }
 
   function queueBoundRecovery(action, hitBounds) {
@@ -960,9 +1531,24 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function onResize() {
+    refreshSurfaces();
+
+    if (!state.activeAction) {
+      snapToCurrentSurface();
+    }
+
     clampPosition();
     setFrame(state.currentFrame ?? NEUTRAL_FRAME, true);
     applyPosition();
+  }
+
+  function onScroll() {
+    refreshSurfaces();
+
+    if (!state.activeAction) {
+      snapToCurrentSurface();
+      applyPosition();
+    }
   }
 
   function createLayer() {
@@ -990,10 +1576,12 @@ window.SheepApp = window.SheepApp || {};
 
   function seedInitialPosition() {
     const bounds = getBounds();
+    const groundSurface = getGroundSurface(bounds);
 
-    state.x = bounds.maxX;
-    state.y = randomBetween(bounds.minY, bounds.maxY);
+    state.x = groundSurface.maxX;
+    state.y = groundSurface.landY;
     state.direction = 1;
+    setCurrentSurface(groundSurface);
     queueSleep(randomBetween(900, 2000));
     startNextAction();
     clampPosition();
@@ -1004,6 +1592,7 @@ window.SheepApp = window.SheepApp || {};
     document.addEventListener('show.bs.modal', onModalShown);
     document.addEventListener('hidden.bs.modal', onModalHidden);
     window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
 
     if (typeof prefersReducedMotion.addEventListener === 'function') {
       prefersReducedMotion.addEventListener('change', onReducedMotionChange);
@@ -1025,6 +1614,7 @@ window.SheepApp = window.SheepApp || {};
     }
 
     createLayer();
+    refreshSurfaces();
     seedInitialPosition();
     bindEvents();
     syncPresentation();
