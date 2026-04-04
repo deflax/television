@@ -10,18 +10,53 @@ window.SheepApp = window.SheepApp || {};
   const SPRITE_SHEET_URL = '/static/vendor/sheep/rsc/sheep.png';
   const SPRITE_COLUMNS = 16;
   const SPRITE_ROWS = 11;
-  const FRAMES = Object.freeze({
-    idle: 3,
-    walkA: 2,
-    walkB: 3
+  const NEUTRAL_FRAME = 3;
+  const ACTIONS = Object.freeze({
+    walk: Object.freeze({
+      frames: Object.freeze([2, 3]),
+      frameMs: 180,
+      loop: true
+    }),
+    sleep: Object.freeze({
+      frames: Object.freeze([0, 1]),
+      frameMs: 420,
+      loop: true
+    }),
+    run: Object.freeze({
+      frames: Object.freeze([4, 5]),
+      frameMs: 110,
+      loop: true
+    }),
+    direction: Object.freeze({
+      frames: Object.freeze([3, 9, 10, 11, 3]),
+      frameMs: 90,
+      loop: false
+    }),
+    directionBack: Object.freeze({
+      frames: Object.freeze([3, 12, 13, 14, 3]),
+      frameMs: 90,
+      loop: false
+    }),
+    bump: Object.freeze({
+      frames: Object.freeze([62, 63, 64, 65, 66, 67, 68, 69, 70, 63]),
+      frameMs: 72,
+      loop: false
+    })
   });
 
   const DEFAULTS = Object.freeze({
-    minSpeed: 40,
-    maxSpeed: 66,
-    restMinMs: 900,
-    restMaxMs: 2200,
-    minTravelDistance: 120
+    minWalkSpeed: 40,
+    maxWalkSpeed: 66,
+    minRunSpeed: 92,
+    maxRunSpeed: 126,
+    minWalkDistance: 120,
+    minRunDistance: 176,
+    sleepMinMs: 1200,
+    sleepMaxMs: 3000,
+    edgeRetargetMinInset: 48,
+    edgeRetargetVerticalInset: 40,
+    runChance: 0.2,
+    sleepChance: 0.42
   });
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -29,16 +64,14 @@ window.SheepApp = window.SheepApp || {};
     x: 0,
     y: 0,
     direction: 1,
-    mode: 'rest',
-    speed: DEFAULTS.minSpeed,
-    target: null,
-    restUntil: 0,
     currentFrame: null,
     lastTimestamp: 0,
     animationFrame: 0,
-    walkFrameElapsed: 0,
     reducedMotion: prefersReducedMotion.matches,
-    modalOpen: false
+    modalOpen: false,
+    activeAction: null,
+    actionQueue: [],
+    lastTurnAction: 'directionBack'
   };
 
   let layer = null;
@@ -75,7 +108,6 @@ window.SheepApp = window.SheepApp || {};
 
   function clampPosition() {
     const bounds = getBounds();
-
     const nextX = clamp(state.x, bounds.minX, bounds.maxX);
     const nextY = clamp(state.y, bounds.minY, bounds.maxY);
     const hitBounds = {
@@ -99,7 +131,7 @@ window.SheepApp = window.SheepApp || {};
     sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
   }
 
-  function setFrame(frame, force = false) {
+  function setFrame(frame, force) {
     if (!sprite) {
       return;
     }
@@ -117,24 +149,224 @@ window.SheepApp = window.SheepApp || {};
     sprite.style.backgroundPosition = `${-column * frameSize}px ${-row * frameSize}px`;
   }
 
-  function pickTarget(bounds = getBounds()) {
+  function buildAction(name, overrides) {
+    const definition = ACTIONS[name];
+    const options = overrides || {};
+
+    return {
+      name: name,
+      frames: definition.frames.slice(),
+      frameMs: definition.frameMs,
+      loop: definition.loop,
+      durationMs: options.durationMs ?? null,
+      speed: options.speed ?? 0,
+      target: options.target ?? null,
+      direction: typeof options.direction === 'number' ? options.direction : null,
+      onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
+    };
+  }
+
+  function queueAction(name, overrides) {
+    state.actionQueue.push(buildAction(name, overrides));
+  }
+
+  function clearQueuedActions() {
+    state.actionQueue.length = 0;
+  }
+
+  function startNextAction() {
+    if (state.activeAction || !state.actionQueue.length) {
+      return;
+    }
+
+    const action = state.actionQueue.shift();
+    state.activeAction = {
+      name: action.name,
+      frames: action.frames,
+      frameMs: action.frameMs,
+      loop: action.loop,
+      durationMs: action.durationMs,
+      speed: action.speed,
+      target: action.target,
+      direction: action.direction,
+      onComplete: action.onComplete,
+      frameIndex: 0,
+      frameElapsedMs: 0,
+      elapsedMs: 0,
+      lastVector: { dx: 0, dy: 0 }
+    };
+
+    setFrame(state.activeAction.frames[0], true);
+  }
+
+  function finishActiveAction(timestamp, reason) {
+    const action = state.activeAction;
+
+    if (!action) {
+      return;
+    }
+
+    state.activeAction = null;
+
+    if (typeof action.onComplete === 'function') {
+      action.onComplete(action, timestamp, reason);
+    }
+  }
+
+  function cancelActiveAction() {
+    state.activeAction = null;
+  }
+
+  function pickTarget(bounds, minDistance) {
+    const targetBounds = bounds || getBounds();
+    const requiredDistance = minDistance ?? DEFAULTS.minWalkDistance;
     const attempts = 8;
 
     for (let index = 0; index < attempts; index += 1) {
       const candidate = {
-        x: randomBetween(bounds.minX, bounds.maxX),
-        y: randomBetween(bounds.minY, bounds.maxY)
+        x: randomBetween(targetBounds.minX, targetBounds.maxX),
+        y: randomBetween(targetBounds.minY, targetBounds.maxY)
       };
 
-      if (Math.hypot(candidate.x - state.x, candidate.y - state.y) >= DEFAULTS.minTravelDistance) {
+      if (Math.hypot(candidate.x - state.x, candidate.y - state.y) >= requiredDistance) {
         return candidate;
       }
     }
 
     return {
-      x: randomBetween(bounds.minX, bounds.maxX),
-      y: randomBetween(bounds.minY, bounds.maxY)
+      x: randomBetween(targetBounds.minX, targetBounds.maxX),
+      y: randomBetween(targetBounds.minY, targetBounds.maxY)
     };
+  }
+
+  function pickTurnAction(forceBackTurn) {
+    if (forceBackTurn) {
+      state.lastTurnAction = 'directionBack';
+      return 'directionBack';
+    }
+
+    state.lastTurnAction = state.lastTurnAction === 'direction' ? 'directionBack' : 'direction';
+    return state.lastTurnAction;
+  }
+
+  function queueTurn(targetDirection, forceBackTurn) {
+    if (targetDirection === state.direction) {
+      return;
+    }
+
+    queueAction(pickTurnAction(forceBackTurn), {
+      direction: targetDirection,
+      onComplete: (action) => {
+        if (typeof action.direction === 'number') {
+          state.direction = action.direction;
+        }
+      }
+    });
+  }
+
+  function queueSleep(durationMs) {
+    queueAction('sleep', {
+      durationMs: durationMs ?? randomBetween(DEFAULTS.sleepMinMs, DEFAULTS.sleepMaxMs)
+    });
+  }
+
+  function getTravelSpeed(mode) {
+    if (mode === 'run') {
+      return randomBetween(DEFAULTS.minRunSpeed, DEFAULTS.maxRunSpeed);
+    }
+
+    return randomBetween(DEFAULTS.minWalkSpeed, DEFAULTS.maxWalkSpeed);
+  }
+
+  function queueTravel(mode, target, options) {
+    const overrides = options || {};
+    const travelTarget = target || pickTarget(
+      null,
+      mode === 'run' ? DEFAULTS.minRunDistance : DEFAULTS.minWalkDistance
+    );
+    const nextDirection = travelTarget.x < state.x ? 1 : -1;
+
+    queueTurn(nextDirection, overrides.forceBackTurn);
+    queueAction(mode, {
+      speed: getTravelSpeed(mode),
+      target: travelTarget
+    });
+  }
+
+  function queueAutonomousPlan() {
+    if (state.activeAction || state.actionQueue.length) {
+      return;
+    }
+
+    if (Math.random() < DEFAULTS.sleepChance) {
+      queueSleep();
+      return;
+    }
+
+    queueTravel(Math.random() < DEFAULTS.runChance ? 'run' : 'walk');
+  }
+
+  function moveAction(action, deltaSeconds, timestamp) {
+    if (!action.target) {
+      finishActiveAction(timestamp, 'missing-target');
+      return;
+    }
+
+    const dx = action.target.x - state.x;
+    const dy = action.target.y - state.y;
+    const distance = Math.hypot(dx, dy);
+
+    action.lastVector = { dx: dx, dy: dy };
+
+    if (distance <= 2) {
+      state.x = action.target.x;
+      state.y = action.target.y;
+      finishActiveAction(timestamp, 'arrived');
+      return;
+    }
+
+    state.direction = dx < 0 ? 1 : -1;
+
+    const step = Math.min(distance, action.speed * deltaSeconds);
+    state.x += (dx / distance) * step;
+    state.y += (dy / distance) * step;
+  }
+
+  function animateAction(action, deltaMs, timestamp) {
+    action.elapsedMs += deltaMs;
+    action.frameElapsedMs += deltaMs;
+
+    if (action.name === 'walk' || action.name === 'run') {
+      moveAction(action, deltaMs / 1000, timestamp);
+
+      if (!state.activeAction) {
+        return;
+      }
+    }
+
+    while (action.frameElapsedMs >= action.frameMs) {
+      action.frameElapsedMs -= action.frameMs;
+
+      if (action.loop) {
+        action.frameIndex = (action.frameIndex + 1) % action.frames.length;
+        setFrame(action.frames[action.frameIndex]);
+        continue;
+      }
+
+      if (action.frameIndex < action.frames.length - 1) {
+        action.frameIndex += 1;
+        setFrame(action.frames[action.frameIndex]);
+      }
+    }
+
+    if (action.loop && action.durationMs !== null && action.elapsedMs >= action.durationMs) {
+      finishActiveAction(timestamp, 'timeout');
+      return;
+    }
+
+    if (!action.loop && action.elapsedMs >= action.frames.length * action.frameMs) {
+      finishActiveAction(timestamp, 'complete');
+    }
   }
 
   function didHitActiveBound(hitBounds, dx, dy) {
@@ -144,17 +376,17 @@ window.SheepApp = window.SheepApp || {};
       || (hitBounds.bottom && dy > 0);
   }
 
-  function retargetFromBounds(hitBounds) {
+  function pickEscapeTarget(hitBounds, mode) {
     const bounds = getBounds();
+    const minimumDistance = mode === 'run' ? DEFAULTS.minRunDistance : DEFAULTS.minWalkDistance;
     const horizontalInset = Math.min(
       (bounds.maxX - bounds.minX) / 2,
-      Math.max(DEFAULTS.minTravelDistance * 0.6, 48)
+      Math.max(minimumDistance * 0.6, DEFAULTS.edgeRetargetMinInset)
     );
     const verticalInset = Math.min(
       (bounds.maxY - bounds.minY) / 2,
-      Math.max(DEFAULTS.minTravelDistance * 0.45, 40)
+      Math.max(minimumDistance * 0.45, DEFAULTS.edgeRetargetVerticalInset)
     );
-
     const targetBounds = {
       minX: hitBounds.left ? Math.min(bounds.maxX, bounds.minX + horizontalInset) : bounds.minX,
       maxX: hitBounds.right ? Math.max(bounds.minX, bounds.maxX - horizontalInset) : bounds.maxX,
@@ -162,35 +394,22 @@ window.SheepApp = window.SheepApp || {};
       maxY: hitBounds.bottom ? Math.max(bounds.minY, bounds.maxY - verticalInset) : bounds.maxY
     };
 
-    state.target = pickTarget(targetBounds);
-    state.walkFrameElapsed = 0;
-    setFrame(FRAMES.walkA);
+    return pickTarget(targetBounds, minimumDistance);
   }
 
-  function scheduleNextWalk(timestamp) {
-    state.mode = 'rest';
-    state.target = null;
-    state.restUntil = timestamp + randomBetween(DEFAULTS.restMinMs, DEFAULTS.restMaxMs);
-    state.walkFrameElapsed = 0;
-    setFrame(FRAMES.idle);
-  }
+  function queueBoundRecovery(action, hitBounds) {
+    const recoveryMode = action.name === 'run' ? 'run' : 'walk';
 
-  function ensureWalkingState() {
-    if (state.target) {
-      return;
-    }
-
-    state.mode = 'walk';
-    state.speed = randomBetween(DEFAULTS.minSpeed, DEFAULTS.maxSpeed);
-    state.target = pickTarget();
-    state.walkFrameElapsed = 0;
-    setFrame(FRAMES.walkA);
+    cancelActiveAction();
+    clearQueuedActions();
+    queueAction('bump');
+    queueTravel(recoveryMode, pickEscapeTarget(hitBounds, recoveryMode), {
+      forceBackTurn: true
+    });
   }
 
   function tick(timestamp) {
     state.animationFrame = 0;
-    let movementDx = 0;
-    let movementDy = 0;
 
     if (state.modalOpen || state.reducedMotion || !sprite) {
       state.lastTimestamp = 0;
@@ -201,48 +420,28 @@ window.SheepApp = window.SheepApp || {};
       state.lastTimestamp = timestamp;
     }
 
-    const deltaSeconds = Math.min(0.05, (timestamp - state.lastTimestamp) / 1000);
+    const deltaMs = Math.min(50, timestamp - state.lastTimestamp);
     state.lastTimestamp = timestamp;
 
-    if (state.mode === 'rest') {
-      setFrame(FRAMES.idle);
-      if (timestamp >= state.restUntil) {
-        ensureWalkingState();
-      }
-    }
+    queueAutonomousPlan();
+    startNextAction();
 
-    if (state.mode === 'walk' && state.target) {
-      state.walkFrameElapsed += deltaSeconds;
-
-      if (state.walkFrameElapsed >= 0.18) {
-        state.walkFrameElapsed = 0;
-        setFrame(state.currentFrame === FRAMES.walkA ? FRAMES.walkB : FRAMES.walkA);
-      }
-
-      const dx = state.target.x - state.x;
-      const dy = state.target.y - state.y;
-      const distance = Math.hypot(dx, dy);
-
-      if (distance <= 2) {
-        state.x = state.target.x;
-        state.y = state.target.y;
-        scheduleNextWalk(timestamp);
-      } else {
-        const step = Math.min(distance, state.speed * deltaSeconds);
-        movementDx = dx;
-        movementDy = dy;
-        state.direction = dx < 0 ? 1 : -1;
-        state.x += (dx / distance) * step;
-        state.y += (dy / distance) * step;
-      }
+    if (state.activeAction) {
+      animateAction(state.activeAction, deltaMs, timestamp);
     }
 
     const hitBounds = clampPosition();
+    const action = state.activeAction;
 
-    if (state.mode === 'walk' && state.target && didHitActiveBound(hitBounds, movementDx, movementDy)) {
-      retargetFromBounds(hitBounds);
+    if (
+      action?.target
+      && didHitActiveBound(hitBounds, action.lastVector.dx, action.lastVector.dy)
+    ) {
+      queueBoundRecovery(action, hitBounds);
     }
 
+    queueAutonomousPlan();
+    startNextAction();
     applyPosition();
     state.animationFrame = window.requestAnimationFrame(tick);
   }
@@ -276,7 +475,7 @@ window.SheepApp = window.SheepApp || {};
 
     if (shouldSuspend) {
       stopLoop();
-      setFrame(FRAMES.idle);
+      setFrame(NEUTRAL_FRAME, true);
       return;
     }
 
@@ -290,6 +489,7 @@ window.SheepApp = window.SheepApp || {};
 
   function onModalShown(event) {
     const modal = event.target;
+
     if (!(modal instanceof HTMLElement)) {
       return;
     }
@@ -301,6 +501,7 @@ window.SheepApp = window.SheepApp || {};
 
   function onModalHidden(event) {
     const modal = event.target;
+
     if (!(modal instanceof HTMLElement)) {
       return;
     }
@@ -320,7 +521,7 @@ window.SheepApp = window.SheepApp || {};
 
   function onResize() {
     clampPosition();
-    setFrame(state.currentFrame ?? FRAMES.idle, true);
+    setFrame(state.currentFrame ?? NEUTRAL_FRAME, true);
     applyPosition();
   }
 
@@ -341,10 +542,13 @@ window.SheepApp = window.SheepApp || {};
 
   function seedInitialPosition() {
     const bounds = getBounds();
+
     state.x = bounds.maxX;
     state.y = randomBetween(bounds.minY, bounds.maxY);
     state.direction = 1;
-    scheduleNextWalk(performance.now());
+    queueSleep(randomBetween(900, 2000));
+    startNextAction();
+    clampPosition();
     applyPosition();
   }
 
