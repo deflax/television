@@ -117,7 +117,7 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 75, 200);
     addSequenceFrame(sequence, 76, 5000);
     addSequenceFrame(sequence, 73, 200);
-    addSequenceFrame(sequence, 3, 200);
+    addSequenceFrame(sequence, 3, 320);
 
     return finalizeSequenceAction(sequence, {
       onComplete: () => {
@@ -338,7 +338,7 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 10, 220, () => {
       showProp(170, PROP_PRESETS.alienVisit);
     });
-    addSequenceFrame(sequence, 9, 260, () => {
+    addSequenceFrame(sequence, 9, 320, () => {
       showProp(171, PROP_PRESETS.alienVisit);
     });
     addSequenceFrame(sequence, 3, 220, hideProp);
@@ -625,7 +625,7 @@ window.SheepApp = window.SheepApp || {};
     Object.freeze({ name: 'yawn', weight: 1 }),
     Object.freeze({ name: 'stare', weight: 0.8 }),
     Object.freeze({ name: 'roll', weight: 0.55 }),
-    Object.freeze({ name: 'alienVisit', weight: 0.11 }),
+    Object.freeze({ name: 'alienVisit', weight: 0.13 }),
     Object.freeze({ name: 'ufoBlink', weight: 0.06 }),
     Object.freeze({ name: 'ghostPuff', weight: 0.04 }),
     Object.freeze({ name: 'spaceSheep', weight: 0.08 }),
@@ -684,7 +684,7 @@ window.SheepApp = window.SheepApp || {};
     surfaceActionChance: 0.26,
     markedSurfaceDwellChance: 0.58,
     markedSurfaceSleepChance: 0.24,
-    abductedMeteorDelayMs: 6000,
+    abductedMeteorDelayMs: 6800,
     callResponseChance: 0.3,
     markedSurfaceDwellMinMs: 3200,
     markedSurfaceDwellMaxMs: 7600,
