@@ -210,7 +210,14 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 142, 100);
     addSequenceFrame(sequence, 143, 120);
 
-    return finalizeSequenceAction(sequence);
+    return finalizeSequenceAction(sequence, {
+      onStart: () => {
+        state.abducted = false;
+        state.abductedReturnAt = 0;
+        showSheep();
+        hideProp();
+      }
+    });
   }
 
   function createBlackSheepAction() {
@@ -323,19 +330,26 @@ window.SheepApp = window.SheepApp || {};
       showProp(168, PROP_PRESETS.alienVisit);
     });
     addSequenceFrame(sequence, 157, 260, () => {
+      hideSheep();
+      state.abducted = true;
+      state.abductedReturnAt = state.lastTimestamp + DEFAULTS.abductedMeteorDelayMs;
       showProp(169, PROP_PRESETS.alienVisit);
     });
-    addSequenceFrame(sequence, 154, 220, () => {
+    addSequenceFrame(sequence, 10, 220, () => {
       showProp(170, PROP_PRESETS.alienVisit);
     });
-    addSequenceFrame(sequence, 155, 260, () => {
+    addSequenceFrame(sequence, 9, 260, () => {
       showProp(171, PROP_PRESETS.alienVisit);
     });
-    addSequenceFrame(sequence, 10, 220);
-    addSequenceFrame(sequence, 9, 220, hideProp);
-    addSequenceFrame(sequence, 3, 220);
+    addSequenceFrame(sequence, 3, 220, hideProp);
 
     return finalizeSequenceAction(sequence, {
+      onStart: () => {
+        state.abducted = false;
+        state.abductedReturnAt = 0;
+        showSheep();
+        hideProp();
+      },
       onComplete: hideProp
     });
   }
@@ -611,7 +625,6 @@ window.SheepApp = window.SheepApp || {};
     Object.freeze({ name: 'yawn', weight: 1 }),
     Object.freeze({ name: 'stare', weight: 0.8 }),
     Object.freeze({ name: 'roll', weight: 0.55 }),
-    Object.freeze({ name: 'meteor', weight: 0.2 }),
     Object.freeze({ name: 'alienVisit', weight: 0.11 }),
     Object.freeze({ name: 'ufoBlink', weight: 0.06 }),
     Object.freeze({ name: 'ghostPuff', weight: 0.04 }),
@@ -671,6 +684,7 @@ window.SheepApp = window.SheepApp || {};
     surfaceActionChance: 0.26,
     markedSurfaceDwellChance: 0.58,
     markedSurfaceSleepChance: 0.24,
+    abductedMeteorDelayMs: 6000,
     callResponseChance: 0.3,
     markedSurfaceDwellMinMs: 3200,
     markedSurfaceDwellMaxMs: 7600,
@@ -704,6 +718,9 @@ window.SheepApp = window.SheepApp || {};
     reducedMotion: prefersReducedMotion.matches,
     modalOpen: false,
     enabled: true,
+    sheepVisible: true,
+    abducted: false,
+    abductedReturnAt: 0,
     activeAction: null,
     actionQueue: [],
     lastTurnAction: 'directionBack',
@@ -1237,6 +1254,7 @@ window.SheepApp = window.SheepApp || {};
       return;
     }
 
+    sprite.hidden = !state.sheepVisible;
     sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
 
     if (!propSprite) {
@@ -1291,6 +1309,22 @@ window.SheepApp = window.SheepApp || {};
     state.prop.attachToFacing = nextPreset.attachToFacing;
     state.prop.flipWithDirection = nextPreset.flipWithDirection;
     setPropFrame(frame, false);
+  }
+
+  function showSheep() {
+    state.sheepVisible = true;
+
+    if (sprite) {
+      sprite.hidden = false;
+    }
+  }
+
+  function hideSheep() {
+    state.sheepVisible = false;
+
+    if (sprite) {
+      sprite.hidden = true;
+    }
   }
 
   function hideProp() {
@@ -1594,8 +1628,17 @@ window.SheepApp = window.SheepApp || {};
     });
   }
 
-  function queueAutonomousPlan() {
+  function queueAutonomousPlan(timestamp) {
     if (state.activeAction || state.actionQueue.length) {
+      return;
+    }
+
+    if (state.abducted) {
+      if (timestamp < state.abductedReturnAt) {
+        return;
+      }
+
+      queueAction('meteor');
       return;
     }
 
@@ -1754,7 +1797,7 @@ window.SheepApp = window.SheepApp || {};
     const deltaMs = Math.min(50, timestamp - state.lastTimestamp);
     state.lastTimestamp = timestamp;
 
-    queueAutonomousPlan();
+    queueAutonomousPlan(timestamp);
     startNextAction();
 
     if (state.activeAction) {
@@ -1771,7 +1814,7 @@ window.SheepApp = window.SheepApp || {};
       queueBoundRecovery(action, hitBounds);
     }
 
-    queueAutonomousPlan();
+    queueAutonomousPlan(timestamp);
     startNextAction();
     applyPosition();
     state.animationFrame = window.requestAnimationFrame(tick);
