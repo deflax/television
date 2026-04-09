@@ -16,29 +16,29 @@ window.SheepApp = window.SheepApp || {};
   const SURFACE_ACTION_CONFIG = Object.freeze({
     jumpTo: Object.freeze({
       motionStartIndex: 1,
-      minimumSpeed: 220,
-      arcLift: 92
+      minimumSpeed: 188,
+      arcLift: 108
     }),
     jumpDown: Object.freeze({
       motionStartIndex: 1,
-      minimumSpeed: 210,
-      arcLift: 54
+      minimumSpeed: 182,
+      arcLift: 68
     }),
     climbDown: Object.freeze({
       motionStartIndex: 5,
-      minimumSpeed: 118,
+      minimumSpeed: 104,
       edgeOffset: 14,
       verticalLead: 18
     }),
     climbDown2: Object.freeze({
       motionStartIndex: 7,
-      minimumSpeed: 126,
+      minimumSpeed: 112,
       edgeOffset: 10,
       verticalLead: 14
     }),
     climbUp: Object.freeze({
       motionStartIndex: 2,
-      minimumSpeed: 128,
+      minimumSpeed: 114,
       edgeOffset: 12,
       verticalLead: 16
     })
@@ -418,14 +418,19 @@ window.SheepApp = window.SheepApp || {};
     maxRunSpeed: 126,
     minWalkDistance: 120,
     minRunDistance: 176,
-    sleepMinMs: 2200,
-    sleepMaxMs: 4800,
+    sleepMinMs: 7000,
+    sleepMaxMs: 14000,
     edgeRetargetMinInset: 48,
     edgeRetargetVerticalInset: 40,
     specialActionChance: 0.28,
     runChance: 0.2,
-    sleepChance: 0.18,
+    sleepChance: 0.08,
     surfaceActionChance: 0.26,
+    markedSurfaceDwellChance: 0.58,
+    markedSurfaceSleepChance: 0.24,
+    markedSurfaceDwellMinMs: 3200,
+    markedSurfaceDwellMaxMs: 7600,
+    markedSurfaceMinWalkDistance: 28,
     rollTravelDistance: 220,
     rollTravelMs: 3000,
     minRollDistance: 96,
@@ -1297,6 +1302,27 @@ window.SheepApp = window.SheepApp || {};
     queueAction(actionName);
   }
 
+  function isMarkedSurface(surface) {
+    return Boolean(surface && surface.id !== GROUND_SURFACE_ID);
+  }
+
+  function queueMarkedSurfaceDwellPlan() {
+    const surface = getCurrentSurface();
+    const availableDistance = Math.max(0, surface.maxX - surface.minX);
+
+    if (Math.random() < DEFAULTS.markedSurfaceSleepChance) {
+      queueSleep(randomBetween(DEFAULTS.markedSurfaceDwellMinMs, DEFAULTS.markedSurfaceDwellMaxMs));
+      return;
+    }
+
+    if (availableDistance >= DEFAULTS.minSurfaceWidth && Math.random() < 0.35) {
+      queueTravel('walk', pickTarget(surface, Math.min(DEFAULTS.markedSurfaceMinWalkDistance, availableDistance * 0.35)));
+      return;
+    }
+
+    queueSpecialActionPlan();
+  }
+
   function getTravelSpeed(mode) {
     if (mode === 'run') {
       return randomBetween(DEFAULTS.minRunSpeed, DEFAULTS.maxRunSpeed);
@@ -1329,6 +1355,13 @@ window.SheepApp = window.SheepApp || {};
     }
 
     refreshSurfaces();
+
+    const currentSurface = getCurrentSurface();
+
+    if (isMarkedSurface(currentSurface) && Math.random() < DEFAULTS.markedSurfaceDwellChance) {
+      queueMarkedSurfaceDwellPlan();
+      return;
+    }
 
     if (Math.random() < DEFAULTS.sleepChance) {
       queueSleep();
@@ -1718,6 +1751,16 @@ window.SheepApp = window.SheepApp || {};
 
   app.isEnabled = function isSheepEnabled() {
     return state.enabled;
+  };
+
+  app.refreshSurfaces = function refreshSheepSurfaces() {
+    refreshSurfaces();
+
+    if (!state.activeAction) {
+      snapToCurrentSurface();
+      clampPosition();
+      applyPosition();
+    }
   };
 
   if (document.readyState === 'loading') {
