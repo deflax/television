@@ -6,7 +6,12 @@ window.StreamApp = window.StreamApp || {};
 
 (function() {
   const video = document.querySelector("video");
+  const streamMedia = document.getElementById('stream-media');
   const hlsSource = '/live/stream.m3u8';
+  const preferenceKeys = {
+    audioOnly: 'stream.audioOnly',
+    sheepEnabled: 'stream.sheepEnabled'
+  };
   const defaultOptions = {
     controls: [
       'play-large',
@@ -26,6 +31,33 @@ window.StreamApp = window.StreamApp || {};
   // Expose for SSE and audio-only toggle
   window.StreamApp.video = video;
   window.StreamApp.hlsSource = hlsSource;
+  window.StreamApp.preferences = {
+    keys: preferenceKeys,
+    getBoolean(key) {
+      try {
+        const value = window.localStorage.getItem(key);
+
+        if (value === 'true') {
+          return true;
+        }
+
+        if (value === 'false') {
+          return false;
+        }
+      } catch (error) {
+        console.warn('Preference read failed:', error);
+      }
+
+      return null;
+    },
+    setBoolean(key, value) {
+      try {
+        window.localStorage.setItem(key, value ? 'true' : 'false');
+      } catch (error) {
+        console.warn('Preference write failed:', error);
+      }
+    }
+  };
 
   function updateQuality(newQuality) {
     if (newQuality === 0) {
@@ -112,6 +144,8 @@ window.StreamApp = window.StreamApp || {};
         });
 
         const player = new Plyr(video, defaultOptions);
+        syncAudioOnlyView();
+        restoreAudioOnlyPreference();
       });
 
       // Attach media AFTER registering event handlers to avoid race conditions
@@ -122,6 +156,8 @@ window.StreamApp = window.StreamApp || {};
       // Native HLS fallback (Safari without HLS.js support)
       video.src = hlsSource;
       const player = new Plyr(video, defaultOptions);
+      syncAudioOnlyView();
+      restoreAudioOnlyPreference();
 
       video.addEventListener('error', function(e) {
         console.warn('Video error, attempting reload in 3s...', e);
@@ -138,9 +174,45 @@ window.StreamApp = window.StreamApp || {};
   // ---------------------------------------------------------------------------
 
   const audioOnlyBtn = document.getElementById('audio-only-btn');
+  const sheepBtn = document.getElementById('sheep-btn');
   let audioOnly = false;
   let audioHls = null;
   let audioEl = null;
+  let shouldRestoreAudioOnly = window.StreamApp.preferences.getBoolean(preferenceKeys.audioOnly) === true;
+
+  function getVideoPresentationElement() {
+    return video.closest('.plyr') || video;
+  }
+
+  function syncAudioOnlyView() {
+    const videoPresentation = getVideoPresentationElement();
+    const audioPoster = document.getElementById('audio-only-poster');
+
+    if (!videoPresentation || !audioPoster) {
+      return;
+    }
+
+    if (audioOnly) {
+      videoPresentation.style.setProperty('display', 'none');
+      if (streamMedia) {
+        streamMedia.style.removeProperty('display');
+      }
+      audioPoster.style.display = 'block';
+      return;
+    }
+
+    videoPresentation.style.removeProperty('display');
+    audioPoster.style.display = 'none';
+  }
+
+  function restoreAudioOnlyPreference() {
+    if (!shouldRestoreAudioOnly) {
+      return;
+    }
+
+    shouldRestoreAudioOnly = false;
+    enableAudioOnly();
+  }
 
   function enableAudioOnly() {
     if (audioOnly) return;
@@ -185,9 +257,9 @@ window.StreamApp = window.StreamApp || {};
     if (window.hls) {
       window.hls.stopLoad();
     }
-    video.closest('.plyr, .content').style.setProperty('display', 'none');
-    document.getElementById('audio-only-poster').style.display = 'block';
+    syncAudioOnlyView();
 
+    window.StreamApp.preferences.setBoolean(preferenceKeys.audioOnly, true);
     updateAudioOnlyButton(true);
     console.log('Audio-only mode: ON');
   }
@@ -214,13 +286,13 @@ window.StreamApp = window.StreamApp || {};
     }
 
     // 3. Show the video player and resume
-    document.getElementById('audio-only-poster').style.display = 'none';
-    video.closest('.plyr, .content').style.removeProperty('display');
+    syncAudioOnlyView();
     if (window.hls) {
       window.hls.startLoad();
     }
     video.play().catch(() => console.warn('Video resume: autoplay blocked'));
 
+    window.StreamApp.preferences.setBoolean(preferenceKeys.audioOnly, false);
     updateAudioOnlyButton(false);
     console.log('Audio-only mode: OFF');
   }
@@ -237,6 +309,31 @@ window.StreamApp = window.StreamApp || {};
     }
   }
 
+  function updateSheepButton(enabled) {
+    if (!sheepBtn) {
+      return;
+    }
+
+    if (enabled) {
+      sheepBtn.classList.remove('btn-outline-secondary');
+      sheepBtn.classList.add('btn-outline-success');
+      sheepBtn.title = 'Sheep on';
+    } else {
+      sheepBtn.classList.remove('btn-outline-success');
+      sheepBtn.classList.add('btn-outline-secondary');
+      sheepBtn.title = 'Sheep off';
+    }
+  }
+
+  function getSheepEnabledState() {
+    if (window.SheepApp && typeof window.SheepApp.isEnabled === 'function') {
+      return window.SheepApp.isEnabled();
+    }
+
+    const storedValue = window.StreamApp.preferences.getBoolean(preferenceKeys.sheepEnabled);
+    return storedValue === null ? true : storedValue;
+  }
+
   if (audioOnlyBtn) {
     audioOnlyBtn.addEventListener('click', () => {
       if (audioOnly) {
@@ -247,6 +344,20 @@ window.StreamApp = window.StreamApp || {};
     });
   }
 
+  if (sheepBtn) {
+    updateSheepButton(getSheepEnabledState());
+    sheepBtn.addEventListener('click', () => {
+      if (!window.SheepApp || typeof window.SheepApp.toggle !== 'function') {
+        return;
+      }
+
+      const enabled = window.SheepApp.toggle();
+      updateSheepButton(enabled);
+    });
+  }
+
   // Initialize player
   initPlayer();
+
+  updateSheepButton(getSheepEnabledState());
 })();
