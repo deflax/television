@@ -479,6 +479,7 @@ window.SheepApp = window.SheepApp || {};
   let propSprite = null;
   let markedSurfaces = [];
   let eventsBound = false;
+  let scrollSyncFrame = 0;
 
   function readStoredEnabledPreference() {
     if (preferenceStorage && typeof preferenceStorage.getBoolean === 'function') {
@@ -1546,6 +1547,11 @@ window.SheepApp = window.SheepApp || {};
       return;
     }
 
+    if (scrollSyncFrame) {
+      window.cancelAnimationFrame(scrollSyncFrame);
+      scrollSyncFrame = 0;
+    }
+
     window.cancelAnimationFrame(state.animationFrame);
     state.animationFrame = 0;
     state.lastTimestamp = 0;
@@ -1628,12 +1634,19 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function onScroll() {
-    refreshSurfaces();
-
-    if (!state.activeAction) {
-      snapToCurrentSurface();
-      applyPosition();
+    if (scrollSyncFrame) {
+      return;
     }
+
+    scrollSyncFrame = window.requestAnimationFrame(() => {
+      scrollSyncFrame = 0;
+      refreshSurfaces();
+
+      if (!state.activeAction) {
+        snapToCurrentSurface();
+        applyPosition();
+      }
+    });
   }
 
   function createLayer() {
