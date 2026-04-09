@@ -165,7 +165,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `DISCORDBOT_LIVE_CHANNEL_ID` | Discord channel ID for live stream announcements |
 | `DISCORDBOT_TIMECODE_CHANNEL_ID` | Discord channel ID for timecode messages |
 | `DISCORDBOT_LIVE_CHANNEL_UPDATE` | Live announcement interval in minutes (default: `1440`) |
-| `FRONTEND_MODE` | `mux` (default) or `legacy` - see [Frontend Modes](#frontend-modes) |
 
 ### Mux Service Variables
 
@@ -228,15 +227,6 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 **Switching behavior:**
 - On playhead change: segments continue numbering, `#EXT-X-DISCONTINUITY` tag injected, ffmpeg restarts with new input (~4s gap)
 - On crash: seamless recovery with discontinuity marker, segment numbering continues (no viewer disruption)
-
-### Frontend Modes
-
-| Mode | Template | Behavior |
-|------|----------|----------|
-| `mux` (default) | `index_mux.html` | Static stream from `/live/stream.m3u8`, mux service handles switching |
-| `legacy` | `index_legacy.html` | SSE-based client-side stream switching |
-
-Set via `FRONTEND_MODE` environment variable.
 
 **Frontend Features:**
 - **Automatic error recovery** - HLS.js detects network/media errors and automatically recovers
@@ -355,7 +345,6 @@ television/
 │   ├── templates/
 │   │   ├── base.html            # Base template with modals
 │   │   ├── index_mux.html       # Mux mode template
-│   │   └── index_legacy.html    # Legacy mode template
 │   ├── main.py                  # Application entry point
 │   ├── services/                # Core/backend service layer
 │   │   ├── core_api.py          # Restreamer Core API client
