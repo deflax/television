@@ -29,7 +29,7 @@
       </div>
       <div class="col-12 col-lg-10">
           <div class="content">
-              <div id="stream-media">
+              <div id="stream-media" class="sheep-surface">
               <video controls crossorigin playsinline poster="static/images/poster.png">
                 <track kind="captions" srclang="en" label="Decorative empty captions" src="/static/empty.vtt" default>
               </video>
@@ -46,13 +46,13 @@
                   <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
                 </div>
                 <div class="d-flex gap-2 ms-3">
-                  <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary" title="Toggle video">
+                  <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle video">
                     <i class="fa fa-headphones"></i> audio only
                   </button>
-                  <button type="button" id="sheep-btn" class="btn btn-sm btn-outline-secondary" title="Toggle sheep">
+                  <button type="button" id="sheep-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle sheep">
                     <i class="fa fa-paw"></i> sheep
                   </button>
-                  <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-secondary" target="_blank">live.hls</a>
+                  <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-secondary sheep-surface" target="_blank">live.hls</a>
                   <!-- <a href="/live/stream.mp3" class="btn btn-sm btn-outline-secondary" target="_blank">live.mp3</a> -->
                  </div>
                </div>

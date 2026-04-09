@@ -184,6 +184,16 @@ window.StreamApp = window.StreamApp || {};
     return video.closest('.plyr') || video;
   }
 
+  function syncSheepSurfaces() {
+    if (streamMedia) {
+      streamMedia.classList.toggle('sheep-surface', !audioOnly);
+    }
+
+    if (window.SheepApp && typeof window.SheepApp.refreshSurfaces === 'function') {
+      window.SheepApp.refreshSurfaces();
+    }
+  }
+
   function syncAudioOnlyView() {
     const videoPresentation = getVideoPresentationElement();
     const audioPoster = document.getElementById('audio-only-poster');
@@ -198,11 +208,13 @@ window.StreamApp = window.StreamApp || {};
         streamMedia.style.removeProperty('display');
       }
       audioPoster.style.display = 'block';
+      syncSheepSurfaces();
       return;
     }
 
     videoPresentation.style.removeProperty('display');
     audioPoster.style.display = 'none';
+    syncSheepSurfaces();
   }
 
   function restoreAudioOnlyPreference() {
