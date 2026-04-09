@@ -59,8 +59,7 @@ def register_frontend_routes(app, config, loggers, state: WebRouteState) -> None
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] index /')
 
-        template = 'index_mux.html' if config.frontend_mode == 'mux' else 'index_legacy.html'
-        return await render_template(template, now=datetime.now(timezone.utc))
+        return await render_template('index_mux.html', now=datetime.now(timezone.utc))
 
     @app.route('/archive', methods=['GET', 'POST'])
     async def archive_route():
