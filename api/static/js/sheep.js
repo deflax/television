@@ -147,7 +147,13 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 31, 200);
     addSequenceFrame(sequence, 3, 200);
 
-    return finalizeSequenceAction(sequence);
+    return finalizeSequenceAction(sequence, {
+      onComplete: () => {
+        if (Math.random() < DEFAULTS.sleepChance) {
+          queueSleep();
+        }
+      }
+    });
   }
 
   function createStareAction() {
@@ -683,7 +689,6 @@ window.SheepApp = window.SheepApp || {};
     sleepChance: 0.08,
     surfaceActionChance: 0.32,
     markedSurfaceDwellChance: 0.48,
-    markedSurfaceSleepChance: 0.24,
     abductedMeteorDelayMs: 6800,
     callResponseChance: 0.3,
     markedSurfaceDwellMinMs: 3200,
@@ -1589,11 +1594,6 @@ window.SheepApp = window.SheepApp || {};
     const surface = getCurrentSurface();
     const availableDistance = Math.max(0, surface.maxX - surface.minX);
 
-    if (Math.random() < DEFAULTS.markedSurfaceSleepChance) {
-      queueSleep(randomBetween(DEFAULTS.markedSurfaceDwellMinMs, DEFAULTS.markedSurfaceDwellMaxMs));
-      return;
-    }
-
     if (availableDistance >= DEFAULTS.minSurfaceWidth && Math.random() < 0.35) {
       queueTravel('walk', pickTarget(surface, Math.min(DEFAULTS.markedSurfaceMinWalkDistance, availableDistance * 0.35)));
       return;
@@ -1648,11 +1648,6 @@ window.SheepApp = window.SheepApp || {};
 
     if (isMarkedSurface(currentSurface) && Math.random() < DEFAULTS.markedSurfaceDwellChance) {
       queueMarkedSurfaceDwellPlan();
-      return;
-    }
-
-    if (Math.random() < DEFAULTS.sleepChance) {
-      queueSleep();
       return;
     }
 
@@ -1967,7 +1962,6 @@ window.SheepApp = window.SheepApp || {};
     state.y = groundSurface.landY;
     state.direction = 1;
     setCurrentSurface(groundSurface);
-    queueSleep(randomBetween(900, 2000));
     startNextAction();
     clampPosition();
     applyPosition();
