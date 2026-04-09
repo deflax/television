@@ -119,7 +119,20 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 73, 200);
     addSequenceFrame(sequence, 3, 200);
 
-    return finalizeSequenceAction(sequence);
+    return finalizeSequenceAction(sequence, {
+      onComplete: () => {
+        const callDirection = state.direction;
+
+        if (Math.random() < DEFAULTS.callResponseChance) {
+          queueAction('blackSheep', {
+            onStart: (action) => {
+              action.callDirection = callDirection;
+              action.approachFromLeft = callDirection === 1;
+            }
+          });
+        }
+      }
+    });
   }
 
   function createYawnAction() {
@@ -172,6 +185,213 @@ window.SheepApp = window.SheepApp || {};
     });
   }
 
+  function createMeteorAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 134, 180);
+    addSequenceFrame(sequence, 135, 180);
+    addSequenceFrame(sequence, 136, 120, (action) => {
+      const bounds = getBounds();
+      const goLeft = Math.random() < 0.5;
+      const horizontalTravel = Math.min(140, (goLeft ? state.x - bounds.minX : bounds.maxX - state.x) * 0.9);
+      const verticalTravel = Math.min(110, (bounds.maxY - state.y) * 0.9);
+
+      action.target = {
+        x: clamp(state.x + (goLeft ? horizontalTravel * -1 : horizontalTravel), bounds.minX, bounds.maxX),
+        y: clamp(state.y + verticalTravel, bounds.minY, bounds.maxY)
+      };
+      action.speed = 220;
+    });
+    addSequenceFrame(sequence, 137, 100);
+    addSequenceFrame(sequence, 138, 100);
+    addSequenceFrame(sequence, 139, 100);
+    addSequenceFrame(sequence, 140, 100);
+    addSequenceFrame(sequence, 141, 100);
+    addSequenceFrame(sequence, 142, 100);
+    addSequenceFrame(sequence, 143, 120);
+
+    return finalizeSequenceAction(sequence);
+  }
+
+  function createBlackSheepAction() {
+    const sequence = createSequence();
+    const frameTimings = [260, 240, 220, 280, 260, 340, 280, 240, 220, 260, 300, 220];
+
+    addSequenceFrame(sequence, 73, frameTimings[0], (action) => {
+      action.approachFromLeft = typeof action.approachFromLeft === 'boolean'
+        ? action.approachFromLeft
+        : Math.random() < 0.5;
+      state.direction = action.callDirection ?? (action.approachFromLeft ? 1 : -1);
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -160 : 160;
+    });
+    addSequenceFrame(sequence, 74, frameTimings[1], (action) => {
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -136 : 136;
+    });
+    addSequenceFrame(sequence, 75, frameTimings[2], (action) => {
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -108 : 108;
+    });
+    addSequenceFrame(sequence, 76, frameTimings[3], (action) => {
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -76 : 76;
+    });
+    addSequenceFrame(sequence, 172, frameTimings[4], (action) => {
+      action.startDirection = action.startDirection ?? state.direction;
+      state.direction = action.approachFromLeft ? -1 : 1;
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -26 : 26;
+    });
+    addSequenceFrame(sequence, 173, frameTimings[5], (action) => {
+      state.direction = action.approachFromLeft ? -1 : 1;
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -18 : 18;
+    });
+    addSequenceFrame(sequence, 174, frameTimings[6], (action) => {
+      state.direction = action.approachFromLeft ? -1 : 1;
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -12 : 12;
+    });
+    addSequenceFrame(sequence, 173, frameTimings[7], (action) => {
+      state.direction = action.startDirection ?? state.direction;
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -14 : 14;
+    });
+    addSequenceFrame(sequence, 74, frameTimings[8], (action) => {
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -72 : 72;
+    });
+    addSequenceFrame(sequence, 73, frameTimings[9], (action) => {
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -104 : 104;
+    });
+    addSequenceFrame(sequence, 74, frameTimings[10], (action) => {
+      showProp(144, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -136 : 136;
+    });
+    addSequenceFrame(sequence, 3, frameTimings[11], (action) => {
+      showProp(145, PROP_PRESETS.blackSheepVisitor);
+      state.prop.offsetX = action.approachFromLeft ? -184 : 184;
+    });
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: (action) => {
+        if (typeof action.startDirection === 'number') {
+          state.direction = action.startDirection;
+        }
+
+        hideProp();
+      }
+    });
+  }
+
+  function createAlienVisitAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 220, () => {
+      showProp(158, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 9, 220, () => {
+      showProp(159, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 10, 220, () => {
+      showProp(160, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 10, 180, () => {
+      showProp(161, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 154, 220, () => {
+      showProp(162, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 155, 220, () => {
+      showProp(163, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 156, 220, () => {
+      showProp(164, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 157, 260, () => {
+      showProp(165, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 154, 220, () => {
+      showProp(166, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 155, 220, () => {
+      showProp(167, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 156, 220, () => {
+      showProp(168, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 157, 260, () => {
+      showProp(169, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 154, 220, () => {
+      showProp(170, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 155, 260, () => {
+      showProp(171, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 10, 220);
+    addSequenceFrame(sequence, 9, 220, hideProp);
+    addSequenceFrame(sequence, 3, 220);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: hideProp
+    });
+  }
+
+  function createUfoBlinkAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 180, () => {
+      showProp(158, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 9, 220, () => {
+      showProp(170, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 10, 220, () => {
+      showProp(171, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 9, 220, () => {
+      showProp(170, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 3, 180, () => {
+      showProp(158, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 3, 160, hideProp);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: hideProp
+    });
+  }
+
+  function createGhostPuffAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 220, () => {
+      showProp(175, PROP_PRESETS.alienVisit);
+    });
+    addSequenceFrame(sequence, 3, 180, hideProp);
+
+    return finalizeSequenceAction(sequence, {
+      onComplete: hideProp
+    });
+  }
+
+  function createSpaceSheepAction() {
+    const sequence = createSequence();
+
+    addSequenceFrame(sequence, 3, 180);
+    addSequenceFrame(sequence, 169, 260);
+    addSequenceFrame(sequence, 170, 280);
+    addSequenceFrame(sequence, 171, 280);
+    addSequenceFrame(sequence, 170, 260);
+    addSequenceFrame(sequence, 169, 220);
+    addSequenceFrame(sequence, 3, 180);
+
+    return finalizeSequenceAction(sequence);
+  }
+
   function createBathAction() {
     const sequence = createSequence();
 
@@ -180,7 +400,7 @@ window.SheepApp = window.SheepApp || {};
     addSequenceFrame(sequence, 10, 400, () => {
       showProp(146, PROP_PRESETS.bath);
     });
-    addRepeatedFrames(sequence, [54, 55], 5, 400, (frame) => () => {
+    addRepeatedFrames(sequence, [54, 55], 7, 400, (frame) => () => {
       showProp(frame === 54 ? 147 : 148, PROP_PRESETS.bath);
     });
     addSequenceFrame(sequence, 10, 400, hideProp);
@@ -370,6 +590,12 @@ window.SheepApp = window.SheepApp || {};
     yawn: createYawnAction(),
     stare: createStareAction(),
     roll: createRollAction(),
+    meteor: createMeteorAction(),
+    blackSheep: createBlackSheepAction(),
+    alienVisit: createAlienVisitAction(),
+    ufoBlink: createUfoBlinkAction(),
+    ghostPuff: createGhostPuffAction(),
+    spaceSheep: createSpaceSheepAction(),
     bath: createBathAction(),
     eat: createEatAction(),
     water: createWaterAction(),
@@ -385,12 +611,29 @@ window.SheepApp = window.SheepApp || {};
     Object.freeze({ name: 'yawn', weight: 1 }),
     Object.freeze({ name: 'stare', weight: 0.8 }),
     Object.freeze({ name: 'roll', weight: 0.55 }),
+    Object.freeze({ name: 'meteor', weight: 0.2 }),
+    Object.freeze({ name: 'alienVisit', weight: 0.11 }),
+    Object.freeze({ name: 'ufoBlink', weight: 0.06 }),
+    Object.freeze({ name: 'ghostPuff', weight: 0.04 }),
+    Object.freeze({ name: 'spaceSheep', weight: 0.08 }),
     Object.freeze({ name: 'bath', weight: 0.7 }),
     Object.freeze({ name: 'eat', weight: 0.9 }),
     Object.freeze({ name: 'water', weight: 0.7 })
   ]);
 
   const PROP_PRESETS = Object.freeze({
+    blackSheepVisitor: Object.freeze({
+      offsetX: 0,
+      offsetY: 0,
+      attachToFacing: false,
+      flipWithDirection: false
+    }),
+    alienVisit: Object.freeze({
+      offsetX: 0,
+      offsetY: -28,
+      attachToFacing: false,
+      flipWithDirection: false
+    }),
     bath: Object.freeze({
       offsetX: 0,
       offsetY: -4,
@@ -428,6 +671,7 @@ window.SheepApp = window.SheepApp || {};
     surfaceActionChance: 0.26,
     markedSurfaceDwellChance: 0.58,
     markedSurfaceSleepChance: 0.24,
+    callResponseChance: 0.3,
     markedSurfaceDwellMinMs: 3200,
     markedSurfaceDwellMaxMs: 7600,
     markedSurfaceMinWalkDistance: 28,
