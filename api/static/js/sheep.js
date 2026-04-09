@@ -681,8 +681,8 @@ window.SheepApp = window.SheepApp || {};
     specialActionChance: 0.28,
     runChance: 0.2,
     sleepChance: 0.08,
-    surfaceActionChance: 0.26,
-    markedSurfaceDwellChance: 0.58,
+    surfaceActionChance: 0.32,
+    markedSurfaceDwellChance: 0.48,
     markedSurfaceSleepChance: 0.24,
     abductedMeteorDelayMs: 6800,
     callResponseChance: 0.3,
@@ -698,8 +698,8 @@ window.SheepApp = window.SheepApp || {};
     maxJumpUpDistance: 260,
     maxJumpDownDistance: 280,
     maxClimbDistance: 300,
-    maxEdgeLandingDelta: 28,
-    surfaceEdgeApproachThreshold: 12,
+    maxEdgeLandingDelta: 40,
+    surfaceEdgeApproachThreshold: 16,
     surfaceHorizontalPadding: 8
   });
 
@@ -1123,7 +1123,7 @@ window.SheepApp = window.SheepApp || {};
 
     const jumpUp = pickJumpUpCandidate(currentSurface);
     if (jumpUp) {
-      candidates.push({ ...jumpUp, weight: currentSurface.id === GROUND_SURFACE_ID ? 1.6 : 1 });
+      candidates.push({ ...jumpUp, weight: currentSurface.id === GROUND_SURFACE_ID ? 1.9 : 1.15 });
     }
 
     if (currentSurface.id !== GROUND_SURFACE_ID) {
@@ -1132,7 +1132,7 @@ window.SheepApp = window.SheepApp || {};
       const climbUp = pickBestSurfaceCandidate([climbUpLeft, climbUpRight].filter(Boolean));
 
       if (climbUp) {
-        candidates.push({ ...climbUp, weight: 0.75 });
+        candidates.push({ ...climbUp, weight: 0.95 });
       }
 
       const jumpDown = pickJumpDownCandidate(currentSurface);
