@@ -441,6 +441,10 @@ window.SheepApp = window.SheepApp || {};
   });
 
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const preferenceStorage = window.StreamApp && window.StreamApp.preferences;
+  const sheepPreferenceKey = preferenceStorage && preferenceStorage.keys
+    ? preferenceStorage.keys.sheepEnabled
+    : 'stream.sheepEnabled';
   const state = {
     x: 0,
     y: 0,
@@ -450,6 +454,7 @@ window.SheepApp = window.SheepApp || {};
     animationFrame: 0,
     reducedMotion: prefersReducedMotion.matches,
     modalOpen: false,
+    enabled: true,
     activeAction: null,
     actionQueue: [],
     lastTurnAction: 'directionBack',
@@ -468,6 +473,43 @@ window.SheepApp = window.SheepApp || {};
   let sprite = null;
   let propSprite = null;
   let markedSurfaces = [];
+  let eventsBound = false;
+
+  function readStoredEnabledPreference() {
+    if (preferenceStorage && typeof preferenceStorage.getBoolean === 'function') {
+      const storedValue = preferenceStorage.getBoolean(sheepPreferenceKey);
+      return storedValue === null ? true : storedValue;
+    }
+
+    try {
+      const storedValue = window.localStorage.getItem(sheepPreferenceKey);
+
+      if (storedValue === 'true') {
+        return true;
+      }
+
+      if (storedValue === 'false') {
+        return false;
+      }
+    } catch (error) {
+      console.warn('Sheep preference read failed:', error);
+    }
+
+    return true;
+  }
+
+  function writeStoredEnabledPreference(enabled) {
+    if (preferenceStorage && typeof preferenceStorage.setBoolean === 'function') {
+      preferenceStorage.setBoolean(sheepPreferenceKey, enabled);
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(sheepPreferenceKey, enabled ? 'true' : 'false');
+    } catch (error) {
+      console.warn('Sheep preference write failed:', error);
+    }
+  }
 
   function randomBetween(min, max) {
     return min + (Math.random() * (max - min));
@@ -1481,6 +1523,16 @@ window.SheepApp = window.SheepApp || {};
       return;
     }
 
+    if (!state.enabled) {
+      stopLoop();
+      hideProp();
+      layer.hidden = true;
+      setFrame(NEUTRAL_FRAME, true);
+      return;
+    }
+
+    layer.hidden = false;
+
     const shouldSuspend = state.modalOpen || state.reducedMotion;
     layer.classList.toggle('is-suspended', shouldSuspend);
 
@@ -1589,6 +1641,11 @@ window.SheepApp = window.SheepApp || {};
   }
 
   function bindEvents() {
+    if (eventsBound) {
+      return;
+    }
+
+    eventsBound = true;
     document.addEventListener('show.bs.modal', onModalShown);
     document.addEventListener('hidden.bs.modal', onModalHidden);
     window.addEventListener('resize', onResize, { passive: true });
@@ -1604,12 +1661,17 @@ window.SheepApp = window.SheepApp || {};
     }
   }
 
-  function init() {
+  function ensureInitialized() {
     if (!document.body) {
       return;
     }
 
     if (document.querySelector('.sheep-layer')) {
+      layer = document.querySelector('.sheep-layer');
+      sprite = layer.querySelector('.sheep-layer__sprite');
+      propSprite = layer.querySelector('.sheep-layer__prop');
+      bindEvents();
+      syncPresentation();
       return;
     }
 
@@ -1619,6 +1681,44 @@ window.SheepApp = window.SheepApp || {};
     bindEvents();
     syncPresentation();
   }
+
+  function setEnabled(enabled) {
+    state.enabled = Boolean(enabled);
+    writeStoredEnabledPreference(state.enabled);
+
+    if (state.enabled) {
+      ensureInitialized();
+    }
+
+    syncPresentation();
+    return state.enabled;
+  }
+
+  function init() {
+    state.enabled = readStoredEnabledPreference();
+
+    if (!state.enabled) {
+      return;
+    }
+
+    ensureInitialized();
+  }
+
+  app.enable = function enableSheep() {
+    return setEnabled(true);
+  };
+
+  app.disable = function disableSheep() {
+    return setEnabled(false);
+  };
+
+  app.toggle = function toggleSheep() {
+    return setEnabled(!state.enabled);
+  };
+
+  app.isEnabled = function isSheepEnabled() {
+    return state.enabled;
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
