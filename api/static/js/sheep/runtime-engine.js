@@ -33,6 +33,7 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalPoint: options.arrivalPoint ?? null,
         arrivalSurfaceId: options.arrivalSurfaceId ?? null,
         keepPlayingOnArrival: options.keepPlayingOnArrival ?? definition.keepPlayingOnArrival,
+        waitForLanding: options.waitForLanding ?? definition.waitForLanding,
         onStart: composeCallbacks(definition.onStart, options.onStart),
         onComplete: composeCallbacks(definition.onComplete, options.onComplete)
       };
@@ -68,6 +69,7 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalPoint: action.arrivalPoint,
         arrivalSurfaceId: action.arrivalSurfaceId,
         keepPlayingOnArrival: action.keepPlayingOnArrival,
+        waitForLanding: action.waitForLanding,
         onStart: action.onStart,
         onComplete: action.onComplete,
         frameIndex: 0,
@@ -355,7 +357,29 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     function moveAction(action, deltaSeconds, timestamp) {
+      function completeLanding(fromX, fromY, toX, toY) {
+        const landingResult = services.surfacePlanner.findLandingSurfaceBetween(fromX, fromY, toX, toY);
+
+        if (!landingResult) {
+          return false;
+        }
+
+        const { surface: landingSurface, landingX } = landingResult;
+
+        action.arrivalSurfaceId = landingSurface.id;
+        action.arrivalPoint = {
+          x: services.surfacePlanner.clampXToSurface(landingSurface, landingX),
+          y: landingSurface.landY
+        };
+        finishActiveAction(timestamp, 'arrived');
+        return true;
+      }
+
       if (!action.target) {
+        if (action.waitForLanding) {
+          return;
+        }
+
         finishActiveAction(timestamp, 'missing-target');
         return;
       }
@@ -376,6 +400,10 @@ window.SheepInternals = window.SheepInternals || {};
           return;
         }
 
+        if (action.waitForLanding && completeLanding(state.x, state.y, state.x, state.y)) {
+          return;
+        }
+
         if (action.keepPlayingOnArrival) {
           action.target = null;
           action.lastVector = { dx: 0, dy: 0 };
@@ -389,8 +417,14 @@ window.SheepInternals = window.SheepInternals || {};
       state.direction = dx < 0 ? 1 : -1;
 
       const step = Math.min(distance, action.speed * deltaSeconds);
+      const previousX = state.x;
+      const previousY = state.y;
       state.x += (dx / distance) * step;
       state.y += (dy / distance) * step;
+
+      if (action.waitForLanding) {
+        completeLanding(previousX, previousY, state.x, state.y);
+      }
     }
 
     function animateAction(action, deltaMs, timestamp) {
@@ -420,6 +454,11 @@ window.SheepInternals = window.SheepInternals || {};
           action.frameIndex += 1;
           services.presentation.enterActionFrame(action, false);
           continue;
+        }
+
+        if (action.waitForLanding) {
+          action.frameElapsedMs = 0;
+          return;
         }
 
         finishActiveAction(timestamp, 'complete');
