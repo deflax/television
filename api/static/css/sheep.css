@@ -4,11 +4,19 @@
     --sheep-safe-top: 68px;
     --sheep-safe-bottom: 16px;
     --sheep-layer-z: 20;
+    --sheep-menu-z: 1;
     --sheep-sprite-opacity: 0.94;
     --sheep-prop-opacity: 0.9;
     --sheep-hidden-opacity: 0;
     --sheep-visible-opacity: 1;
     --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+    --sheep-menu-bg: rgba(14, 14, 18, 0.94);
+    --sheep-menu-border: rgba(255, 255, 255, 0.16);
+    --sheep-menu-text: rgba(255, 255, 255, 0.96);
+    --sheep-menu-text-muted: rgba(255, 255, 255, 0.72);
+    --sheep-menu-hover: rgba(255, 255, 255, 0.1);
+    --sheep-menu-radius: 12px;
+    --sheep-menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
 .sheep-layer {
@@ -44,10 +52,80 @@
 
 .sheep-layer__sprite {
     opacity: var(--sheep-sprite-opacity);
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 .sheep-layer__prop {
     opacity: var(--sheep-prop-opacity);
+}
+
+.sheep-layer__menu {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: var(--sheep-menu-z);
+    display: grid;
+    gap: 2px;
+    min-width: 132px;
+    padding: 6px;
+    pointer-events: auto;
+    color: var(--sheep-menu-text);
+    background: var(--sheep-menu-bg);
+    border: 1px solid var(--sheep-menu-border);
+    border-radius: var(--sheep-menu-radius);
+    box-shadow: var(--sheep-menu-shadow);
+    backdrop-filter: blur(8px);
+}
+
+.sheep-layer__menu::after {
+    content: '';
+    position: absolute;
+    left: calc(50% - 6px);
+    width: 12px;
+    height: 12px;
+    background: var(--sheep-menu-bg);
+    border-right: 1px solid var(--sheep-menu-border);
+    border-bottom: 1px solid var(--sheep-menu-border);
+    transform: rotate(45deg);
+}
+
+.sheep-layer__menu[data-side="top"]::after {
+    bottom: -7px;
+}
+
+.sheep-layer__menu[data-side="bottom"]::after {
+    top: -7px;
+    transform: rotate(225deg);
+}
+
+.sheep-layer__menu-item {
+    appearance: none;
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: inherit;
+    background: transparent;
+    font: 600 12px/1.2 Arial, Helvetica, sans-serif;
+    text-align: left;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.sheep-layer__menu-item:hover,
+.sheep-layer__menu-item:focus-visible {
+    background: var(--sheep-menu-hover);
+    color: var(--sheep-menu-text);
+    outline: none;
+}
+
+.sheep-layer__menu-item:active {
+    color: var(--sheep-menu-text-muted);
+}
+
+.sheep-layer.is-suspended .sheep-layer__sprite,
+.sheep-layer.is-suspended .sheep-layer__menu {
+    pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
