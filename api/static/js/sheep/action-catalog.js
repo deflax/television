@@ -290,23 +290,28 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 142, 100);
       addSequenceFrame(sequence, 143, 120);
 
-      return finalizeSequenceAction(sequence, {
-        waitForLanding: true,
-        onStart: (action) => {
-          const bounds = getBounds();
-          const maxEntryDepth = Math.min(180, Math.max(120, (bounds.maxY - bounds.minY) * 0.18));
+    return finalizeSequenceAction(sequence, {
+      waitForLanding: true,
+      onStart: (action) => {
+        const bounds = getBounds();
+        const maxEntryDepth = Math.min(180, Math.max(120, (bounds.maxY - bounds.minY) * 0.18));
 
           action.entryFromLeft = Math.random() < 0.5;
           state.abducted = false;
           state.abductedReturnAt = 0;
           state.x = action.entryFromLeft ? bounds.minX : bounds.maxX;
           state.y = clamp(bounds.minY + (Math.random() * maxEntryDepth), bounds.minY, bounds.minY + maxEntryDepth);
-          showSheep();
-          hideProp();
-          hideSecondaryProp();
+        showSheep();
+        hideProp();
+        hideSecondaryProp();
+      },
+      onComplete: (_action, _timestamp, reason) => {
+        if (reason === 'arrived' || reason === 'complete') {
+          queueAction('bath');
         }
-      });
-    }
+      }
+    });
+  }
 
     function createBlackSheepAction() {
       const sequence = createSequence();
