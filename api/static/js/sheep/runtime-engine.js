@@ -230,6 +230,48 @@ window.SheepInternals = window.SheepInternals || {};
       queueAction(actionName);
     }
 
+    function isSpecialAction(name) {
+      return services.actionCatalog.getSpecialActions().some((entry) => entry.name === name);
+    }
+
+    function triggerSpecialAction(name) {
+      if (!isSpecialAction(name)) {
+        return false;
+      }
+
+       if (
+        !state.enabled
+        || state.modalOpen
+        || state.reducedMotion
+        || !services.presentation.hasSprite()
+      ) {
+        return false;
+      }
+
+      cancelActiveAction();
+      clearQueuedActions();
+      services.surfacePlanner.refreshSurfaces();
+      services.surfacePlanner.snapToCurrentSurface();
+      clampPosition();
+
+      state.abducted = false;
+      state.abductedReturnAt = 0;
+      services.presentation.showSheep();
+      services.presentation.hideProp();
+      services.presentation.hideSecondaryProp();
+
+      if (name === 'roll') {
+        queueRollAction();
+      } else {
+        queueAction(name);
+      }
+
+      startNextAction();
+      services.presentation.applyPosition();
+      services.presentation.syncPresentation();
+      return true;
+    }
+
     function queueMarkedSurfaceDwellPlan() {
       const defaults = getDefaults();
       const surface = services.surfacePlanner.getCurrentSurface();
@@ -510,6 +552,7 @@ window.SheepInternals = window.SheepInternals || {};
       queueSleep,
       queueTravel,
       queueTurn,
+      triggerSpecialAction,
       startLoop,
       startNextAction,
       stopLoop

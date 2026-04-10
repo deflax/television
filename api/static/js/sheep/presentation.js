@@ -2,9 +2,23 @@ window.SheepInternals = window.SheepInternals || {};
 
 ((internals) => {
   function createPresentation(context) {
-    const { window, document, state, refs, config, prefersReducedMotion, services } = context;
+    const { window, document, state, refs, config, prefersReducedMotion, services, helpers } = context;
+    const { clamp } = helpers;
     let eventsBound = false;
     let scrollSyncFrame = 0;
+    const MENU_LABELS = Object.freeze({
+      call: 'Call',
+      yawn: 'Yawn',
+      stare: 'Stare',
+      roll: 'Roll',
+      alienVisit: 'Alien Visit',
+      ufoBlink: 'UFO Blink',
+      ghostPuff: 'Ghost Puff',
+      spaceSheep: 'Space Sheep',
+      bath: 'Bath',
+      eat: 'Eat',
+      water: 'Water'
+    });
 
     function getLayer() {
       return refs.layer;
@@ -22,8 +36,16 @@ window.SheepInternals = window.SheepInternals || {};
       return refs.secondaryPropSprite;
     }
 
+    function getMenu() {
+      return refs.menu;
+    }
+
     function hasSprite() {
       return Boolean(getSprite());
+    }
+
+    function isMenuOpen() {
+      return Boolean(state.menuOpen);
     }
 
     function getSpriteMetrics() {
@@ -160,6 +182,31 @@ window.SheepInternals = window.SheepInternals || {};
 
       applyPropPosition(state.prop, getPropSprite());
       applyPropPosition(state.secondaryProp, getSecondaryPropSprite());
+      positionMenu();
+    }
+
+    function positionMenu() {
+      const menu = getMenu();
+
+      if (!menu || !isMenuOpen() || !state.sheepVisible) {
+        return;
+      }
+
+      const metrics = getSpriteMetrics();
+      const viewportPadding = 8;
+      const menuWidth = menu.offsetWidth || 140;
+      const menuHeight = menu.offsetHeight || 0;
+      const centeredX = state.x + (metrics.width / 2) - (menuWidth / 2);
+      const menuX = clamp(centeredX, viewportPadding, Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding));
+      const aboveY = state.y - menuHeight - 10;
+      const belowY = state.y + metrics.height + 10;
+      const prefersTop = aboveY >= viewportPadding;
+      const menuY = prefersTop
+        ? aboveY
+        : Math.min(belowY, Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding));
+
+      menu.dataset.side = prefersTop ? 'top' : 'bottom';
+      menu.style.transform = `translate3d(${menuX}px, ${menuY}px, 0)`;
     }
 
     function enterActionFrame(action, force) {
@@ -185,12 +232,40 @@ window.SheepInternals = window.SheepInternals || {};
       return element;
     }
 
+    function createMenuButton(actionName) {
+      const button = document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'sheep-layer__menu-item';
+      button.dataset.action = actionName;
+      button.setAttribute('role', 'menuitem');
+      button.textContent = MENU_LABELS[actionName] || actionName;
+      return button;
+    }
+
+    function createMenuElement() {
+      const menu = document.createElement('div');
+
+      menu.className = 'sheep-layer__menu';
+      menu.hidden = true;
+      menu.setAttribute('role', 'menu');
+      menu.setAttribute('aria-label', 'Sheep special actions');
+
+      services.actionCatalog.getSpecialActions().forEach((entry) => {
+        menu.appendChild(createMenuButton(entry.name));
+      });
+
+      return menu;
+    }
+
     function assignLayerElements(layer) {
       refs.layer = layer;
+      layer.removeAttribute('aria-hidden');
       refs.sprite = layer.querySelector('.sheep-layer__sprite');
       const propSprites = layer.querySelectorAll('.sheep-layer__prop');
       refs.propSprite = propSprites[0] || null;
       refs.secondaryPropSprite = propSprites[1] || null;
+      refs.menu = layer.querySelector('.sheep-layer__menu');
 
       if (refs.sprite) {
         applySpriteSheetStyles(refs.sprite);
@@ -203,13 +278,17 @@ window.SheepInternals = window.SheepInternals || {};
       if (refs.secondaryPropSprite) {
         applySpriteSheetStyles(refs.secondaryPropSprite);
       }
+
+      if (!refs.menu) {
+        refs.menu = createMenuElement();
+        layer.appendChild(refs.menu);
+      }
     }
 
     function createLayer() {
       const layer = document.createElement('div');
 
       layer.className = 'sheep-layer';
-      layer.setAttribute('aria-hidden', 'true');
 
       const propSprite = createSpriteElement('sheep-layer__prop');
       propSprite.hidden = true;
@@ -218,16 +297,19 @@ window.SheepInternals = window.SheepInternals || {};
       secondaryPropSprite.hidden = true;
 
       const sprite = createSpriteElement('sheep-layer__sprite');
+      const menu = createMenuElement();
 
       layer.appendChild(propSprite);
       layer.appendChild(secondaryPropSprite);
       layer.appendChild(sprite);
+      layer.appendChild(menu);
       document.body.appendChild(layer);
 
       refs.layer = layer;
       refs.sprite = sprite;
       refs.propSprite = propSprite;
       refs.secondaryPropSprite = secondaryPropSprite;
+      refs.menu = menu;
     }
 
     function ensureLayer() {
@@ -255,17 +337,62 @@ window.SheepInternals = window.SheepInternals || {};
       scrollSyncFrame = 0;
     }
 
+    function closeSpecialActionMenu() {
+      const menu = getMenu();
+
+      state.menuOpen = false;
+
+      if (menu) {
+        menu.hidden = true;
+      }
+    }
+
+    function openSpecialActionMenu() {
+      const menu = getMenu();
+
+      if (!menu || !state.enabled || !state.sheepVisible) {
+        return;
+      }
+
+      state.menuOpen = true;
+      menu.hidden = false;
+      positionMenu();
+      syncPresentation();
+    }
+
+    function toggleSpecialActionMenu() {
+      if (isMenuOpen()) {
+        closeSpecialActionMenu();
+        syncPresentation();
+        return;
+      }
+
+      openSpecialActionMenu();
+    }
+
+    function isWithinInteractiveSheepUi(target) {
+      const sprite = getSprite();
+      const menu = getMenu();
+
+      return Boolean(
+        (sprite && sprite.contains(target))
+        || (menu && menu.contains(target))
+      );
+    }
+
     function syncPresentation() {
       const layer = getLayer();
       const sprite = getSprite();
+      const menu = getMenu();
 
-      if (!layer || !sprite) {
+      if (!layer || !sprite || !menu) {
         return;
       }
 
       if (!state.enabled) {
         cancelPendingScrollSync();
         services.runtimeEngine.stopLoop();
+        closeSpecialActionMenu();
         hideProp();
         hideSecondaryProp();
         layer.hidden = true;
@@ -275,13 +402,17 @@ window.SheepInternals = window.SheepInternals || {};
 
       layer.hidden = false;
 
-      const shouldSuspend = state.modalOpen || state.reducedMotion;
-      layer.classList.toggle('is-suspended', shouldSuspend);
+      menu.hidden = !isMenuOpen() || !state.sheepVisible;
 
-      if (shouldSuspend) {
+      const shouldHideLayer = state.modalOpen || state.reducedMotion;
+      const shouldPauseLoop = shouldHideLayer || isMenuOpen();
+      layer.classList.toggle('is-suspended', shouldHideLayer);
+
+      if (shouldPauseLoop) {
         cancelPendingScrollSync();
         services.runtimeEngine.stopLoop();
         setFrame(config.NEUTRAL_FRAME, true);
+        positionMenu();
         return;
       }
 
@@ -322,6 +453,11 @@ window.SheepInternals = window.SheepInternals || {};
 
     function onReducedMotionChange(event) {
       state.reducedMotion = event.matches;
+
+      if (state.reducedMotion) {
+        closeSpecialActionMenu();
+      }
+
       syncPresentation();
     }
 
@@ -353,6 +489,56 @@ window.SheepInternals = window.SheepInternals || {};
       });
     }
 
+    function onSpriteClick(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSpecialActionMenu();
+    }
+
+    function onMenuClick(event) {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const button = event.target.closest('.sheep-layer__menu-item');
+
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+
+      const { action } = button.dataset;
+
+      if (!action) {
+        return;
+      }
+
+      closeSpecialActionMenu();
+      syncPresentation();
+      services.runtimeEngine.triggerSpecialAction(action);
+    }
+
+    function onDocumentPointerDown(event) {
+      if (!isMenuOpen() || !(event.target instanceof Node)) {
+        return;
+      }
+
+      if (isWithinInteractiveSheepUi(event.target)) {
+        return;
+      }
+
+      closeSpecialActionMenu();
+      syncPresentation();
+    }
+
+    function onDocumentKeyDown(event) {
+      if (event.key !== 'Escape' || !isMenuOpen()) {
+        return;
+      }
+
+      closeSpecialActionMenu();
+      syncPresentation();
+    }
+
     function bindEvents() {
       if (eventsBound) {
         return;
@@ -361,8 +547,21 @@ window.SheepInternals = window.SheepInternals || {};
       eventsBound = true;
       document.addEventListener('show.bs.modal', onModalShown);
       document.addEventListener('hidden.bs.modal', onModalHidden);
+      document.addEventListener('pointerdown', onDocumentPointerDown, true);
+      document.addEventListener('keydown', onDocumentKeyDown);
       window.addEventListener('resize', onResize, { passive: true });
       window.addEventListener('scroll', onScroll, { passive: true });
+
+      const sprite = getSprite();
+      const menu = getMenu();
+
+      if (sprite) {
+        sprite.addEventListener('click', onSpriteClick);
+      }
+
+      if (menu) {
+        menu.addEventListener('click', onMenuClick);
+      }
 
       if (typeof prefersReducedMotion.addEventListener === 'function') {
         prefersReducedMotion.addEventListener('change', onReducedMotionChange);
@@ -384,6 +583,9 @@ window.SheepInternals = window.SheepInternals || {};
       hasSprite,
       hideProp,
       hideSheep,
+      isMenuOpen,
+      closeSpecialActionMenu,
+      openSpecialActionMenu,
       setFrame,
       setPropFrame,
       setSecondaryPropFrame,
