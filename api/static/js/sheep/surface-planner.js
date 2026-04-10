@@ -133,6 +133,40 @@ window.SheepInternals = window.SheepInternals || {};
       state.y = surface.landY;
     }
 
+    function findLandingSurfaceBetween(fromX, fromY, toX, toY) {
+      const verticalTravel = toY - fromY;
+
+      if (verticalTravel < 0) {
+        return null;
+      }
+
+      const candidates = [...markedSurfaces, getGroundSurface()]
+        .map((surface) => {
+          if (surface.landY < (fromY - 2) || surface.landY > (toY + 2)) {
+            return null;
+          }
+
+          const progress = verticalTravel <= 0
+            ? 1
+            : clamp((surface.landY - fromY) / verticalTravel, 0, 1);
+          const landingX = fromX + ((toX - fromX) * progress);
+
+          if (landingX < surface.minX || landingX > surface.maxX) {
+            return null;
+          }
+
+          return {
+            surface,
+            landingX,
+            score: surface.landY
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.score - right.score || left.surface.minX - right.surface.minX);
+
+      return candidates[0] || null;
+    }
+
     function getPathLength(origin, waypoints) {
       let cursor = origin;
       let length = 0;
@@ -448,6 +482,7 @@ window.SheepInternals = window.SheepInternals || {};
 
     return Object.freeze({
       clampXToSurface,
+      findLandingSurfaceBetween,
       getBounds,
       getCurrentSurface,
       getGroundSurface,

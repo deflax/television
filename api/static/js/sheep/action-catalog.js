@@ -125,7 +125,8 @@ window.SheepInternals = window.SheepInternals || {};
         loop: definition.loop,
         onStart: typeof definition.onStart === 'function' ? definition.onStart : null,
         onComplete: typeof definition.onComplete === 'function' ? definition.onComplete : null,
-        keepPlayingOnArrival: Boolean(definition.keepPlayingOnArrival)
+        keepPlayingOnArrival: Boolean(definition.keepPlayingOnArrival),
+        waitForLanding: Boolean(definition.waitForLanding)
       });
     }
 
@@ -172,7 +173,8 @@ window.SheepInternals = window.SheepInternals || {};
         loop: false,
         onStart: settings.onStart,
         onComplete: settings.onComplete,
-        keepPlayingOnArrival: settings.keepPlayingOnArrival
+        keepPlayingOnArrival: settings.keepPlayingOnArrival,
+        waitForLanding: settings.waitForLanding
       });
     }
 
@@ -271,8 +273,8 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 136, 120, (action) => {
         const bounds = getBounds();
         const goLeft = action.entryFromLeft ? false : true;
-        const horizontalTravel = Math.min(140, (goLeft ? state.x - bounds.minX : bounds.maxX - state.x) * 0.9);
-        const verticalTravel = Math.min(110, (bounds.maxY - state.y) * 0.9);
+        const horizontalTravel = Math.min(180, (goLeft ? state.x - bounds.minX : bounds.maxX - state.x) * 0.9);
+        const verticalTravel = bounds.maxY - state.y;
 
         action.target = {
           x: clamp(state.x + (goLeft ? horizontalTravel * -1 : horizontalTravel), bounds.minX, bounds.maxX),
@@ -289,6 +291,7 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 143, 120);
 
       return finalizeSequenceAction(sequence, {
+        waitForLanding: true,
         onStart: (action) => {
           const bounds = getBounds();
           const maxEntryDepth = Math.min(180, Math.max(120, (bounds.maxY - bounds.minY) * 0.18));
