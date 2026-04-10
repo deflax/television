@@ -82,15 +82,15 @@ window.SheepInternals = window.SheepInternals || {};
       edgeRetargetVerticalInset: 40,
       specialActionChance: 0.14,
       runChance: 0.2,
-      sleepChance: 0.16,
+      sleepChance: 0.50,
       surfaceActionChance: 0.32,
-      markedSurfaceDwellChance: 0.48,
+      markedSurfaceDwellChance: 0.40,
       abductedMeteorDelayMs: 6800,
       callResponseChance: 0.3,
       markedSurfaceDwellMinMs: 3200,
       markedSurfaceDwellMaxMs: 7600,
       markedSurfaceMinWalkDistance: 28,
-      rollTravelDistance: 220,
+      rollTravelDistance: 120,
       rollTravelMs: 3000,
       minRollDistance: 96,
       minSurfaceWidth: 36,
@@ -515,6 +515,7 @@ window.SheepInternals = window.SheepInternals || {};
         showProp(frame === 169 ? 147 : 148, PROP_PRESETS.bath);
       });
       addSequenceFrame(sequence, 10, 400, hideProp);
+      addSequenceFrame(sequence, 9, 400);
 
       return finalizeSequenceAction(sequence, {
         onComplete: hideProp
@@ -547,11 +548,11 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       addSequenceFrame(sequence, 3, 2000);
-      addSequenceFrame(sequence, 50, 300);
-      addSequenceFrame(sequence, 51, 300);
-      addSequenceFrame(sequence, 50, 300);
-      addSequenceFrame(sequence, 51, 300);
-      addSequenceFrame(sequence, 50, 300);
+      //addSequenceFrame(sequence, 50, 300);
+      //addSequenceFrame(sequence, 51, 300);
+      //addSequenceFrame(sequence, 50, 300);
+      //addSequenceFrame(sequence, 51, 300);
+      //addSequenceFrame(sequence, 50, 300);
       addSequenceFrame(sequence, 3, 300, hideProp);
 
       return finalizeSequenceAction(sequence, {
