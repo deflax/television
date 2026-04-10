@@ -62,7 +62,7 @@ window.SheepInternals = window.SheepInternals || {};
         flipWithDirection: true
       }),
       water: Object.freeze({
-        offsetX: 20,
+        offsetX: 30,
         offsetY: 10,
         attachToFacing: true,
         flipWithDirection: false
@@ -516,9 +516,6 @@ window.SheepInternals = window.SheepInternals || {};
       });
       addSequenceFrame(sequence, 10, 400, hideProp);
       addSequenceFrame(sequence, 171, 3000);
-      addSequenceFrame(sequence, 10, 400);
-      addSequenceFrame(sequence, 9, 400);
-      addSequenceFrame(sequence, 3, 400, hideProp);
 
       return finalizeSequenceAction(sequence, {
         onComplete: hideProp
