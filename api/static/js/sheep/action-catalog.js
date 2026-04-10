@@ -39,7 +39,7 @@ window.SheepInternals = window.SheepInternals || {};
     const PROP_PRESETS = Object.freeze({
       blackSheepVisitor: Object.freeze({
         offsetX: 0,
-        offsetY: 0,
+        offsetY: 12,
         attachToFacing: false,
         flipWithDirection: false
       }),
@@ -304,12 +304,17 @@ window.SheepInternals = window.SheepInternals || {};
       const frameTimings = [260, 240, 220, 280, 260, 340, 280, 240, 220, 260, 300, 220];
 
       addSequenceFrame(sequence, 73, frameTimings[0], (action) => {
+        const bounds = getBounds();
+
         action.approachFromLeft = typeof action.approachFromLeft === 'boolean'
           ? action.approachFromLeft
           : Math.random() < 0.5;
         state.direction = action.callDirection ?? (action.approachFromLeft ? 1 : -1);
+        action.entryOffsetX = action.approachFromLeft
+          ? bounds.minX - state.x
+          : bounds.maxX - state.x;
         showProp(144, PROP_PRESETS.blackSheepVisitor);
-        state.prop.offsetX = action.approachFromLeft ? -160 : 160;
+        state.prop.offsetX = action.entryOffsetX;
       });
       addSequenceFrame(sequence, 74, frameTimings[1], (action) => {
         showProp(145, PROP_PRESETS.blackSheepVisitor);
@@ -376,7 +381,13 @@ window.SheepInternals = window.SheepInternals || {};
       const sequence = createSequence();
 
       addSequenceFrame(sequence, 3, 220, (action) => {
-        action.ufoOffsetX = action.ufoOffsetX ?? (Math.random() < 0.5 ? -96 : 96);
+        if (typeof action.ufoOffsetX !== 'number') {
+          const bounds = getBounds();
+          action.ufoOffsetX = Math.random() < 0.5
+            ? bounds.minX - state.x
+            : bounds.maxX - state.x;
+        }
+
         showSecondaryProp(158, PROP_PRESETS.alienVisit);
         state.secondaryProp.offsetX = action.ufoOffsetX;
         state.secondaryProp.offsetY = -90;
