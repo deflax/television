@@ -55,12 +55,21 @@ window.SheepInternals = window.SheepInternals || {};
       offsetY: 0,
       attachToFacing: false,
       flipWithDirection: false
+    },
+    secondaryProp: {
+      visible: false,
+      currentFrame: null,
+      offsetX: 0,
+      offsetY: 0,
+      attachToFacing: false,
+      flipWithDirection: false
     }
   };
   const refs = {
     layer: null,
     sprite: null,
-    propSprite: null
+    propSprite: null,
+    secondaryPropSprite: null
   };
 
   function randomBetween(min, max) {
@@ -117,6 +126,9 @@ window.SheepInternals = window.SheepInternals || {};
     showProp(frame, preset) {
       context.services.presentation.showProp(frame, preset);
     },
+    showSecondaryProp(frame, preset) {
+      context.services.presentation.showSecondaryProp(frame, preset);
+    },
     showSheep() {
       context.services.presentation.showSheep();
     },
@@ -125,6 +137,9 @@ window.SheepInternals = window.SheepInternals || {};
     },
     hideProp() {
       context.services.presentation.hideProp();
+    },
+    hideSecondaryProp() {
+      context.services.presentation.hideSecondaryProp();
     }
   });
 
