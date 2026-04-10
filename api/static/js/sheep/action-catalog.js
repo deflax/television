@@ -503,44 +503,6 @@ window.SheepInternals = window.SheepInternals || {};
       });
     }
 
-    function createUfoBlinkAction() {
-      const sequence = createSequence();
-
-      addSequenceFrame(sequence, 3, 180, () => {
-        showProp(158, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 9, 220, () => {
-        showProp(170, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 10, 220, () => {
-        showProp(171, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 9, 220, () => {
-        showProp(170, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 3, 180, () => {
-        showProp(158, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 3, 160, hideProp);
-
-      return finalizeSequenceAction(sequence, {
-        onComplete: hideProp
-      });
-    }
-
-    function createGhostPuffAction() {
-      const sequence = createSequence();
-
-      addSequenceFrame(sequence, 3, 220, () => {
-        showProp(175, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 3, 180, hideProp);
-
-      return finalizeSequenceAction(sequence, {
-        onComplete: hideProp
-      });
-    }
-
     function createBathAction() {
       const sequence = createSequence();
 
@@ -749,8 +711,6 @@ window.SheepInternals = window.SheepInternals || {};
       meteor: createMeteorAction(),
       blackSheep: createBlackSheepAction(),
       alienVisit: createAlienVisitAction(),
-      ufoBlink: createUfoBlinkAction(),
-      ghostPuff: createGhostPuffAction(),
       bath: createBathAction(),
       eat: createEatAction(),
       water: createWaterAction(),
@@ -767,8 +727,6 @@ window.SheepInternals = window.SheepInternals || {};
       Object.freeze({ name: 'stare', weight: 0.8 }),
       Object.freeze({ name: 'roll', weight: 0.55 }),
       Object.freeze({ name: 'alienVisit', weight: 0.13 }),
-      Object.freeze({ name: 'ufoBlink', weight: 0.06 }),
-      Object.freeze({ name: 'ghostPuff', weight: 0.04 }),
       Object.freeze({ name: 'bath', weight: 0.7 }),
       Object.freeze({ name: 'eat', weight: 0.9 }),
       Object.freeze({ name: 'water', weight: 0.7 })

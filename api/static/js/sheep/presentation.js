@@ -12,8 +12,6 @@ window.SheepInternals = window.SheepInternals || {};
       stare: 'Stare',
       roll: 'Roll',
       alienVisit: 'Alien Visit',
-      ufoBlink: 'UFO Blink',
-      ghostPuff: 'Ghost Puff',
       bath: 'Bath',
       eat: 'Eat',
       water: 'Water'
