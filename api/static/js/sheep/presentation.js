@@ -18,6 +18,10 @@ window.SheepInternals = window.SheepInternals || {};
       return refs.propSprite;
     }
 
+    function getSecondaryPropSprite() {
+      return refs.secondaryPropSprite;
+    }
+
     function hasSprite() {
       return Boolean(getSprite());
     }
@@ -65,6 +69,10 @@ window.SheepInternals = window.SheepInternals || {};
       state.prop.currentFrame = applyAtlasFrame(getPropSprite(), frame, force, state.prop.currentFrame);
     }
 
+    function setSecondaryPropFrame(frame, force) {
+      state.secondaryProp.currentFrame = applyAtlasFrame(getSecondaryPropSprite(), frame, force, state.secondaryProp.currentFrame);
+    }
+
     function showProp(frame, preset) {
       const nextPreset = preset || services.actionCatalog.PROP_PRESETS.bath;
 
@@ -74,6 +82,17 @@ window.SheepInternals = window.SheepInternals || {};
       state.prop.attachToFacing = nextPreset.attachToFacing;
       state.prop.flipWithDirection = nextPreset.flipWithDirection;
       setPropFrame(frame, false);
+    }
+
+    function showSecondaryProp(frame, preset) {
+      const nextPreset = preset || services.actionCatalog.PROP_PRESETS.bath;
+
+      state.secondaryProp.visible = true;
+      state.secondaryProp.offsetX = nextPreset.offsetX;
+      state.secondaryProp.offsetY = nextPreset.offsetY;
+      state.secondaryProp.attachToFacing = nextPreset.attachToFacing;
+      state.secondaryProp.flipWithDirection = nextPreset.flipWithDirection;
+      setSecondaryPropFrame(frame, false);
     }
 
     function showSheep() {
@@ -101,6 +120,34 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
+    function hideSecondaryProp() {
+      state.secondaryProp.visible = false;
+      state.secondaryProp.currentFrame = null;
+
+      if (getSecondaryPropSprite()) {
+        getSecondaryPropSprite().hidden = true;
+      }
+    }
+
+    function applyPropPosition(propState, propSprite) {
+      if (!propSprite) {
+        return;
+      }
+
+      if (!propState.visible) {
+        propSprite.hidden = true;
+        return;
+      }
+
+      const propOffsetX = propState.attachToFacing
+        ? propState.offsetX * state.direction * -1
+        : propState.offsetX;
+      const propScaleX = propState.flipWithDirection ? state.direction : 1;
+
+      propSprite.hidden = false;
+      propSprite.style.transform = `translate3d(${state.x + propOffsetX}px, ${state.y + propState.offsetY}px, 0) scaleX(${propScaleX})`;
+    }
+
     function applyPosition() {
       const sprite = getSprite();
 
@@ -111,24 +158,8 @@ window.SheepInternals = window.SheepInternals || {};
       sprite.hidden = !state.sheepVisible;
       sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
 
-      const propSprite = getPropSprite();
-
-      if (!propSprite) {
-        return;
-      }
-
-      if (!state.prop.visible) {
-        propSprite.hidden = true;
-        return;
-      }
-
-      const propOffsetX = state.prop.attachToFacing
-        ? state.prop.offsetX * state.direction * -1
-        : state.prop.offsetX;
-      const propScaleX = state.prop.flipWithDirection ? state.direction : 1;
-
-      propSprite.hidden = false;
-      propSprite.style.transform = `translate3d(${state.x + propOffsetX}px, ${state.y + state.prop.offsetY}px, 0) scaleX(${propScaleX})`;
+      applyPropPosition(state.prop, getPropSprite());
+      applyPropPosition(state.secondaryProp, getSecondaryPropSprite());
     }
 
     function enterActionFrame(action, force) {
@@ -157,7 +188,9 @@ window.SheepInternals = window.SheepInternals || {};
     function assignLayerElements(layer) {
       refs.layer = layer;
       refs.sprite = layer.querySelector('.sheep-layer__sprite');
-      refs.propSprite = layer.querySelector('.sheep-layer__prop');
+      const propSprites = layer.querySelectorAll('.sheep-layer__prop');
+      refs.propSprite = propSprites[0] || null;
+      refs.secondaryPropSprite = propSprites[1] || null;
 
       if (refs.sprite) {
         applySpriteSheetStyles(refs.sprite);
@@ -165,6 +198,10 @@ window.SheepInternals = window.SheepInternals || {};
 
       if (refs.propSprite) {
         applySpriteSheetStyles(refs.propSprite);
+      }
+
+      if (refs.secondaryPropSprite) {
+        applySpriteSheetStyles(refs.secondaryPropSprite);
       }
     }
 
@@ -177,15 +214,20 @@ window.SheepInternals = window.SheepInternals || {};
       const propSprite = createSpriteElement('sheep-layer__prop');
       propSprite.hidden = true;
 
+      const secondaryPropSprite = createSpriteElement('sheep-layer__prop sheep-layer__prop--secondary');
+      secondaryPropSprite.hidden = true;
+
       const sprite = createSpriteElement('sheep-layer__sprite');
 
       layer.appendChild(propSprite);
+      layer.appendChild(secondaryPropSprite);
       layer.appendChild(sprite);
       document.body.appendChild(layer);
 
       refs.layer = layer;
       refs.sprite = sprite;
       refs.propSprite = propSprite;
+      refs.secondaryPropSprite = secondaryPropSprite;
     }
 
     function ensureLayer() {
@@ -225,6 +267,7 @@ window.SheepInternals = window.SheepInternals || {};
         cancelPendingScrollSync();
         services.runtimeEngine.stopLoop();
         hideProp();
+        hideSecondaryProp();
         layer.hidden = true;
         setFrame(config.NEUTRAL_FRAME, true);
         return;
@@ -343,8 +386,11 @@ window.SheepInternals = window.SheepInternals || {};
       hideSheep,
       setFrame,
       setPropFrame,
+      setSecondaryPropFrame,
       showProp,
+      showSecondaryProp,
       showSheep,
+      hideSecondaryProp,
       syncPresentation
     });
   }

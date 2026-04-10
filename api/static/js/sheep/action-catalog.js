@@ -109,9 +109,11 @@ window.SheepInternals = window.SheepInternals || {};
       queueSleep,
       getBounds,
       showProp,
+      showSecondaryProp,
       showSheep,
       hideSheep,
-      hideProp
+      hideProp,
+      hideSecondaryProp
     } = effects;
 
     function freezeAction(definition) {
@@ -292,6 +294,7 @@ window.SheepInternals = window.SheepInternals || {};
           state.abductedReturnAt = 0;
           showSheep();
           hideProp();
+          hideSecondaryProp();
         }
       });
     }
@@ -372,52 +375,93 @@ window.SheepInternals = window.SheepInternals || {};
     function createAlienVisitAction() {
       const sequence = createSequence();
 
-      addSequenceFrame(sequence, 3, 220, () => {
-        showProp(158, PROP_PRESETS.alienVisit);
+      addSequenceFrame(sequence, 3, 220, (action) => {
+        action.ufoOffsetX = action.ufoOffsetX ?? (Math.random() < 0.5 ? -96 : 96);
+        showSecondaryProp(158, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -90;
+        hideProp();
       });
-      addSequenceFrame(sequence, 9, 220, () => {
-        showProp(159, PROP_PRESETS.alienVisit);
+      addSequenceFrame(sequence, 9, 220, (action) => {
+        showSecondaryProp(159, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -96;
+      });
+      addSequenceFrame(sequence, 10, 220, (action) => {
+        showSecondaryProp(160, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -92;
+      });
+      addSequenceFrame(sequence, 10, 220, (action) => {
+        showSecondaryProp(161, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -92;
+        showProp(166, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX;
+        state.prop.offsetY = -28;
+      });
+      addSequenceFrame(sequence, 154, 220, (action) => {
+        showSecondaryProp(162, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -94;
+        showProp(167, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX;
+        state.prop.offsetY = -8;
+      });
+      addSequenceFrame(sequence, 155, 220, (action) => {
+        showSecondaryProp(163, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -96;
+        showProp(168, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX;
+        state.prop.offsetY = 12;
+      });
+      addSequenceFrame(sequence, 156, 240, (action) => {
+        showSecondaryProp(164, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -96;
+        showProp(166, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX + (action.ufoOffsetX < 0 ? 24 : -24);
+        state.prop.offsetY = 20;
+      });
+      addSequenceFrame(sequence, 157, 260, (action) => {
+        showSecondaryProp(165, PROP_PRESETS.alienVisit);
+        state.secondaryProp.offsetX = action.ufoOffsetX;
+        state.secondaryProp.offsetY = -96;
+        showProp(167, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX + (action.ufoOffsetX < 0 ? 52 : -52);
+        state.prop.offsetY = 20;
+      });
+      addSequenceFrame(sequence, 154, 220, (action) => {
+        hideSecondaryProp();
+        showProp(166, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX < 0 ? -108 : 108;
+        state.prop.offsetY = 18;
+      });
+      addSequenceFrame(sequence, 155, 220, (action) => {
+        showProp(167, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX < 0 ? -72 : 72;
+        state.prop.offsetY = 14;
+      });
+      addSequenceFrame(sequence, 156, 220, (action) => {
+        showProp(168, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX < 0 ? -38 : 38;
+        state.prop.offsetY = 8;
+      });
+      addSequenceFrame(sequence, 157, 260, (action) => {
+        showProp(169, PROP_PRESETS.alienVisit);
+        state.prop.offsetX = action.ufoOffsetX < 0 ? -8 : 8;
+        state.prop.offsetY = 0;
       });
       addSequenceFrame(sequence, 10, 220, () => {
-        showProp(160, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 10, 180, () => {
-        showProp(161, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 154, 220, () => {
-        showProp(162, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 155, 220, () => {
-        showProp(163, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 156, 220, () => {
-        showProp(164, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 157, 260, () => {
-        showProp(165, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 154, 220, () => {
-        showProp(166, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 155, 220, () => {
-        showProp(167, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 156, 220, () => {
-        showProp(168, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 157, 260, () => {
         hideSheep();
+        hideProp();
+        hideSecondaryProp();
         state.abducted = true;
         state.abductedReturnAt = state.lastTimestamp + DEFAULTS.abductedMeteorDelayMs;
-        showProp(169, PROP_PRESETS.alienVisit);
       });
-      addSequenceFrame(sequence, 10, 220, () => {
-        showProp(170, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 9, 320, () => {
-        showProp(171, PROP_PRESETS.alienVisit);
-      });
-      addSequenceFrame(sequence, 3, 220, hideProp);
+      addSequenceFrame(sequence, 9, 320);
+      addSequenceFrame(sequence, 3, 220);
 
       return finalizeSequenceAction(sequence, {
         onStart: () => {
@@ -425,8 +469,12 @@ window.SheepInternals = window.SheepInternals || {};
           state.abductedReturnAt = 0;
           showSheep();
           hideProp();
+          hideSecondaryProp();
         },
-        onComplete: hideProp
+        onComplete: () => {
+          hideProp();
+          hideSecondaryProp();
+        }
       });
     }
 
