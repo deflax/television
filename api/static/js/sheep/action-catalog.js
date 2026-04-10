@@ -80,7 +80,7 @@ window.SheepInternals = window.SheepInternals || {};
       sleepMaxMs: 28000,
       edgeRetargetMinInset: 48,
       edgeRetargetVerticalInset: 40,
-      specialActionChance: 0.28,
+      specialActionChance: 0.14,
       runChance: 0.2,
       sleepChance: 0.16,
       surfaceActionChance: 0.32,
