@@ -270,7 +270,7 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 135, 180);
       addSequenceFrame(sequence, 136, 120, (action) => {
         const bounds = getBounds();
-        const goLeft = Math.random() < 0.5;
+        const goLeft = action.entryFromLeft ? false : true;
         const horizontalTravel = Math.min(140, (goLeft ? state.x - bounds.minX : bounds.maxX - state.x) * 0.9);
         const verticalTravel = Math.min(110, (bounds.maxY - state.y) * 0.9);
 
@@ -289,9 +289,15 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 143, 120);
 
       return finalizeSequenceAction(sequence, {
-        onStart: () => {
+        onStart: (action) => {
+          const bounds = getBounds();
+          const maxEntryDepth = Math.min(180, Math.max(120, (bounds.maxY - bounds.minY) * 0.18));
+
+          action.entryFromLeft = Math.random() < 0.5;
           state.abducted = false;
           state.abductedReturnAt = 0;
+          state.x = action.entryFromLeft ? bounds.minX : bounds.maxX;
+          state.y = clamp(bounds.minY + (Math.random() * maxEntryDepth), bounds.minY, bounds.minY + maxEntryDepth);
           showSheep();
           hideProp();
           hideSecondaryProp();
