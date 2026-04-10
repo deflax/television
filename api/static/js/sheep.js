@@ -40,6 +40,7 @@ window.SheepInternals = window.SheepInternals || {};
     animationFrame: 0,
     reducedMotion: prefersReducedMotion.matches,
     modalOpen: false,
+    menuOpen: false,
     enabled: true,
     sheepVisible: true,
     abducted: false,
@@ -69,7 +70,8 @@ window.SheepInternals = window.SheepInternals || {};
     layer: null,
     sprite: null,
     propSprite: null,
-    secondaryPropSprite: null
+    secondaryPropSprite: null,
+    menu: null
   };
 
   function randomBetween(min, max) {
@@ -269,6 +271,14 @@ window.SheepInternals = window.SheepInternals || {};
       runtimeEngine.clampPosition();
       presentation.applyPosition();
     }
+  };
+
+  app.getSpecialActions = function getSheepSpecialActions() {
+    return actionCatalog.getSpecialActions().map((entry) => entry.name);
+  };
+
+  app.triggerSpecialAction = function triggerSheepSpecialAction(name) {
+    return runtimeEngine.triggerSpecialAction(name);
   };
 
   if (document.readyState === 'loading') {
