@@ -215,7 +215,7 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 107, 200);
       addSequenceFrame(sequence, 108, 2000);
       addRepeatedFrames(sequence, [110, 111], 4, 200);
-      addSequenceFrame(sequence, 109, 7000);
+      addSequenceFrame(sequence, 109, 2800);
       addSequenceFrame(sequence, 31, 200);
       addSequenceFrame(sequence, 3, 200);
 
