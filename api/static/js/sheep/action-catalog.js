@@ -604,8 +604,15 @@ window.SheepInternals = window.SheepInternals || {};
     function createWaterAction() {
       const sequence = createSequence();
 
-      addSequenceFrame(sequence, 3, 1000, () => {
-        showProp(152, PROP_PRESETS.water);
+      function showWaterProp(action, frame) {
+        action.startDirection = action.startDirection ?? state.direction;
+        showProp(frame, PROP_PRESETS.water);
+        state.prop.attachToFacing = false;
+        state.prop.offsetX = PROP_PRESETS.water.offsetX * action.startDirection * -1;
+      }
+
+      addSequenceFrame(sequence, 3, 1000, (action) => {
+        showWaterProp(action, 152);
       });
       addSequenceFrame(sequence, 12, 300);
       addSequenceFrame(sequence, 13, 300, (action) => {
@@ -616,8 +623,8 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 104, 300);
 
       [151, 150, 149, 153].forEach((propFrame, index) => {
-        addSequenceFrame(sequence, index % 2 === 0 ? 105 : 106, 300, () => {
-          showProp(propFrame, PROP_PRESETS.water);
+        addSequenceFrame(sequence, index % 2 === 0 ? 105 : 106, 300, (action) => {
+          showWaterProp(action, propFrame);
         });
       });
 
