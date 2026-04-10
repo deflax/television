@@ -515,7 +515,6 @@ window.SheepInternals = window.SheepInternals || {};
         showProp(frame === 169 ? 147 : 148, PROP_PRESETS.bath);
       });
       addSequenceFrame(sequence, 10, 400, hideProp);
-      addSequenceFrame(sequence, 171, 3000);
 
       return finalizeSequenceAction(sequence, {
         onComplete: hideProp
