@@ -677,7 +677,7 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     function createJumpDownAction() {
-      return createTraversalAction('jumpDown', [78, 77, 24, 84], [140, 150, 210, 160]);
+      return createTraversalAction('jumpDown', [78, 77, 24, 24], [140, 150, 210, 160]);
     }
 
     function createClimbDownAction() {
