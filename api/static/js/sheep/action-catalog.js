@@ -86,7 +86,7 @@ window.SheepInternals = window.SheepInternals || {};
       surfaceActionChance: 0.32,
       markedSurfaceDwellChance: 0.40,
       abductedMeteorDelayMs: 6800,
-      callResponseChance: 0.3,
+      callResponseChance: 0.35,
       markedSurfaceDwellMinMs: 3200,
       markedSurfaceDwellMaxMs: 7600,
       markedSurfaceMinWalkDistance: 28,
@@ -316,6 +316,7 @@ window.SheepInternals = window.SheepInternals || {};
     function createBlackSheepAction() {
       const sequence = createSequence();
       const frameTimings = [260, 240, 220, 280, 260, 340, 280, 240, 220, 260, 300, 220];
+      const visitorFrames = [154, 155, 156, 157];
 
       addSequenceFrame(sequence, 73, frameTimings[0], (action) => {
         const bounds = getBounds();
@@ -327,56 +328,56 @@ window.SheepInternals = window.SheepInternals || {};
         action.entryOffsetX = action.approachFromLeft
           ? bounds.minX - state.x
           : bounds.maxX - state.x;
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.entryOffsetX;
       });
       addSequenceFrame(sequence, 74, frameTimings[1], (action) => {
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -136 : 136;
       });
       addSequenceFrame(sequence, 75, frameTimings[2], (action) => {
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -108 : 108;
       });
       addSequenceFrame(sequence, 76, frameTimings[3], (action) => {
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -76 : 76;
       });
       addSequenceFrame(sequence, 172, frameTimings[4], (action) => {
         action.startDirection = action.startDirection ?? state.direction;
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -26 : 26;
       });
       addSequenceFrame(sequence, 173, frameTimings[5], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -18 : 18;
       });
       addSequenceFrame(sequence, 174, frameTimings[6], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -12 : 12;
       });
       addSequenceFrame(sequence, 173, frameTimings[7], (action) => {
         state.direction = action.startDirection ?? state.direction;
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -14 : 14;
       });
       addSequenceFrame(sequence, 74, frameTimings[8], (action) => {
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -72 : 72;
       });
       addSequenceFrame(sequence, 73, frameTimings[9], (action) => {
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -104 : 104;
       });
       addSequenceFrame(sequence, 74, frameTimings[10], (action) => {
-        showProp(144, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -136 : 136;
       });
       addSequenceFrame(sequence, 3, frameTimings[11], (action) => {
-        showProp(145, PROP_PRESETS.blackSheepVisitor);
+        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
         state.prop.offsetX = action.approachFromLeft ? -184 : 184;
       });
 
@@ -425,7 +426,7 @@ window.SheepInternals = window.SheepInternals || {};
         state.prop.offsetX = action.ufoOffsetX;
         state.prop.offsetY = -28;
       });
-      addSequenceFrame(sequence, 154, 220, (action) => {
+      addSequenceFrame(sequence, 10, 220, (action) => {
         showSecondaryProp(162, PROP_PRESETS.alienVisit);
         state.secondaryProp.offsetX = action.ufoOffsetX;
         state.secondaryProp.offsetY = -94;
@@ -433,7 +434,7 @@ window.SheepInternals = window.SheepInternals || {};
         state.prop.offsetX = action.ufoOffsetX;
         state.prop.offsetY = -8;
       });
-      addSequenceFrame(sequence, 155, 220, (action) => {
+      addSequenceFrame(sequence, 9, 220, (action) => {
         showSecondaryProp(163, PROP_PRESETS.alienVisit);
         state.secondaryProp.offsetX = action.ufoOffsetX;
         state.secondaryProp.offsetY = -96;
@@ -441,7 +442,7 @@ window.SheepInternals = window.SheepInternals || {};
         state.prop.offsetX = action.ufoOffsetX;
         state.prop.offsetY = 12;
       });
-      addSequenceFrame(sequence, 156, 240, (action) => {
+      addSequenceFrame(sequence, 10, 240, (action) => {
         showSecondaryProp(164, PROP_PRESETS.alienVisit);
         state.secondaryProp.offsetX = action.ufoOffsetX;
         state.secondaryProp.offsetY = -96;
@@ -449,7 +450,7 @@ window.SheepInternals = window.SheepInternals || {};
         state.prop.offsetX = action.ufoOffsetX + (action.ufoOffsetX < 0 ? 24 : -24);
         state.prop.offsetY = 20;
       });
-      addSequenceFrame(sequence, 157, 260, (action) => {
+      addSequenceFrame(sequence, 9, 260, (action) => {
         showSecondaryProp(165, PROP_PRESETS.alienVisit);
         state.secondaryProp.offsetX = action.ufoOffsetX;
         state.secondaryProp.offsetY = -96;
@@ -457,23 +458,23 @@ window.SheepInternals = window.SheepInternals || {};
         state.prop.offsetX = action.ufoOffsetX + (action.ufoOffsetX < 0 ? 52 : -52);
         state.prop.offsetY = 20;
       });
-      addSequenceFrame(sequence, 154, 220, (action) => {
+      addSequenceFrame(sequence, 10, 220, (action) => {
         hideSecondaryProp();
         showProp(166, PROP_PRESETS.alienVisit);
         state.prop.offsetX = action.ufoOffsetX < 0 ? -108 : 108;
         state.prop.offsetY = 18;
       });
-      addSequenceFrame(sequence, 155, 220, (action) => {
+      addSequenceFrame(sequence, 9, 220, (action) => {
         showProp(167, PROP_PRESETS.alienVisit);
         state.prop.offsetX = action.ufoOffsetX < 0 ? -72 : 72;
         state.prop.offsetY = 14;
       });
-      addSequenceFrame(sequence, 156, 220, (action) => {
+      addSequenceFrame(sequence, 10, 220, (action) => {
         showProp(168, PROP_PRESETS.alienVisit);
         state.prop.offsetX = action.ufoOffsetX < 0 ? -38 : 38;
         state.prop.offsetY = 8;
       });
-      addSequenceFrame(sequence, 157, 260, (action) => {
+      addSequenceFrame(sequence, 9, 260, (action) => {
         showProp(169, PROP_PRESETS.alienVisit);
         state.prop.offsetX = action.ufoOffsetX < 0 ? -8 : 8;
         state.prop.offsetY = 0;
