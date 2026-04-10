@@ -65,7 +65,7 @@ window.SheepInternals = window.SheepInternals || {};
         offsetX: 20,
         offsetY: 10,
         attachToFacing: true,
-        flipWithDirection: true
+        flipWithDirection: false
       })
     });
 
