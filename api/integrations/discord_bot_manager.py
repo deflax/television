@@ -902,7 +902,7 @@ class DiscordBotManager:
     async def _send_visitors_embed(self):
         """Send the visitors embed to the live channel.
 
-        If no visitors are connected, leaves the last visitor message unchanged.
+        If no visitors are connected, deletes the previous message instead.
         """
         try:
             channel = self.bot.get_channel(self.live_channel_id)
@@ -914,6 +914,7 @@ class DiscordBotManager:
             hls_only_ips = self.hls_viewer_ips or set()
 
             if not sse_visitors and not hls_only_ips:
+                await self._prune_all(channel)
                 return
 
             embed = self._build_visitors_embed()
