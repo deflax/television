@@ -49,13 +49,13 @@
                   <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle video">
                     <i class="fa fa-headphones"></i> audio only
                   </button>
-                  <button type="button" id="audio-poster-choose-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Choose local audio-only poster">
+                  <button type="button" id="audio-poster-choose-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Choose local audio-only poster" hidden>
                     <i class="fa fa-image"></i> poster
                   </button>
-                  <button type="button" id="audio-poster-reset-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Reset audio-only poster">
+                  <button type="button" id="audio-poster-reset-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Reset audio-only poster" hidden>
                     <i class="fa fa-rotate-left"></i> reset
                   </button>
-                  <input type="file" id="audio-poster-input" class="d-none" accept="image/*">
+                  <input type="file" id="audio-poster-input" class="visually-hidden" accept="image/*" tabindex="-1" aria-hidden="true">
                   <button type="button" id="sheep-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle sheep">
                     <i class="fa fa-paw"></i> sheep
                   </button>

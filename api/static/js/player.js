@@ -292,14 +292,23 @@ window.StreamApp = window.StreamApp || {};
       });
   }
 
+  function setAudioOnlyPosterControlsVisible(visible) {
+    [audioPosterChooseBtn, audioPosterResetBtn].forEach((control) => {
+      if (control) {
+        control.hidden = !visible;
+        control.disabled = !visible;
+      }
+    });
+  }
+
   function chooseAudioOnlyPoster() {
-    if (audioPosterInput) {
+    if (audioOnly && audioPosterInput) {
       audioPosterInput.click();
     }
   }
 
   function handleAudioOnlyPosterSelected() {
-    if (!audioPosterInput || !audioPosterInput.files || audioPosterInput.files.length === 0) {
+    if (!audioOnly || !audioPosterInput || !audioPosterInput.files || audioPosterInput.files.length === 0) {
       return;
     }
 
@@ -313,6 +322,10 @@ window.StreamApp = window.StreamApp || {};
   }
 
   function resetAudioOnlyPoster() {
+    if (!audioOnly) {
+      return;
+    }
+
     showDefaultAudioOnlyPoster();
     deleteStoredAudioOnlyPoster().catch((error) => {
       console.warn('Audio-only poster reset failed:', error);
@@ -336,6 +349,8 @@ window.StreamApp = window.StreamApp || {};
   function syncAudioOnlyView() {
     const videoPresentation = getVideoPresentationElement();
     const audioPoster = audioOnlyPoster;
+
+    setAudioOnlyPosterControlsVisible(audioOnly);
 
     if (!videoPresentation || !audioPoster) {
       return;
@@ -522,6 +537,7 @@ window.StreamApp = window.StreamApp || {};
   }
 
   // Initialize player
+  setAudioOnlyPosterControlsVisible(false);
   restoreAudioOnlyPoster();
   initPlayer();
 
