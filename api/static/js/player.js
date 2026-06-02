@@ -7,7 +7,17 @@ window.StreamApp = window.StreamApp || {};
 (function() {
   const video = document.querySelector("video");
   const streamMedia = document.getElementById('stream-media');
+  const audioOnlyPoster = document.getElementById('audio-only-poster');
+  const audioPosterChooseBtn = document.getElementById('audio-poster-choose-btn');
+  const audioPosterResetBtn = document.getElementById('audio-poster-reset-btn');
+  const audioPosterInput = document.getElementById('audio-poster-input');
   const hlsSource = '/live/stream.m3u8';
+  const audioOnlyPosterFallbackSrc = '/static/images/odeala.jpg';
+  const audioOnlyPosterStore = {
+    dbName: 'stream-audio-only-poster',
+    storeName: 'posters',
+    key: 'selected'
+  };
   const preferenceKeys = {
     audioOnly: 'stream.audioOnly',
     sheepEnabled: 'stream.sheepEnabled'
@@ -178,7 +188,136 @@ window.StreamApp = window.StreamApp || {};
   let audioOnly = false;
   let audioHls = null;
   let audioEl = null;
+  let audioOnlyPosterObjectUrl = null;
   let shouldRestoreAudioOnly = window.StreamApp.preferences.getBoolean(preferenceKeys.audioOnly) === true;
+
+  function openAudioOnlyPosterDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error('IndexedDB is not available'));
+        return;
+      }
+
+      const request = window.indexedDB.open(audioOnlyPosterStore.dbName, 1);
+
+      request.onupgradeneeded = () => {
+        const db = request.result;
+
+        if (!db.objectStoreNames.contains(audioOnlyPosterStore.storeName)) {
+          db.createObjectStore(audioOnlyPosterStore.storeName);
+        }
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function useAudioOnlyPosterStore(mode, action) {
+    return openAudioOnlyPosterDb().then((db) => {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(audioOnlyPosterStore.storeName, mode);
+        const store = transaction.objectStore(audioOnlyPosterStore.storeName);
+        const request = action(store);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => db.close();
+        transaction.onerror = () => {
+          db.close();
+          reject(transaction.error);
+        };
+        transaction.onabort = () => {
+          db.close();
+          reject(transaction.error);
+        };
+      });
+    });
+  }
+
+  function getStoredAudioOnlyPoster() {
+    return useAudioOnlyPosterStore('readonly', (store) => store.get(audioOnlyPosterStore.key));
+  }
+
+  function saveAudioOnlyPoster(file) {
+    return useAudioOnlyPosterStore('readwrite', (store) => store.put(file, audioOnlyPosterStore.key));
+  }
+
+  function deleteStoredAudioOnlyPoster() {
+    return useAudioOnlyPosterStore('readwrite', (store) => store.delete(audioOnlyPosterStore.key));
+  }
+
+  function revokeAudioOnlyPosterObjectUrl() {
+    if (audioOnlyPosterObjectUrl) {
+      URL.revokeObjectURL(audioOnlyPosterObjectUrl);
+      audioOnlyPosterObjectUrl = null;
+    }
+  }
+
+  function showDefaultAudioOnlyPoster() {
+    if (!audioOnlyPoster) {
+      return;
+    }
+
+    revokeAudioOnlyPosterObjectUrl();
+    audioOnlyPoster.src = audioOnlyPosterFallbackSrc;
+  }
+
+  function showStoredAudioOnlyPoster(blob) {
+    if (!audioOnlyPoster) {
+      return;
+    }
+
+    revokeAudioOnlyPosterObjectUrl();
+    audioOnlyPosterObjectUrl = URL.createObjectURL(blob);
+    audioOnlyPoster.src = audioOnlyPosterObjectUrl;
+  }
+
+  function restoreAudioOnlyPoster() {
+    if (!audioOnlyPoster) {
+      return Promise.resolve();
+    }
+
+    return getStoredAudioOnlyPoster()
+      .then((poster) => {
+        if (poster instanceof Blob) {
+          showStoredAudioOnlyPoster(poster);
+        } else {
+          showDefaultAudioOnlyPoster();
+        }
+      })
+      .catch((error) => {
+        console.warn('Audio-only poster restore failed:', error);
+        showDefaultAudioOnlyPoster();
+      });
+  }
+
+  function chooseAudioOnlyPoster() {
+    if (audioPosterInput) {
+      audioPosterInput.click();
+    }
+  }
+
+  function handleAudioOnlyPosterSelected() {
+    if (!audioPosterInput || !audioPosterInput.files || audioPosterInput.files.length === 0) {
+      return;
+    }
+
+    const file = audioPosterInput.files[0];
+
+    showStoredAudioOnlyPoster(file);
+    saveAudioOnlyPoster(file).catch((error) => {
+      console.warn('Audio-only poster save failed:', error);
+    });
+    audioPosterInput.value = '';
+  }
+
+  function resetAudioOnlyPoster() {
+    showDefaultAudioOnlyPoster();
+    deleteStoredAudioOnlyPoster().catch((error) => {
+      console.warn('Audio-only poster reset failed:', error);
+    });
+  }
 
   function getVideoPresentationElement() {
     return video.closest('.plyr') || video;
@@ -196,7 +335,7 @@ window.StreamApp = window.StreamApp || {};
 
   function syncAudioOnlyView() {
     const videoPresentation = getVideoPresentationElement();
-    const audioPoster = document.getElementById('audio-only-poster');
+    const audioPoster = audioOnlyPoster;
 
     if (!videoPresentation || !audioPoster) {
       return;
@@ -356,6 +495,20 @@ window.StreamApp = window.StreamApp || {};
     });
   }
 
+  if (audioPosterChooseBtn) {
+    audioPosterChooseBtn.addEventListener('click', chooseAudioOnlyPoster);
+  }
+
+  if (audioPosterInput) {
+    audioPosterInput.addEventListener('change', handleAudioOnlyPosterSelected);
+  }
+
+  if (audioPosterResetBtn) {
+    audioPosterResetBtn.addEventListener('click', resetAudioOnlyPoster);
+  }
+
+  window.addEventListener('beforeunload', revokeAudioOnlyPosterObjectUrl);
+
   if (sheepBtn) {
     updateSheepButton(getSheepEnabledState());
     sheepBtn.addEventListener('click', () => {
@@ -369,6 +522,7 @@ window.StreamApp = window.StreamApp || {};
   }
 
   // Initialize player
+  restoreAudioOnlyPoster();
   initPlayer();
 
   updateSheepButton(getSheepEnabledState());
