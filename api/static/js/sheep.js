@@ -356,7 +356,7 @@ window.SheepInternals = window.SheepInternals || {};
     manager.instances.push(sheep);
     sheep.ensureInitialized();
 
-    if (manager.instances.length >= MAX_SHEEP_COUNT) {
+    if (manager.instances.length > MAX_SHEEP_COUNT) {
       stopSpawnTimer();
     }
 
@@ -369,7 +369,7 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     const sheep = spawnSheep({ maxCount: MANUAL_MAX_SHEEP_COUNT });
-    const reachedCap = Boolean(sheep && manager.instances.length >= MANUAL_MAX_SHEEP_COUNT);
+    const reachedCap = Boolean(sheep && manager.instances.length > MANUAL_MAX_SHEEP_COUNT);
 
     if (reachedCap) {
       manager.manualCapResetPending = true;
@@ -383,7 +383,7 @@ window.SheepInternals = window.SheepInternals || {};
   }
 
   function startSpawnTimer() {
-    if (manager.spawnTimer || !manager.enabled || manager.instances.length >= MAX_SHEEP_COUNT) {
+    if (manager.spawnTimer || !manager.enabled || manager.instances.length > MAX_SHEEP_COUNT) {
       return;
     }
 
