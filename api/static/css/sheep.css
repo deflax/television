@@ -10,6 +10,7 @@
     --sheep-hidden-opacity: 0;
     --sheep-visible-opacity: 1;
     --sheep-hue-rotation: 0deg;
+    --sheep-colorize: 0;
     --sheep-saturation: 1;
     --sheep-contrast: 1;
     --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
@@ -55,7 +56,7 @@
 
 .sheep-layer__sprite {
     opacity: var(--sheep-sprite-opacity);
-    filter: hue-rotate(var(--sheep-hue-rotation)) saturate(var(--sheep-saturation)) contrast(var(--sheep-contrast)) var(--sheep-shadow);
+    filter: sepia(var(--sheep-colorize)) hue-rotate(var(--sheep-hue-rotation)) saturate(var(--sheep-saturation)) contrast(var(--sheep-contrast)) var(--sheep-shadow);
     pointer-events: auto;
     cursor: pointer;
 }
