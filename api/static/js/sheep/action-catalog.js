@@ -730,6 +730,11 @@ window.SheepInternals = window.SheepInternals || {};
       Object.freeze({ name: 'water', weight: 0.7 })
     ]);
 
+    const MENU_ACTIONS = Object.freeze([
+      ...SPECIAL_ACTIONS,
+      Object.freeze({ name: 'spawn' })
+    ]);
+
     function getActionDefinition(name) {
       return ACTIONS[name] || null;
     }
@@ -759,6 +764,9 @@ window.SheepInternals = window.SheepInternals || {};
       SPECIAL_ACTIONS,
       SURFACE_ACTION_CONFIG,
       getActionDefinition,
+      getMenuActions() {
+        return MENU_ACTIONS;
+      },
       getSpecialActions() {
         return SPECIAL_ACTIONS;
       },

@@ -14,7 +14,8 @@ window.SheepInternals = window.SheepInternals || {};
       alienVisit: 'Alien Visit',
       bath: 'Bath',
       eat: 'Eat',
-      water: 'Water'
+      water: 'Water',
+      spawn: 'Spawn'
     });
 
     function getLayer() {
@@ -252,7 +253,7 @@ window.SheepInternals = window.SheepInternals || {};
       menu.setAttribute('role', 'menu');
       menu.setAttribute('aria-label', 'Sheep special actions');
 
-      services.actionCatalog.getSpecialActions().forEach((entry) => {
+      services.actionCatalog.getMenuActions().forEach((entry) => {
         menu.appendChild(createMenuButton(entry.name));
       });
 
