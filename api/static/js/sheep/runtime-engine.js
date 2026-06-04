@@ -236,7 +236,7 @@ window.SheepInternals = window.SheepInternals || {};
       return services.actionCatalog.getMenuActions().some((entry) => entry.name === name);
     }
 
-    function triggerSpecialAction(name) {
+    function canTriggerSpecialAction(name) {
       if (!isMenuAction(name)) {
         return false;
       }
@@ -250,6 +250,18 @@ window.SheepInternals = window.SheepInternals || {};
         return false;
       }
 
+      return true;
+    }
+
+    function canTriggerMenuAction(name) {
+      return name !== 'spawn' && canTriggerSpecialAction(name);
+    }
+
+    function triggerSpecialAction(name) {
+      if (!canTriggerSpecialAction(name)) {
+        return false;
+      }
+
       if (name === 'spawn') {
         const spawnResult = effects.spawnManualSheep();
 
@@ -258,19 +270,20 @@ window.SheepInternals = window.SheepInternals || {};
         }
 
         if (spawnResult.reachedCap) {
-          triggerMenuAction('alienVisit', {
-            onComplete: effects.resetSheepInstancesToPrimary
-          });
+          effects.triggerManualCapAlienVisitReset();
         }
 
         return true;
       }
 
-      triggerMenuAction(name);
-      return true;
+      return triggerMenuAction(name);
     }
 
     function triggerMenuAction(name, overrides) {
+      if (!canTriggerMenuAction(name)) {
+        return false;
+      }
+
       const actionOptions = overrides || {};
 
       cancelActiveAction();
@@ -294,6 +307,7 @@ window.SheepInternals = window.SheepInternals || {};
       startNextAction();
       services.presentation.applyPosition();
       services.presentation.syncPresentation();
+      return true;
     }
 
     function queueMarkedSurfaceDwellPlan() {
@@ -613,6 +627,7 @@ window.SheepInternals = window.SheepInternals || {};
       queueSleep,
       queueTravel,
       queueTurn,
+      triggerMenuAction,
       triggerSpecialAction,
       startLoop,
       startNextAction,

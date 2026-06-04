@@ -139,6 +139,7 @@ window.SheepInternals = window.SheepInternals || {};
       spawnSheep: (options) => spawnSheep(options),
       spawnManualSheep: spawnManualSheep,
       resetSheepInstancesToPrimary: resetSheepInstancesToPrimary,
+      triggerManualCapAlienVisitReset: triggerManualCapAlienVisitReset,
       queueAction(name, overrides) {
         context.services.runtimeEngine.queueAction(name, overrides);
       },
@@ -307,6 +308,41 @@ window.SheepInternals = window.SheepInternals || {};
     }
   }
 
+  function triggerManualCapAlienVisitReset() {
+    const sheepSnapshot = manager.instances.slice();
+    let pendingCompletions = 0;
+    let resetApplied = false;
+
+    function resetAfterGroup() {
+      if (resetApplied) {
+        return;
+      }
+
+      resetApplied = true;
+      resetSheepInstancesToPrimary();
+    }
+
+    sheepSnapshot.forEach((sheep) => {
+      const triggered = sheep.runtimeEngine.triggerMenuAction('alienVisit', {
+        onComplete: () => {
+          pendingCompletions -= 1;
+
+          if (pendingCompletions === 0) {
+            resetAfterGroup();
+          }
+        }
+      });
+
+      if (triggered) {
+        pendingCompletions += 1;
+      }
+    });
+
+    if (pendingCompletions === 0) {
+      resetAfterGroup();
+    }
+  }
+
   function spawnSheep(options) {
     const { maxCount = MAX_SHEEP_COUNT } = options || {};
 
@@ -404,6 +440,7 @@ window.SheepInternals = window.SheepInternals || {};
   };
 
   app.toggle = function toggleSheep() {
+    resetSheepInstancesToPrimary();
     return setEnabled(!manager.enabled);
   };
 
