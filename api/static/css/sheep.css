@@ -9,6 +9,7 @@
     --sheep-prop-opacity: 0.9;
     --sheep-hidden-opacity: 0;
     --sheep-visible-opacity: 1;
+    --sheep-hue-rotation: 0deg;
     --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
     --sheep-menu-bg: rgba(14, 14, 18, 0.94);
     --sheep-menu-border: rgba(255, 255, 255, 0.16);
@@ -52,6 +53,7 @@
 
 .sheep-layer__sprite {
     opacity: var(--sheep-sprite-opacity);
+    filter: hue-rotate(var(--sheep-hue-rotation)) var(--sheep-shadow);
     pointer-events: auto;
     cursor: pointer;
 }

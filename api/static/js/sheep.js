@@ -64,11 +64,12 @@ window.SheepInternals = window.SheepInternals || {};
     };
   }
 
-  function createSheepState() {
+  function createSheepState(id) {
     return {
       x: 0,
       y: 0,
       direction: 1,
+      hueRotation: id === 1 ? 0 : Math.floor(randomBetween(1, 360)),
       currentFrame: null,
       lastTimestamp: 0,
       animationFrame: 0,
@@ -113,7 +114,7 @@ window.SheepInternals = window.SheepInternals || {};
   }
 
   function createSheepInstance(id) {
-    const state = createSheepState();
+    const state = createSheepState(id);
     const refs = createSheepRefs();
     const context = {
       window,

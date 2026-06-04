@@ -68,6 +68,14 @@ window.SheepInternals = window.SheepInternals || {};
       element.style.backgroundSize = `calc(var(--sheep-size) * ${config.SPRITE_COLUMNS}) calc(var(--sheep-size) * ${config.SPRITE_ROWS})`;
     }
 
+    function applySpriteHueStyles(element) {
+      if (!element) {
+        return;
+      }
+
+      element.style.setProperty('--sheep-hue-rotation', `${state.hueRotation}deg`);
+    }
+
     function applyAtlasFrame(element, frame, force, previousFrame) {
       if (!element) {
         return previousFrame;
@@ -271,6 +279,7 @@ window.SheepInternals = window.SheepInternals || {};
 
       if (refs.sprite) {
         applySpriteSheetStyles(refs.sprite);
+        applySpriteHueStyles(refs.sprite);
       }
 
       if (refs.propSprite) {
@@ -300,6 +309,7 @@ window.SheepInternals = window.SheepInternals || {};
       secondaryPropSprite.hidden = true;
 
       const sprite = createSpriteElement('sheep-layer__sprite');
+      applySpriteHueStyles(sprite);
       const menu = createMenuElement();
 
       layer.appendChild(propSprite);
