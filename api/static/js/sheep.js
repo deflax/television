@@ -19,8 +19,8 @@ window.SheepInternals = window.SheepInternals || {};
   app.initialized = true;
 
   const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
-  const MAX_SHEEP_COUNT = 3;
-  const MANUAL_MAX_SHEEP_COUNT = 6;
+  const MAX_SHEEP_COUNT = 4;
+  const MANUAL_MAX_SHEEP_COUNT = 7;
   const config = Object.freeze({
     SPRITE_SHEET_URL: '/static/vendor/sheep/rsc/sheep.png',
     SPRITE_COLUMNS: 16,
