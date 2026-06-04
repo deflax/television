@@ -394,6 +394,13 @@ window.SheepInternals = window.SheepInternals || {};
 
     function createAlienVisitAction() {
       const sequence = createSequence();
+      const getAlienTravelOffsetX = (action, progress) => {
+        const side = action.ufoOffsetX < 0 ? -1 : 1;
+        const dropOffsetX = action.ufoOffsetX + side * -52;
+        const sheepOffsetX = side * 8;
+
+        return dropOffsetX + (sheepOffsetX - dropOffsetX) * progress;
+      };
 
       addSequenceFrame(sequence, 3, 220, (action) => {
         if (typeof action.ufoOffsetX !== 'number') {
@@ -461,22 +468,22 @@ window.SheepInternals = window.SheepInternals || {};
       addSequenceFrame(sequence, 10, 220, (action) => {
         hideSecondaryProp();
         showProp(166, PROP_PRESETS.alienVisit);
-        state.prop.offsetX = action.ufoOffsetX < 0 ? -108 : 108;
+        state.prop.offsetX = getAlienTravelOffsetX(action, 0.25);
         state.prop.offsetY = 18;
       });
       addSequenceFrame(sequence, 9, 220, (action) => {
         showProp(167, PROP_PRESETS.alienVisit);
-        state.prop.offsetX = action.ufoOffsetX < 0 ? -72 : 72;
+        state.prop.offsetX = getAlienTravelOffsetX(action, 0.5);
         state.prop.offsetY = 14;
       });
       addSequenceFrame(sequence, 10, 220, (action) => {
         showProp(168, PROP_PRESETS.alienVisit);
-        state.prop.offsetX = action.ufoOffsetX < 0 ? -38 : 38;
+        state.prop.offsetX = getAlienTravelOffsetX(action, 0.75);
         state.prop.offsetY = 8;
       });
       addSequenceFrame(sequence, 9, 260, (action) => {
         showProp(169, PROP_PRESETS.alienVisit);
-        state.prop.offsetX = action.ufoOffsetX < 0 ? -8 : 8;
+        state.prop.offsetX = getAlienTravelOffsetX(action, 1);
         state.prop.offsetY = 0;
       });
       addSequenceFrame(sequence, 10, 220, () => {
