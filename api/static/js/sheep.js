@@ -18,7 +18,7 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.initialized = true;
 
-  const SHEEP_SPAWN_INTERVAL_MS = 20 * 60 * 1000;
+  const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
   const MAX_SHEEP_COUNT = 3;
   const MANUAL_MAX_SHEEP_COUNT = 6;
   const config = Object.freeze({
