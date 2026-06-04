@@ -70,6 +70,8 @@ window.SheepInternals = window.SheepInternals || {};
       y: 0,
       direction: 1,
       hueRotation: id === 1 ? 0 : Math.floor(randomBetween(1, 360)),
+      saturation: id === 1 ? 1 : 1.4,
+      contrast: id === 1 ? 1 : 1.05,
       currentFrame: null,
       lastTimestamp: 0,
       animationFrame: 0,

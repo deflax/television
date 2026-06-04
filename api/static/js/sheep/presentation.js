@@ -74,6 +74,8 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       element.style.setProperty('--sheep-hue-rotation', `${state.hueRotation}deg`);
+      element.style.setProperty('--sheep-saturation', state.saturation);
+      element.style.setProperty('--sheep-contrast', state.contrast);
     }
 
     function applyAtlasFrame(element, frame, force, previousFrame) {
