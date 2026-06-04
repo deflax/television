@@ -3,7 +3,6 @@ import asyncio
 import logging
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from time import monotonic
 from typing import Optional
 import discord
 from discord.ext.commands import Bot, CheckFailure, check
@@ -63,8 +62,6 @@ class DiscordBotManager:
         self._startup_greeting_sent = False
         self._visitor_debounce_handle = None  # asyncio.TimerHandle for debounced visitor updates
         self._visitor_debounce_seconds = 5.0  # coalesce rapid visitor changes into one Discord update
-        self._visitor_connect_log_last_sent = {}
-        self._visitor_connect_log_window_seconds = 300.0
 
         # Setup bot commands and events
         self._setup_bot_events()
@@ -638,41 +635,6 @@ class DiscordBotManager:
                 self.logger.warning(f'Failed to delete old message {old_msg.id}: {e}')
 
         return msg
-
-    def _should_log_visitor_connect(self, ip: str) -> bool:
-        now = monotonic()
-        last_sent = self._visitor_connect_log_last_sent.get(ip)
-        if last_sent is not None and (now - last_sent) < self._visitor_connect_log_window_seconds:
-            return False
-
-        self._visitor_connect_log_last_sent[ip] = now
-        return True
-
-    def log_visitor_connect(self, ip: str, count: int) -> bool:
-        if self.live_channel_id == 0:
-            return False
-        if not self.bot.is_ready():
-            self.logger.warning('Discord bot is not ready yet')
-            return False
-        if not self._should_log_visitor_connect(ip):
-            return False
-
-        return self._schedule_async(
-            self._send_visitor_connect_log_async(ip, count),
-            f'Failed to log visitor connect for {ip}'
-        )
-
-    async def _send_visitor_connect_log_async(self, ip: str, count: int) -> None:
-        if self.live_channel_id == 0:
-            return
-
-        channel = self.bot.get_channel(self.live_channel_id)
-        if channel is None:
-            self.logger.warning(f'Could not find live Discord channel with ID {self.live_channel_id}')
-            return
-
-        hostname = obfuscate_hostname(ip, ip)
-        await channel.send(f'👋 `{hostname}` connected ({count} visitors)')
 
     async def _prune_all(self, channel):
         """Delete all tracked bot messages for a channel without sending a new one."""
