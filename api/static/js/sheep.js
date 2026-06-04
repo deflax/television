@@ -18,6 +18,8 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.initialized = true;
 
+  const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
+  const MAX_SHEEP_COUNT = 6;
   const config = Object.freeze({
     SPRITE_SHEET_URL: '/static/vendor/sheep/rsc/sheep.png',
     SPRITE_COLUMNS: 16,
@@ -31,47 +33,11 @@ window.SheepInternals = window.SheepInternals || {};
   const sheepPreferenceKey = preferenceStorage && preferenceStorage.keys
     ? preferenceStorage.keys.sheepEnabled
     : 'stream.sheepEnabled';
-  const state = {
-    x: 0,
-    y: 0,
-    direction: 1,
-    currentFrame: null,
-    lastTimestamp: 0,
-    animationFrame: 0,
-    reducedMotion: prefersReducedMotion.matches,
-    modalOpen: false,
-    menuOpen: false,
+  const manager = {
     enabled: true,
-    sheepVisible: true,
-    abducted: false,
-    abductedReturnAt: 0,
-    activeAction: null,
-    actionQueue: [],
-    lastTurnAction: 'directionBack',
-    currentSurfaceId: config.GROUND_SURFACE_ID,
-    prop: {
-      visible: false,
-      currentFrame: null,
-      offsetX: 0,
-      offsetY: 0,
-      attachToFacing: false,
-      flipWithDirection: false
-    },
-    secondaryProp: {
-      visible: false,
-      currentFrame: null,
-      offsetX: 0,
-      offsetY: 0,
-      attachToFacing: false,
-      flipWithDirection: false
-    }
-  };
-  const refs = {
-    layer: null,
-    sprite: null,
-    propSprite: null,
-    secondaryPropSprite: null,
-    menu: null
+    instances: [],
+    nextSheepId: 1,
+    spawnTimer: 0
   };
 
   function randomBetween(min, max) {
@@ -86,7 +52,7 @@ window.SheepInternals = window.SheepInternals || {};
     const activeCallbacks = callbacks.filter((callback) => typeof callback === 'function');
 
     if (!activeCallbacks.length) {
-      return;
+      return undefined;
     }
 
     return (...args) => {
@@ -96,66 +62,181 @@ window.SheepInternals = window.SheepInternals || {};
     };
   }
 
-  const context = {
-    window,
-    document,
-    app,
-    config,
-    state,
-    refs,
-    prefersReducedMotion,
-    preferenceStorage,
-    sheepPreferenceKey,
-    helpers: {
-      clamp,
-      composeCallbacks,
-      randomBetween
-    },
-    effects: {},
-    services: {}
-  };
+  function createSheepState() {
+    return {
+      x: 0,
+      y: 0,
+      direction: 1,
+      currentFrame: null,
+      lastTimestamp: 0,
+      animationFrame: 0,
+      reducedMotion: prefersReducedMotion.matches,
+      modalOpen: false,
+      menuOpen: false,
+      enabled: manager.enabled,
+      sheepVisible: true,
+      abducted: false,
+      abductedReturnAt: 0,
+      activeAction: null,
+      actionQueue: [],
+      lastTurnAction: 'directionBack',
+      currentSurfaceId: config.GROUND_SURFACE_ID,
+      prop: {
+        visible: false,
+        currentFrame: null,
+        offsetX: 0,
+        offsetY: 0,
+        attachToFacing: false,
+        flipWithDirection: false
+      },
+      secondaryProp: {
+        visible: false,
+        currentFrame: null,
+        offsetX: 0,
+        offsetY: 0,
+        attachToFacing: false,
+        flipWithDirection: false
+      }
+    };
+  }
 
-  context.effects = Object.freeze({
-    queueAction(name, overrides) {
-      context.services.runtimeEngine.queueAction(name, overrides);
-    },
-    queueSleep(durationMs) {
-      context.services.runtimeEngine.queueSleep(durationMs);
-    },
-    getBounds() {
-      return context.services.surfacePlanner.getBounds();
-    },
-    showProp(frame, preset) {
-      context.services.presentation.showProp(frame, preset);
-    },
-    showSecondaryProp(frame, preset) {
-      context.services.presentation.showSecondaryProp(frame, preset);
-    },
-    showSheep() {
-      context.services.presentation.showSheep();
-    },
-    hideSheep() {
-      context.services.presentation.hideSheep();
-    },
-    hideProp() {
-      context.services.presentation.hideProp();
-    },
-    hideSecondaryProp() {
-      context.services.presentation.hideSecondaryProp();
+  function createSheepRefs() {
+    return {
+      layer: null,
+      sprite: null,
+      propSprite: null,
+      secondaryPropSprite: null,
+      menu: null
+    };
+  }
+
+  function createSheepInstance(id) {
+    const state = createSheepState();
+    const refs = createSheepRefs();
+    const context = {
+      window,
+      document,
+      app,
+      config,
+      sheepId: id,
+      state,
+      refs,
+      prefersReducedMotion,
+      preferenceStorage,
+      sheepPreferenceKey,
+      helpers: {
+        clamp,
+        composeCallbacks,
+        randomBetween
+      },
+      effects: {},
+      services: {}
+    };
+
+    context.effects = Object.freeze({
+      queueAction(name, overrides) {
+        context.services.runtimeEngine.queueAction(name, overrides);
+      },
+      queueSleep(durationMs) {
+        context.services.runtimeEngine.queueSleep(durationMs);
+      },
+      getBounds() {
+        return context.services.surfacePlanner.getBounds();
+      },
+      showProp(frame, preset) {
+        context.services.presentation.showProp(frame, preset);
+      },
+      showSecondaryProp(frame, preset) {
+        context.services.presentation.showSecondaryProp(frame, preset);
+      },
+      showSheep() {
+        context.services.presentation.showSheep();
+      },
+      hideSheep() {
+        context.services.presentation.hideSheep();
+      },
+      hideProp() {
+        context.services.presentation.hideProp();
+      },
+      hideSecondaryProp() {
+        context.services.presentation.hideSecondaryProp();
+      }
+    });
+
+    const presentation = internals.createPresentation(context);
+    context.services.presentation = presentation;
+
+    const actionCatalog = internals.createActionCatalog(context);
+    context.services.actionCatalog = actionCatalog;
+
+    const surfacePlanner = internals.createSurfacePlanner(context);
+    context.services.surfacePlanner = surfacePlanner;
+
+    const runtimeEngine = internals.createRuntimeEngine(context);
+    context.services.runtimeEngine = runtimeEngine;
+
+    function seedInitialPosition() {
+      const bounds = surfacePlanner.getBounds();
+      const groundSurface = surfacePlanner.getGroundSurface(bounds);
+
+      state.x = groundSurface.maxX;
+      state.y = groundSurface.landY;
+      state.direction = 1;
+      surfacePlanner.setCurrentSurface(groundSurface);
+      runtimeEngine.startNextAction();
+      runtimeEngine.clampPosition();
+      presentation.applyPosition();
     }
-  });
 
-  const presentation = internals.createPresentation(context);
-  context.services.presentation = presentation;
+    function ensureInitialized() {
+      const layerState = presentation.ensureLayer();
 
-  const actionCatalog = internals.createActionCatalog(context);
-  context.services.actionCatalog = actionCatalog;
+      if (!layerState) {
+        return;
+      }
 
-  const surfacePlanner = internals.createSurfacePlanner(context);
-  context.services.surfacePlanner = surfacePlanner;
+      if (!layerState.created) {
+        presentation.bindEvents();
+        presentation.syncPresentation();
+        return;
+      }
 
-  const runtimeEngine = internals.createRuntimeEngine(context);
-  context.services.runtimeEngine = runtimeEngine;
+      surfacePlanner.refreshSurfaces();
+      seedInitialPosition();
+      presentation.bindEvents();
+      presentation.syncPresentation();
+    }
+
+    function setEnabled(enabled) {
+      state.enabled = Boolean(enabled);
+
+      if (state.enabled) {
+        ensureInitialized();
+      }
+
+      presentation.syncPresentation();
+      return state.enabled;
+    }
+
+    function refreshSurfaces() {
+      surfacePlanner.refreshSurfaces();
+
+      if (!state.activeAction) {
+        surfacePlanner.snapToCurrentSurface();
+        runtimeEngine.clampPosition();
+        presentation.applyPosition();
+      }
+    }
+
+    return Object.freeze({
+      actionCatalog,
+      ensureInitialized,
+      refreshSurfaces,
+      runtimeEngine,
+      setEnabled,
+      state
+    });
+  }
 
   function readStoredEnabledPreference() {
     if (preferenceStorage && typeof preferenceStorage.getBoolean === 'function') {
@@ -193,58 +274,79 @@ window.SheepInternals = window.SheepInternals || {};
     }
   }
 
-  function seedInitialPosition() {
-    const bounds = surfacePlanner.getBounds();
-    const groundSurface = surfacePlanner.getGroundSurface(bounds);
-
-    state.x = groundSurface.maxX;
-    state.y = groundSurface.landY;
-    state.direction = 1;
-    surfacePlanner.setCurrentSurface(groundSurface);
-    runtimeEngine.startNextAction();
-    runtimeEngine.clampPosition();
-    presentation.applyPosition();
+  function getPrimarySheep() {
+    return manager.instances[0] || null;
   }
 
-  function ensureInitialized() {
-    const layerState = presentation.ensureLayer();
+  function spawnSheep() {
+    if (!manager.enabled || manager.instances.length >= MAX_SHEEP_COUNT) {
+      return null;
+    }
 
-    if (!layerState) {
+    const sheep = createSheepInstance(manager.nextSheepId);
+    manager.nextSheepId += 1;
+    manager.instances.push(sheep);
+    sheep.ensureInitialized();
+
+    if (manager.instances.length >= MAX_SHEEP_COUNT) {
+      stopSpawnTimer();
+    }
+
+    return sheep;
+  }
+
+  function ensurePrimarySheep() {
+    return getPrimarySheep() || spawnSheep();
+  }
+
+  function startSpawnTimer() {
+    if (manager.spawnTimer || !manager.enabled || manager.instances.length >= MAX_SHEEP_COUNT) {
       return;
     }
 
-    if (!layerState.created) {
-      presentation.bindEvents();
-      presentation.syncPresentation();
+    manager.spawnTimer = window.setInterval(spawnSheep, SHEEP_SPAWN_INTERVAL_MS);
+  }
+
+  function stopSpawnTimer() {
+    if (!manager.spawnTimer) {
       return;
     }
 
-    surfacePlanner.refreshSurfaces();
-    seedInitialPosition();
-    presentation.bindEvents();
-    presentation.syncPresentation();
+    window.clearInterval(manager.spawnTimer);
+    manager.spawnTimer = 0;
+  }
+
+  function syncInstancesEnabled(enabled) {
+    manager.instances.forEach((sheep) => {
+      sheep.setEnabled(enabled);
+    });
   }
 
   function setEnabled(enabled) {
-    state.enabled = Boolean(enabled);
-    writeStoredEnabledPreference(state.enabled);
+    manager.enabled = Boolean(enabled);
+    writeStoredEnabledPreference(manager.enabled);
 
-    if (state.enabled) {
-      ensureInitialized();
+    if (manager.enabled) {
+      ensurePrimarySheep();
+      syncInstancesEnabled(true);
+      startSpawnTimer();
+      return true;
     }
 
-    presentation.syncPresentation();
-    return state.enabled;
+    stopSpawnTimer();
+    syncInstancesEnabled(false);
+    return false;
   }
 
   function init() {
-    state.enabled = readStoredEnabledPreference();
+    manager.enabled = readStoredEnabledPreference();
 
-    if (!state.enabled) {
+    if (!manager.enabled) {
       return;
     }
 
-    ensureInitialized();
+    ensurePrimarySheep();
+    startSpawnTimer();
   }
 
   app.enable = function enableSheep() {
@@ -256,29 +358,36 @@ window.SheepInternals = window.SheepInternals || {};
   };
 
   app.toggle = function toggleSheep() {
-    return setEnabled(!state.enabled);
+    return setEnabled(!manager.enabled);
   };
 
   app.isEnabled = function isSheepEnabled() {
-    return state.enabled;
+    return manager.enabled;
   };
 
   app.refreshSurfaces = function refreshSheepSurfaces() {
-    surfacePlanner.refreshSurfaces();
-
-    if (!state.activeAction) {
-      surfacePlanner.snapToCurrentSurface();
-      runtimeEngine.clampPosition();
-      presentation.applyPosition();
-    }
+    manager.instances.forEach((sheep) => {
+      sheep.refreshSurfaces();
+    });
   };
 
   app.getSpecialActions = function getSheepSpecialActions() {
-    return actionCatalog.getSpecialActions().map((entry) => entry.name);
+    const sheep = getPrimarySheep();
+
+    if (!sheep) {
+      return [];
+    }
+
+    return sheep.actionCatalog.getSpecialActions().map((entry) => entry.name);
   };
 
   app.triggerSpecialAction = function triggerSheepSpecialAction(name) {
-    return runtimeEngine.triggerSpecialAction(name);
+    const sheep = getPrimarySheep();
+
+    if (!sheep) {
+      return false;
+    }
+    return sheep.runtimeEngine.triggerSpecialAction(name);
   };
 
   if (document.readyState === 'loading') {

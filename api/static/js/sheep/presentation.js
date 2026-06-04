@@ -2,7 +2,7 @@ window.SheepInternals = window.SheepInternals || {};
 
 ((internals) => {
   function createPresentation(context) {
-    const { window, document, state, refs, config, prefersReducedMotion, services, helpers } = context;
+    const { window, document, state, refs, config, prefersReducedMotion, services, helpers, sheepId } = context;
     const { clamp } = helpers;
     let eventsBound = false;
     let scrollSyncFrame = 0;
@@ -19,6 +19,10 @@ window.SheepInternals = window.SheepInternals || {};
 
     function getLayer() {
       return refs.layer;
+    }
+
+    function getLayerSelector() {
+      return `.sheep-layer[data-sheep-id="${sheepId}"]`;
     }
 
     function getSprite() {
@@ -286,6 +290,7 @@ window.SheepInternals = window.SheepInternals || {};
       const layer = document.createElement('div');
 
       layer.className = 'sheep-layer';
+      layer.dataset.sheepId = String(sheepId);
 
       const propSprite = createSpriteElement('sheep-layer__prop');
       propSprite.hidden = true;
@@ -314,7 +319,7 @@ window.SheepInternals = window.SheepInternals || {};
         return null;
       }
 
-      const existingLayer = document.querySelector('.sheep-layer');
+      const existingLayer = document.querySelector(getLayerSelector());
 
       if (existingLayer) {
         assignLayerElements(existingLayer);
