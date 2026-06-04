@@ -576,10 +576,55 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
+    function destroy() {
+      const sprite = getSprite();
+      const menu = getMenu();
+      const layer = getLayer();
+
+      cancelPendingScrollSync();
+
+      if (eventsBound) {
+        document.removeEventListener('show.bs.modal', onModalShown);
+        document.removeEventListener('hidden.bs.modal', onModalHidden);
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+        document.removeEventListener('keydown', onDocumentKeyDown);
+        window.removeEventListener('resize', onResize, { passive: true });
+        window.removeEventListener('scroll', onScroll, { passive: true });
+
+        if (sprite) {
+          sprite.removeEventListener('click', onSpriteClick);
+        }
+
+        if (menu) {
+          menu.removeEventListener('click', onMenuClick);
+        }
+
+        if (typeof prefersReducedMotion.removeEventListener === 'function') {
+          prefersReducedMotion.removeEventListener('change', onReducedMotionChange);
+        } else if (typeof prefersReducedMotion.removeListener === 'function') {
+          prefersReducedMotion.removeListener(onReducedMotionChange);
+        }
+      }
+
+      eventsBound = false;
+      closeSpecialActionMenu();
+
+      if (layer?.parentNode) {
+        layer.parentNode.removeChild(layer);
+      }
+
+      refs.layer = null;
+      refs.sprite = null;
+      refs.propSprite = null;
+      refs.secondaryPropSprite = null;
+      refs.menu = null;
+    }
+
     return Object.freeze({
       applyPosition,
       bindEvents,
       cancelPendingScrollSync,
+      destroy,
       ensureLayer,
       enterActionFrame,
       getSpriteMetrics,

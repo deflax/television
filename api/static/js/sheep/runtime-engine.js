@@ -2,7 +2,7 @@ window.SheepInternals = window.SheepInternals || {};
 
 ((internals) => {
   function createRuntimeEngine(context) {
-    const { window, state, helpers, services } = context;
+    const { window, state, helpers, effects, services } = context;
     const { randomBetween, clamp, composeCallbacks } = helpers;
 
     function getDefaults() {
@@ -232,16 +232,16 @@ window.SheepInternals = window.SheepInternals || {};
       queueAction(actionName);
     }
 
-    function isSpecialAction(name) {
-      return services.actionCatalog.getSpecialActions().some((entry) => entry.name === name);
+    function isMenuAction(name) {
+      return services.actionCatalog.getMenuActions().some((entry) => entry.name === name);
     }
 
     function triggerSpecialAction(name) {
-      if (!isSpecialAction(name)) {
+      if (!isMenuAction(name)) {
         return false;
       }
 
-       if (
+      if (
         !state.enabled
         || state.modalOpen
         || state.reducedMotion
@@ -249,6 +249,29 @@ window.SheepInternals = window.SheepInternals || {};
       ) {
         return false;
       }
+
+      if (name === 'spawn') {
+        const spawnResult = effects.spawnManualSheep();
+
+        if (!spawnResult.spawned) {
+          return false;
+        }
+
+        if (spawnResult.reachedCap) {
+          triggerMenuAction('alienVisit', {
+            onComplete: effects.resetSheepInstancesToPrimary
+          });
+        }
+
+        return true;
+      }
+
+      triggerMenuAction(name);
+      return true;
+    }
+
+    function triggerMenuAction(name, overrides) {
+      const actionOptions = overrides || {};
 
       cancelActiveAction();
       clearQueuedActions();
@@ -265,13 +288,12 @@ window.SheepInternals = window.SheepInternals || {};
       if (name === 'roll') {
         queueRollAction();
       } else {
-        queueAction(name);
+        queueAction(name, actionOptions);
       }
 
       startNextAction();
       services.presentation.applyPosition();
       services.presentation.syncPresentation();
-      return true;
     }
 
     function queueMarkedSurfaceDwellPlan() {

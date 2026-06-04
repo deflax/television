@@ -18,8 +18,9 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.initialized = true;
 
-  const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
-  const MAX_SHEEP_COUNT = 6;
+  const SHEEP_SPAWN_INTERVAL_MS = 20 * 60 * 1000;
+  const MAX_SHEEP_COUNT = 3;
+  const MANUAL_MAX_SHEEP_COUNT = 6;
   const config = Object.freeze({
     SPRITE_SHEET_URL: '/static/vendor/sheep/rsc/sheep.png',
     SPRITE_COLUMNS: 16,
@@ -37,6 +38,7 @@ window.SheepInternals = window.SheepInternals || {};
     enabled: true,
     instances: [],
     nextSheepId: 1,
+    manualCapResetPending: false,
     spawnTimer: 0
   };
 
@@ -134,6 +136,9 @@ window.SheepInternals = window.SheepInternals || {};
     };
 
     context.effects = Object.freeze({
+      spawnSheep: (options) => spawnSheep(options),
+      spawnManualSheep: spawnManualSheep,
+      resetSheepInstancesToPrimary: resetSheepInstancesToPrimary,
       queueAction(name, overrides) {
         context.services.runtimeEngine.queueAction(name, overrides);
       },
@@ -228,8 +233,16 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
+    function destroy() {
+      runtimeEngine.stopLoop();
+      runtimeEngine.cancelActiveAction();
+      runtimeEngine.clearQueuedActions();
+      presentation.destroy();
+    }
+
     return Object.freeze({
       actionCatalog,
+      destroy,
       ensureInitialized,
       refreshSurfaces,
       runtimeEngine,
@@ -278,8 +291,26 @@ window.SheepInternals = window.SheepInternals || {};
     return manager.instances[0] || null;
   }
 
-  function spawnSheep() {
-    if (!manager.enabled || manager.instances.length >= MAX_SHEEP_COUNT) {
+  function resetSheepInstancesToPrimary() {
+    const primarySheep = getPrimarySheep();
+
+    manager.instances.slice(1).forEach((sheep) => {
+      sheep.destroy();
+    });
+    manager.instances = primarySheep ? [primarySheep] : [];
+    manager.manualCapResetPending = false;
+
+    if (manager.enabled) {
+      ensurePrimarySheep();
+      syncInstancesEnabled(true);
+      startSpawnTimer();
+    }
+  }
+
+  function spawnSheep(options) {
+    const { maxCount = MAX_SHEEP_COUNT } = options || {};
+
+    if (!manager.enabled || manager.instances.length >= maxCount) {
       return null;
     }
 
@@ -293,6 +324,21 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     return sheep;
+  }
+
+  function spawnManualSheep() {
+    if (manager.manualCapResetPending) {
+      return { spawned: false, reachedCap: false };
+    }
+
+    const sheep = spawnSheep({ maxCount: MANUAL_MAX_SHEEP_COUNT });
+    const reachedCap = Boolean(sheep && manager.instances.length >= MANUAL_MAX_SHEEP_COUNT);
+
+    if (reachedCap) {
+      manager.manualCapResetPending = true;
+    }
+
+    return { spawned: Boolean(sheep), reachedCap };
   }
 
   function ensurePrimarySheep() {
