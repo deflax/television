@@ -164,6 +164,7 @@ cython_debug/
 #data folder
 data/
 logs/
+.omo/
 
 # env vars
 variables.env
