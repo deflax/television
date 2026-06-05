@@ -102,7 +102,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         finally:
             tracker_module.time.monotonic = original_monotonic
 
-    def test_public_ipv6_privacy_addresses_share_prefix_viewer(self):
+    def test_public_ipv6_addresses_count_separately_within_same_prefix(self):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
 
@@ -114,12 +114,17 @@ class HLSViewerTrackerTest(unittest.TestCase):
             asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:1111:2222:3333:4444'))
             asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:aaaa:bbbb:cccc:dddd'))
 
-            viewers = asyncio.run(read_viewers())
-            self.assertEqual(set(viewers.keys()), {'2001:4860:4860:abcd::/64'})
+            self.assertEqual(
+                set(asyncio.run(read_viewers()).keys()),
+                {
+                    '2001:4860:4860:abcd:1111:2222:3333:4444',
+                    '2001:4860:4860:abcd:aaaa:bbbb:cccc:dddd',
+                },
+            )
         finally:
             tracker_module.time.monotonic = original_monotonic
 
-    def test_public_ipv6_different_prefixes_count_separately(self):
+    def test_public_ipv6_canonical_form_is_used(self):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
 
@@ -128,15 +133,11 @@ class HLSViewerTrackerTest(unittest.TestCase):
 
         try:
             tracker_module.time.monotonic = lambda: 100.0
-            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:1111:2222:3333:4444'))
-            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abce:1111:2222:3333:4444'))
+            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:0000:0000:0000:0001'))
 
             self.assertEqual(
                 set(asyncio.run(read_viewers()).keys()),
-                {
-                    '2001:4860:4860:abcd::/64',
-                    '2001:4860:4860:abce::/64',
-                },
+                {'2001:4860:4860:abcd::1'},
             )
         finally:
             tracker_module.time.monotonic = original_monotonic

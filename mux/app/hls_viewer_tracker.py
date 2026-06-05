@@ -36,9 +36,6 @@ def _viewer_key(ip: str) -> str | None:
     if addr.is_private or addr.is_loopback:
         return None
 
-    if isinstance(addr, ipaddress.IPv6Address):
-        return str(ipaddress.ip_network(f'{addr}/64', strict=False))
-
     return str(addr)
 
 

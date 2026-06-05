@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false, reportImplicitRelativeImport=false
+
 import asyncio
 import copy
 import json
@@ -6,7 +8,7 @@ import time
 from quart import request
 
 from web.helpers import get_client_address
-from web.state import WebRouteState
+from web.state import WebRouteState, apply_hls_viewer_display_grace
 
 
 SSE_TO_HLS_GRACE_SECONDS = 45.0
@@ -70,22 +72,27 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         now = time.monotonic()
         _prune_recent_sse_disconnects(now)
 
-        reported_ips = set(data.get('viewers', {}).keys())
+        reported_ips = {str(ip) for ip in data.get('viewers', {}).keys()}
+        displayed_ips = apply_hls_viewer_display_grace(state, reported_ips, now)
         sse_ips = set(state.visitor_tracker.visitors.keys())
         grace_ips = {
             ip for ip, ts in state.recent_sse_disconnects.items() if ts >= now - SSE_TO_HLS_GRACE_SECONDS
         }
+        held_hls_ips = displayed_ips - reported_ips
         old_count = state.hls_viewer_count
         old_ips = state.hls_viewer_ips
-        state.hls_viewer_ips = reported_ips
-        state.hls_viewer_count = len(reported_ips)
+        state.hls_viewer_ips = displayed_ips
+        state.hls_viewer_count = len(displayed_ips)
 
         if state.hls_viewer_count != old_count or state.hls_viewer_ips != old_ips:
             message = ' '.join([
                 f'HLS viewers updated: hls={state.hls_viewer_count}',
+                f'raw_hls={len(reported_ips)}',
+                f'held_hls={len(held_hls_ips)}',
                 f'sse={state.visitor_tracker.count}',
                 f'grace={len(grace_ips)}',
-                f'hls_ips={sorted(reported_ips)}',
+                f'hls_ips={sorted(displayed_ips)}',
+                f'raw_hls_ips={sorted(reported_ips)}',
                 f'sse_ips={sorted(sse_ips)}',
             ])
             loggers.sse.info(message)
@@ -94,7 +101,7 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
             await _broadcast_visitors()
 
         if discord_bot_manager is not None:
-            discord_bot_manager.update_hls_viewers(reported_ips, state.hls_viewer_count)
+            discord_bot_manager.update_hls_viewers(displayed_ips, state.hls_viewer_count)
 
         return 'OK', 200
 
@@ -104,7 +111,7 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         client_ip = get_client_address(request)
         loggers.sse.info(f'[{client_ip}] SSE client connected')
 
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
         state.sse_clients.add(queue)
         state.recent_sse_disconnects.pop(client_ip, None)
         state.visitor_tracker.connect(client_ip)
