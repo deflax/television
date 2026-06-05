@@ -672,7 +672,7 @@ class DiscordBotManager:
             return
 
         hostname = obfuscate_hostname(ip, ip)
-        await channel.send(f'`{hostname}` connected. :alien: {count}')
+        await channel.send(f'`:sattelite: {hostname}`')
 
     async def _prune_all(self, channel):
         """Delete all tracked bot messages for a channel without sending a new one."""
