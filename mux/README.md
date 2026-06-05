@@ -78,6 +78,7 @@ This eliminates the "back and forth" playback issue caused by overlapping FFmpeg
 | `MUX_MODE` | `copy` | `copy` (passthrough) or `abr` (adaptive bitrate) |
 | `HLS_SEGMENT_TIME` | `4` | Segment duration in seconds |
 | `HLS_LIST_SIZE` | `20` | Max segments in playlist |
+| `HLS_VIEWER_TTL` | `90` | Seconds since last playlist fetch before an HLS viewer expires |
 | `TRANSITION_TIMEOUT` | `15` | Max seconds to wait for new stream segment |
 
 ### ABR Mode Settings

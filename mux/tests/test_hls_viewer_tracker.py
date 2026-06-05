@@ -26,7 +26,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
 
             self.assertEqual(
                 logs.output,
-                ['INFO:hls_viewer_tracker:HLS viewer connected: ip=8.8.8.8 active=1'],
+                ['INFO:hls_viewer_tracker:HLS viewer connected: viewer=8.8.8.8 active=1'],
             )
 
             with self.assertNoLogs('hls_viewer_tracker', level='INFO'):
@@ -42,7 +42,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
             tracker_module.time.monotonic = lambda: 100.0
             asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
 
-            tracker_module.time.monotonic = lambda: 131.0
+            tracker_module.time.monotonic = lambda: 191.0
 
             with self.assertLogs('hls_viewer_tracker', level='INFO') as logs:
                 asyncio.run(tracker.cleanup_expired())
@@ -52,7 +52,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
                 [
                     ''.join([
                         'INFO:hls_viewer_tracker:HLS viewer disconnected: ',
-                        'ip=8.8.8.8 active=0 reason=ttl_expired',
+                        'viewer=8.8.8.8 active=0 reason=ttl_expired',
                     ])
                 ],
             )
@@ -73,10 +73,71 @@ class HLSViewerTrackerTest(unittest.TestCase):
             tracker_module.time.monotonic = lambda: 100.0
             asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
 
-            tracker_module.time.monotonic = lambda: 131.0
+            tracker_module.time.monotonic = lambda: 191.0
 
             self.assertEqual(asyncio.run(read_count()), 0)
             self.assertEqual(asyncio.run(read_viewers()), {})
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+
+    def test_default_ttl_tolerates_slow_playlist_refresh(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        async def read_count() -> int:
+            return await tracker.count
+
+        try:
+            self.assertEqual(tracker_module.HLS_VIEWER_TTL, 90.0)
+
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            tracker_module.time.monotonic = lambda: 131.0
+            self.assertEqual(asyncio.run(read_count()), 1)
+
+            tracker_module.time.monotonic = lambda: 191.0
+            self.assertEqual(asyncio.run(read_count()), 0)
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+    def test_public_ipv6_privacy_addresses_share_prefix_viewer(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        async def read_viewers() -> dict[str, float]:
+            return await tracker.viewers
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:1111:2222:3333:4444'))
+            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:aaaa:bbbb:cccc:dddd'))
+
+            viewers = asyncio.run(read_viewers())
+            self.assertEqual(set(viewers.keys()), {'2001:4860:4860:abcd::/64'})
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+    def test_public_ipv6_different_prefixes_count_separately(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        async def read_viewers() -> dict[str, float]:
+            return await tracker.viewers
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abcd:1111:2222:3333:4444'))
+            asyncio.run(tracker.record_playlist_fetch('2001:4860:4860:abce:1111:2222:3333:4444'))
+
+            self.assertEqual(
+                set(asyncio.run(read_viewers()).keys()),
+                {
+                    '2001:4860:4860:abcd::/64',
+                    '2001:4860:4860:abce::/64',
+                },
+            )
         finally:
             tracker_module.time.monotonic = original_monotonic
 

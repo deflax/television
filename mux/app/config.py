@@ -3,17 +3,18 @@
 import os
 import json
 import logging
-from typing import TypeVar
+from typing import Callable, TypeAlias, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', int, float)
+ABRVariant: TypeAlias = dict[str, int | str]
 
 
 def _parse_env(
     name: str,
     default: T,
-    type_fn: type,
+    type_fn: Callable[[str], T],
     min_val: T | None = None,
     max_val: T | None = None,
 ) -> T:
@@ -54,6 +55,7 @@ API_URL = os.environ.get('API_URL', 'http://api:8080')
 HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = _parse_env('HLS_SEGMENT_TIME', 4, int, min_val=1, max_val=60)
 HLS_LIST_SIZE = _parse_env('HLS_LIST_SIZE', 20, int, min_val=3, max_val=100)
+HLS_VIEWER_TTL = _parse_env('HLS_VIEWER_TTL', 90.0, float, min_val=30.0, max_val=600.0)
 
 # Server settings
 SERVER_PORT = 8091
@@ -71,30 +73,48 @@ ABR_GOP_SIZE = _parse_env('ABR_GOP_SIZE', 48, int, min_val=1, max_val=300)
 ABR_THREADS = _parse_env('ABR_THREADS', 2, int, min_val=0, max_val=64)
 
 # ABR variants configuration
-DEFAULT_ABR_VARIANTS = [
+DEFAULT_ABR_VARIANTS: list[ABRVariant] = [
     {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
     {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"},
 ]
 
 
-def parse_abr_variants() -> list[dict]:
+def parse_abr_variants() -> list[ABRVariant]:
     """Parse ABR_VARIANTS from environment or use defaults."""
     variants_json = os.environ.get('ABR_VARIANTS', '')
     if variants_json:
         try:
-            variants = json.loads(variants_json)
-            if not isinstance(variants, list) or len(variants) == 0:
+            decoded = cast(object, json.loads(variants_json))
+            if not isinstance(decoded, list):
                 raise ValueError('ABR_VARIANTS must be a non-empty list')
-            
-            # Validate required keys in each variant
-            required_keys = {'height', 'video_bitrate', 'audio_bitrate'}
-            for i, v in enumerate(variants):
-                if not isinstance(v, dict):
+
+            decoded_items = cast(list[object], decoded)
+            if len(decoded_items) == 0:
+                raise ValueError('ABR_VARIANTS must be a non-empty list')
+
+            variants: list[ABRVariant] = []
+            for i, item in enumerate(decoded_items):
+                if not isinstance(item, dict):
                     raise ValueError(f'Variant {i} is not an object')
-                missing = required_keys - v.keys()
-                if missing:
-                    raise ValueError(f'Variant {i} missing keys: {missing}')
-            
+
+                item_map = cast(dict[object, object], item)
+                height = item_map.get('height')
+                video_bitrate = item_map.get('video_bitrate')
+                audio_bitrate = item_map.get('audio_bitrate')
+
+                if not isinstance(height, int):
+                    raise ValueError(f'Variant {i} height must be an integer')
+                if not isinstance(video_bitrate, str):
+                    raise ValueError(f'Variant {i} video_bitrate must be a string')
+                if not isinstance(audio_bitrate, str):
+                    raise ValueError(f'Variant {i} audio_bitrate must be a string')
+
+                variants.append({
+                    'height': height,
+                    'video_bitrate': video_bitrate,
+                    'audio_bitrate': audio_bitrate,
+                })
+
             logger.info(f"Using custom ABR variants: {variants}")
             return variants
         except (json.JSONDecodeError, ValueError) as e:
@@ -106,12 +126,18 @@ ABR_VARIANTS = parse_abr_variants()
 
 
 # Logging
-_VALID_LOG_LEVELS = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+_LOG_LEVELS = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARNING': logging.WARNING,
+    'ERROR': logging.ERROR,
+    'CRITICAL': logging.CRITICAL,
+}
 _raw_log_level = os.environ.get('MUX_LOG_LEVEL', 'INFO').upper()
-if _raw_log_level not in _VALID_LOG_LEVELS:
+if _raw_log_level not in _LOG_LEVELS:
     logger.warning(f'Invalid MUX_LOG_LEVEL={_raw_log_level!r}, using INFO')
     _raw_log_level = 'INFO'
-LOG_LEVEL = getattr(logging, _raw_log_level)
+LOG_LEVEL = _LOG_LEVELS[_raw_log_level]
 
 # Transition settings
 TRANSITION_TIMEOUT = _parse_env('TRANSITION_TIMEOUT', 15.0, float, min_val=1.0, max_val=120.0)
