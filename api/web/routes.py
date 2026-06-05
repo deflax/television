@@ -10,6 +10,7 @@ def register_routes(app, stream_manager, config, loggers, discord_bot_manager=No
 
     def on_visitor_connect(ip: str, count: int) -> None:
         if discord_bot_manager is not None:
+            discord_bot_manager.log_visitor_connect(ip, count)
             discord_bot_manager.log_visitor_change()
 
     def on_visitor_disconnect(ip: str, count: int) -> None:
