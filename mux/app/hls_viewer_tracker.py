@@ -52,17 +52,27 @@ class HLSViewerTracker:
             return
 
         async with self._lock:
+            is_new_viewer = ip not in self._viewers
             self._viewers[ip] = time.monotonic()
+            active_count = len(self._viewers)
+
+        if is_new_viewer:
+            logger.info(f'HLS viewer connected: ip={ip} active={active_count}')
 
     async def cleanup_expired(self) -> None:
         """Remove viewers that haven't fetched a playlist recently."""
         cutoff = time.monotonic() - VIEWER_TTL
+        active_count = 0
         async with self._lock:
             expired = [ip for ip, ts in self._viewers.items() if ts < cutoff]
             for ip in expired:
                 del self._viewers[ip]
             if expired:
                 logger.debug(f'Expired {len(expired)} HLS viewers')
+                active_count = len(self._viewers)
+
+        for ip in expired:
+            logger.info(f'HLS viewer disconnected: ip={ip} active={active_count} reason=ttl_expired')
 
     @property
     async def count(self) -> int:

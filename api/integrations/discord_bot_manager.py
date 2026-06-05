@@ -672,7 +672,7 @@ class DiscordBotManager:
             return
 
         hostname = obfuscate_hostname(ip, ip)
-        await channel.send(f'`{hostname}` connected. {count} :alien:')
+        await channel.send(f'`{hostname}` connected. :alien: {count}')
 
     async def _prune_all(self, channel):
         """Delete all tracked bot messages for a channel without sending a new one."""
@@ -931,7 +931,7 @@ class DiscordBotManager:
 
         total = len(sse_visitors) + len(hls_only_ips)
         return self._make_embed(
-            title=f':alien: {total}',
+                title=f'Visitors: {total} :alien:',
             description='\n'.join(visitor_lines),
             footer='🖥️ Browser  📡 External player',
             color=self.COLOR_INFO

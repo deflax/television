@@ -14,6 +14,51 @@ import hls_viewer_tracker as tracker_module
 
 
 class HLSViewerTrackerTest(unittest.TestCase):
+    def test_logs_connect_once_for_new_viewer(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+
+            with self.assertLogs('hls_viewer_tracker', level='INFO') as logs:
+                asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            self.assertEqual(
+                logs.output,
+                ['INFO:hls_viewer_tracker:HLS viewer connected: ip=8.8.8.8 active=1'],
+            )
+
+            with self.assertNoLogs('hls_viewer_tracker', level='INFO'):
+                asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+    def test_logs_disconnect_when_viewer_expires(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            tracker_module.time.monotonic = lambda: 131.0
+
+            with self.assertLogs('hls_viewer_tracker', level='INFO') as logs:
+                asyncio.run(tracker.cleanup_expired())
+
+            self.assertEqual(
+                logs.output,
+                [
+                    ''.join([
+                        'INFO:hls_viewer_tracker:HLS viewer disconnected: ',
+                        'ip=8.8.8.8 active=0 reason=ttl_expired',
+                    ])
+                ],
+            )
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
     def test_count_and_viewers_prune_expired_entries_on_read(self):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
