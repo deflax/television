@@ -953,7 +953,11 @@ class DiscordBotManager:
     def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
         """Update HLS viewer state and send visitors embed on changes."""
         old_ips = self.hls_viewer_ips
+        new_viewer_ips = new_ips - old_ips
         self.hls_viewer_ips = new_ips
+
+        for ip in sorted(new_viewer_ips):
+            self.log_visitor_connect(ip, total_count)
 
         if new_ips != old_ips:
             self._schedule_debounced_visitor_update()
