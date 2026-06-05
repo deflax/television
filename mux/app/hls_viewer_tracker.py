@@ -44,7 +44,7 @@ class HLSViewerTracker:
 
     def __init__(self):
         self._viewers: dict[str, float] = {}  # ip -> last_seen timestamp
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     async def record_playlist_fetch(self, ip: str) -> None:
         """Record that an IP fetched a playlist."""
@@ -67,12 +67,14 @@ class HLSViewerTracker:
     @property
     async def count(self) -> int:
         """Return the number of currently active HLS viewers."""
+        await self.cleanup_expired()
         async with self._lock:
             return len(self._viewers)
 
     @property
     async def viewers(self) -> dict[str, float]:
         """Return a snapshot of active viewers (ip -> last_seen)."""
+        await self.cleanup_expired()
         async with self._lock:
             return self._viewers.copy()
 
