@@ -905,10 +905,9 @@ class DiscordBotManager:
 
         Shared by the .visitors command and automatic connect/disconnect announcements.
         """
-        sse_visitors = self.visitor_tracker.visitors if self.visitor_tracker else {}
-        hls_only_ips = self.hls_viewer_ips or set()
+        hls_viewer_ips = self.hls_viewer_ips or set()
 
-        if not sse_visitors and not hls_only_ips:
+        if not hls_viewer_ips:
             return self._make_embed(
                 title=':alien:',
                 description='No :alien: connected.',
@@ -917,23 +916,15 @@ class DiscordBotManager:
 
         visitor_lines = []
 
-        for ip in sse_visitors:
-            hostname = obfuscate_hostname(ip, ip)
-            connections = sse_visitors[ip]
-            if connections > 1:
-                visitor_lines.append(f'🖥️ `{hostname}` ×{connections}')
-            else:
-                visitor_lines.append(f'🖥️ `{hostname}`')
-
-        for ip in hls_only_ips:
+        for ip in hls_viewer_ips:
             hostname = obfuscate_hostname(ip, ip)
             visitor_lines.append(f'📡 `{hostname}`')
 
-        total = len(sse_visitors) + len(hls_only_ips)
+        total = len(hls_viewer_ips)
         return self._make_embed(
                 title=f'Visitors: {total} :alien:',
             description='\n'.join(visitor_lines),
-            footer='🖥️ Browser  📡 External player',
+            footer='📡 HLS viewers',
             color=self.COLOR_INFO
         )
 
@@ -948,10 +939,9 @@ class DiscordBotManager:
                 self.logger.error(f'Could not find Discord channel with ID {self.live_channel_id}')
                 return
 
-            sse_visitors = self.visitor_tracker.visitors if self.visitor_tracker else {}
-            hls_only_ips = self.hls_viewer_ips or set()
+            hls_viewer_ips = self.hls_viewer_ips or set()
 
-            if not sse_visitors and not hls_only_ips:
+            if not hls_viewer_ips:
                 await self._prune_all(channel)
                 return
 

@@ -22,10 +22,9 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
                 del state.recent_sse_disconnects[ip]
 
     async def _broadcast_visitors() -> None:
-        total = state.visitor_tracker.count + state.hls_viewer_count
         event = {
             'type': 'visitors',
-            'data': json.dumps({'visitors': total}),
+            'data': json.dumps({'visitors': state.hls_viewer_count}),
         }
         for queue in list(state.sse_clients):
             try:
@@ -76,17 +75,26 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         grace_ips = {
             ip for ip, ts in state.recent_sse_disconnects.items() if ts >= now - SSE_TO_HLS_GRACE_SECONDS
         }
-        hls_only_ips = reported_ips - sse_ips - grace_ips
-
         old_count = state.hls_viewer_count
-        state.hls_viewer_count = len(hls_only_ips)
+        old_ips = state.hls_viewer_ips
+        state.hls_viewer_ips = reported_ips
+        state.hls_viewer_count = len(reported_ips)
+
+        if state.hls_viewer_count != old_count or state.hls_viewer_ips != old_ips:
+            message = ' '.join([
+                f'HLS viewers updated: hls={state.hls_viewer_count}',
+                f'sse={state.visitor_tracker.count}',
+                f'grace={len(grace_ips)}',
+                f'hls_ips={sorted(reported_ips)}',
+                f'sse_ips={sorted(sse_ips)}',
+            ])
+            loggers.sse.info(message)
 
         if state.hls_viewer_count != old_count:
             await _broadcast_visitors()
 
         if discord_bot_manager is not None:
-            total = state.visitor_tracker.count + state.hls_viewer_count
-            discord_bot_manager.update_hls_viewers(hls_only_ips, total)
+            discord_bot_manager.update_hls_viewers(reported_ips, state.hls_viewer_count)
 
         return 'OK', 200
 
@@ -108,8 +116,7 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
                     initial_data = json.dumps(stream_manager.playhead)
                     yield f'event: playhead\ndata: {initial_data}\n\n'
 
-                total = state.visitor_tracker.count + state.hls_viewer_count
-                yield f"event: visitors\ndata: {json.dumps({'visitors': total})}\n\n"
+                yield f"event: visitors\ndata: {json.dumps({'visitors': state.hls_viewer_count})}\n\n"
 
                 if stream_manager is not None:
                     yield f'event: epg\ndata: {json.dumps(stream_manager.database)}\n\n'

@@ -13,4 +13,5 @@ class WebRouteState:
     visitor_tracker: VisitorTracker
     sse_clients: set[asyncio.Queue] = field(default_factory=set)
     hls_viewer_count: int = 0
+    hls_viewer_ips: set[str] = field(default_factory=set)
     recent_sse_disconnects: dict[str, float] = field(default_factory=dict)
