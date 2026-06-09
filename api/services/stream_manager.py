@@ -13,20 +13,28 @@ from services.core_api import CoreAPIClient
 # Constants
 STREAM_ACCESS_RETRY_ATTEMPTS = 15
 STREAM_ACCESS_RETRY_INTERVAL = 6
+STREAM_ACCESS_TIMEOUT = 5
 FALLBACK_JOB_ID = 'fallback'
+DISABLED_STREAM_START = 'never'
 
 
-def parse_military_time(time_str: str) -> tuple:
-    """Parse a military time string (e.g. '1745') into (hour, minute).
-    
-    Also supports legacy hour-only format (e.g. '14') for backwards compatibility.
-    """
-    time_str = str(time_str).strip()
-    if len(time_str) <= 2:
-        # Legacy hour-only format: '0' to '23'
-        return int(time_str), 0
-    # Military time format: '0030', '1745', '2359'
-    return int(time_str[:-2]), int(time_str[-2:])
+def parse_military_time(time_str: str) -> tuple[int, int]:
+    """Parse HHMM or legacy hour-only time into a validated (hour, minute)."""
+    value = str(time_str).strip()
+    if not value.isdigit():
+        raise ValueError(f'invalid schedule time {time_str!r}: expected HHMM or hour')
+
+    if len(value) <= 2:
+        hour, minute = int(value), 0
+    elif len(value) == 4:
+        hour, minute = int(value[:-2]), int(value[-2:])
+    else:
+        raise ValueError(f'invalid schedule time {time_str!r}: expected HHMM or hour')
+
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError(f'invalid schedule time {time_str!r}: out of range')
+
+    return hour, minute
 
 
 class StreamManager:
@@ -137,6 +145,10 @@ class StreamManager:
         if stream_details:
             self.logger.info(f'Details found: {stream_details}')
         
+        if stream_start == DISABLED_STREAM_START:
+            self.logger.debug(f'{stream_id} ({stream_name}) disabled by start_at=never')
+            return
+
         if stream_start == "now":
             if not self._wait_for_stream_access(stream_hls_url, stream_name):
                 return
@@ -146,7 +158,12 @@ class StreamManager:
                 args=(stream_id, stream_name, stream_prio, stream_hls_url)
             )
         else:
-            cron_hour, cron_minute = parse_military_time(stream_start)
+            try:
+                cron_hour, cron_minute = parse_military_time(stream_start)
+            except ValueError as e:
+                self.logger.warning(f'{stream_id} ({stream_name}) skipped: {e}')
+                return
+
             self.scheduler.add_job(
                 func=self.exec_stream, 
                 trigger='cron', 
@@ -203,12 +220,16 @@ class StreamManager:
             time.sleep(STREAM_ACCESS_RETRY_INTERVAL)
             req_counter += 1
             try:
-                if requests.get(stream_hls_url).status_code == 200:
+                response = requests.get(stream_hls_url, timeout=STREAM_ACCESS_TIMEOUT)
+                if response.status_code == 200:
                     self.logger.info(
                         f'{stream_hls_url} accessible after {req_counter} attempts.'
                     )
                     return True
-            except Exception as e:
+                self.logger.debug(
+                    f'Stream access check returned {response.status_code}: {stream_hls_url}'
+                )
+            except requests.RequestException as e:
                 self.logger.debug(f'Stream access check failed: {e}')
             
             if req_counter == STREAM_ACCESS_RETRY_ATTEMPTS:
@@ -307,7 +328,7 @@ class StreamManager:
         
         # Collect scheduled times (in total minutes) from database
         for key, value in self.database.items():
-            if value['start_at'] in ("now", "never"):
+            if value['start_at'] in ("now", DISABLED_STREAM_START):
                 # Do not use non-time scheduled streams as fallbacks
                 continue
             try:
@@ -338,7 +359,7 @@ class StreamManager:
         
         # Find stream matching the closest time
         for key, value in self.database.items():
-            if value['start_at'] in ("now", "never"):
+            if value['start_at'] in ("now", DISABLED_STREAM_START):
                 continue
             try:
                 h, m = parse_military_time(value['start_at'])
