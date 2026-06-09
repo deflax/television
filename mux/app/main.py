@@ -15,7 +15,24 @@ import asyncio
 import logging
 import signal
 
-from config import MUX_MODE, HLS_SEGMENT_TIME, HLS_LIST_SIZE, ABR_VARIANTS, SERVER_PORT, API_URL, LOG_LEVEL
+from config import (
+    API_URL,
+    ABR_GOP_SIZE,
+    ABR_PRESET,
+    ABR_THREADS,
+    ABR_VARIANTS,
+    HLS_LIST_SIZE,
+    HLS_SEGMENT_CACHE_MAX_AGE,
+    HLS_SEGMENT_CACHE_STALE_REVALIDATE,
+    HLS_SEGMENT_TIME,
+    HLS_VIEWER_TTL,
+    LOG_LEVEL,
+    MAX_SEGMENT_AGE,
+    MUX_MODE,
+    SEGMENT_CACHE_CONTROL,
+    SERVER_PORT,
+    TRANSITION_TIMEOUT,
+)
 from hls_viewer_tracker import cleanup_loop as hls_cleanup_loop, report_loop as hls_report_loop
 from playhead_monitor import PlayheadMonitor
 from stream_manager import stream_manager
@@ -111,15 +128,18 @@ async def main() -> None:
     """Main entry point."""
     # Log startup info
     logger.info('Mux service starting...')
-    logger.info(
-        f'Mode: {MUX_MODE} | Segment time: {HLS_SEGMENT_TIME}s | '
-        f'Playlist size: {HLS_LIST_SIZE}'
-    )
+    logger.info('Mux settings: mode=%s api_url=%s server_port=%s transition_timeout=%ss',
+                MUX_MODE, API_URL, SERVER_PORT, TRANSITION_TIMEOUT)
+    logger.info('HLS settings: segment_time=%ss playlist_size=%s viewer_ttl=%ss segment_retention=%ss',
+                HLS_SEGMENT_TIME, HLS_LIST_SIZE, HLS_VIEWER_TTL, MAX_SEGMENT_AGE)
+    logger.info('HLS segment cache: max_age=%ss stale_revalidate=%ss cache_control="%s"',
+                HLS_SEGMENT_CACHE_MAX_AGE, HLS_SEGMENT_CACHE_STALE_REVALIDATE, SEGMENT_CACHE_CONTROL)
     if MUX_MODE == 'abr':
         variant_desc = ', '.join(
             f"{v['height']}p@{v['video_bitrate']}" for v in ABR_VARIANTS
         )
-        logger.info(f'ABR variants: source (copy) + {variant_desc}')
+        logger.info('ABR settings: preset=%s gop_size=%s threads=%s variants=source(copy)+%s',
+                    ABR_PRESET, ABR_GOP_SIZE, ABR_THREADS, variant_desc)
     
     # Setup signal handlers
     loop = asyncio.get_running_loop()
