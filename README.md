@@ -157,7 +157,6 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `API_LOG_LEVEL_CONTENT` | Log level for content/routes (default: `INFO`) |
 | `API_LOG_LEVEL_DISCORD` | Log level for Discord bot (default: `INFO`) |
 | `API_LOG_LEVEL_SSE` | Log level for SSE events (default: `WARN`) |
-| `API_VOD_TOKEN` | Bearer token for video upload API |
 | `FLASK_SECRET_KEY` | Flask session encryption key |
 | `TIMECODE_SECRET_KEY` | HMAC key for archive timecodes |
 | `DISCORDBOT_ENABLED` | Enable Discord bot (`true`/`false`, default: `false`) |
@@ -302,7 +301,6 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `/health` | GET | Public | Health check endpoint |
 | `/live.m3u8` | GET | Public | IPTV playlist (dynamic) |
 | `/epg.xml` | GET | Public | XMLTV EPG (dynamic) |
-| `/video` | POST | Bearer | Upload video files |
 | `/video/watch/<name>` | GET | Timecode | Video player page |
 | `/video/<file>` | GET | Timecode | Stream video file |
 | `/video/download/<file>` | GET | Timecode | Download video file |
@@ -360,7 +358,6 @@ television/
 │   │   ├── api_routes.py
 │   │   ├── playlist_routes.py
 │   │   ├── sse_routes.py
-│   │   └── ingest_routes.py
 │   ├── utils/
 │   │   └── obfuscation.py       # Hostname obfuscation
 │   ├── Dockerfile

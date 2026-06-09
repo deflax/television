@@ -28,4 +28,4 @@ def register_routes(app, stream_manager, config, loggers, discord_bot_manager=No
         discord_bot_manager.visitor_tracker = state.visitor_tracker
 
     register_frontend_routes(app, config, loggers, state)
-    register_api_routes(app, stream_manager, config, loggers, discord_bot_manager, state)
+    register_api_routes(app, stream_manager, loggers, discord_bot_manager, state)

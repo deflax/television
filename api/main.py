@@ -32,7 +32,6 @@ class Config:
         self.log_level_discord = os.environ.get('API_LOG_LEVEL_DISCORD', 'INFO').upper()
         self.log_level_sse = os.environ.get('API_LOG_LEVEL_SSE', 'WARN').upper()
 
-        self.vod_token = os.environ.get('API_VOD_TOKEN')
         self.core_hostname = os.environ.get('CORE_API_HOSTNAME', 'stream.example.com')
         self.core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
         self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
