@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false, reportImplicitOverride=false, reportAny=false, reportUnusedCallResult=false
 
 import importlib
+import logging
 import os
 import sys
 import unittest
@@ -76,6 +77,20 @@ class HLSConfigTest(unittest.TestCase):
         expected_minimum = int(config.MAX_SEGMENT_AGE / config.HLS_SEGMENT_TIME) + 1
         self.assertGreaterEqual(segment_store.MAX_SEGMENTS_IN_MEMORY, expected_minimum)
         sys.modules.pop('segment_store', None)
+
+    def test_warn_log_level_alias_is_supported(self):
+        os.environ['MUX_LOG_LEVEL'] = 'WARN'
+
+        config = self._load_config()
+
+        self.assertEqual(config.LOG_LEVEL, logging.WARNING)
+
+    def test_lowercase_warn_log_level_alias_is_supported(self):
+        os.environ['MUX_LOG_LEVEL'] = 'warn'
+
+        config = self._load_config()
+
+        self.assertEqual(config.LOG_LEVEL, logging.WARNING)
 
 
 if __name__ == '__main__':
