@@ -176,6 +176,9 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `MUX_MODE` | `copy` | Mode: `copy` (passthrough) or `abr` (adaptive bitrate) |
 | `HLS_SEGMENT_TIME` | `4` | HLS segment duration (seconds) |
 | `HLS_LIST_SIZE` | `20` | Number of segments in playlist |
+| `HLS_SEGMENT_CACHE_MAX_AGE` | `300` | Seconds segment responses may be cached |
+| `HLS_SEGMENT_CACHE_STALE_REVALIDATE` | `60` | Seconds stale cached segments may be used while revalidating |
+| `HLS_SEGMENT_RETENTION_SECONDS` | `440` | Seconds segment files are retained; clamped to at least playlist window plus cache lifetime |
 | `HLS_VIEWER_TTL` | `90` | Seconds since last playlist fetch before an HLS viewer expires |
 | `ABR_PRESET` | `veryfast` | x264 encoder preset (ABR mode only) |
 | `ABR_GOP_SIZE` | `48` | Keyframe interval in frames (ABR mode only) |

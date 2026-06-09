@@ -78,6 +78,9 @@ This eliminates the "back and forth" playback issue caused by overlapping FFmpeg
 | `MUX_MODE` | `copy` | `copy` (passthrough) or `abr` (adaptive bitrate) |
 | `HLS_SEGMENT_TIME` | `4` | Segment duration in seconds |
 | `HLS_LIST_SIZE` | `20` | Max segments in playlist |
+| `HLS_SEGMENT_CACHE_MAX_AGE` | `300` | Seconds segment responses may be cached |
+| `HLS_SEGMENT_CACHE_STALE_REVALIDATE` | `60` | Seconds stale cached segments may be used while revalidating |
+| `HLS_SEGMENT_RETENTION_SECONDS` | `440` | Seconds segment files are retained; clamped to at least playlist window plus cache lifetime |
 | `HLS_VIEWER_TTL` | `90` | Seconds since last playlist fetch before an HLS viewer expires |
 | `TRANSITION_TIMEOUT` | `15` | Max seconds to wait for new stream segment |
 
@@ -196,5 +199,6 @@ The `head` field contains the HLS stream URL to switch to. The `name` field is u
 
 ### Segments not cleaning up
 - Cleanup runs every 30 seconds
-- Segments older than `HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3` seconds are removed
+- Segments older than `HLS_SEGMENT_RETENTION_SECONDS` seconds are removed
+- Default retention is the greater of three playlist windows and playlist window plus segment cache lifetime
 - Check logs for cleanup errors
