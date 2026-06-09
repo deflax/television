@@ -21,8 +21,7 @@ from config import HLS_OUTPUT_DIR, HLS_LIST_SIZE, HLS_SEGMENT_TIME, MAX_SEGMENT_
 
 logger = logging.getLogger(__name__)
 
-# Maximum segments to keep in memory per variant (prevents unbounded growth)
-MAX_SEGMENTS_IN_MEMORY = HLS_LIST_SIZE * 3
+MAX_SEGMENTS_IN_MEMORY = max(HLS_LIST_SIZE * 3, int(MAX_SEGMENT_AGE / HLS_SEGMENT_TIME) + 1)
 
 
 @dataclass

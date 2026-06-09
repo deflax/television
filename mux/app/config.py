@@ -48,6 +48,49 @@ def _parse_env(
         return default
 
 
+def _parse_optional_env(
+    name: str,
+    type_fn: Callable[[str], T],
+    min_val: T | None = None,
+    max_val: T | None = None,
+) -> T | None:
+    raw = os.environ.get(name, '')
+    if not raw:
+        return None
+
+    try:
+        val = type_fn(raw)
+        if min_val is not None and val < min_val:
+            logger.warning(f'{name}={val} below minimum {min_val}, using {min_val}')
+            return min_val
+        if max_val is not None and val > max_val:
+            logger.warning(f'{name}={val} above maximum {max_val}, using {max_val}')
+            return max_val
+        return val
+    except (ValueError, TypeError) as e:
+        logger.warning(f'Invalid {name}={raw!r}: {e}, ignoring')
+        return None
+
+
+def _resolve_segment_retention_seconds() -> int:
+    configured = _parse_optional_env(
+        'HLS_SEGMENT_RETENTION_SECONDS',
+        int,
+        min_val=HLS_SEGMENT_TIME,
+        max_val=86400,
+    )
+    if configured is None:
+        return DEFAULT_SEGMENT_RETENTION_SECONDS
+    if configured < MIN_SEGMENT_RETENTION_SECONDS:
+        logger.warning(
+            'HLS_SEGMENT_RETENTION_SECONDS=%s is shorter than segment cache lifetime %ss; using %ss',
+            configured,
+            MIN_SEGMENT_RETENTION_SECONDS,
+            MIN_SEGMENT_RETENTION_SECONDS,
+        )
+    return max(configured, MIN_SEGMENT_RETENTION_SECONDS)
+
+
 # API connection
 API_URL = os.environ.get('API_URL', 'http://api:8080')
 
@@ -56,6 +99,14 @@ HLS_OUTPUT_DIR = '/tmp/hls'
 HLS_SEGMENT_TIME = _parse_env('HLS_SEGMENT_TIME', 4, int, min_val=1, max_val=60)
 HLS_LIST_SIZE = _parse_env('HLS_LIST_SIZE', 20, int, min_val=3, max_val=100)
 HLS_VIEWER_TTL = _parse_env('HLS_VIEWER_TTL', 90.0, float, min_val=30.0, max_val=600.0)
+HLS_SEGMENT_CACHE_MAX_AGE = _parse_env('HLS_SEGMENT_CACHE_MAX_AGE', 300, int, min_val=0, max_val=3600)
+HLS_SEGMENT_CACHE_STALE_REVALIDATE = _parse_env(
+    'HLS_SEGMENT_CACHE_STALE_REVALIDATE',
+    60,
+    int,
+    min_val=0,
+    max_val=3600,
+)
 
 # Server settings
 SERVER_PORT = 8091
@@ -145,7 +196,20 @@ SEGMENT_STABILITY_DELAY = 0.1
 
 # Derived values
 NUM_VARIANTS = len(ABR_VARIANTS) + 1 if MUX_MODE == 'abr' else 1
-MAX_SEGMENT_AGE = HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3
+DEFAULT_SEGMENT_RETENTION_SECONDS = max(
+    HLS_LIST_SIZE * HLS_SEGMENT_TIME * 3,
+    HLS_LIST_SIZE * HLS_SEGMENT_TIME + HLS_SEGMENT_CACHE_MAX_AGE + HLS_SEGMENT_CACHE_STALE_REVALIDATE,
+)
+MIN_SEGMENT_RETENTION_SECONDS = (
+    HLS_LIST_SIZE * HLS_SEGMENT_TIME
+    + HLS_SEGMENT_CACHE_MAX_AGE
+    + HLS_SEGMENT_CACHE_STALE_REVALIDATE
+)
+MAX_SEGMENT_AGE = _resolve_segment_retention_seconds()
+SEGMENT_CACHE_CONTROL = (
+    f'public, max-age={HLS_SEGMENT_CACHE_MAX_AGE}, '
+    f'stale-while-revalidate={HLS_SEGMENT_CACHE_STALE_REVALIDATE}'
+)
 
 
 def parse_bitrate(bitrate_str: str, default: int = 1000) -> int:

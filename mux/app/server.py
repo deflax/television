@@ -10,7 +10,7 @@ from pathlib import Path
 
 from quart import Quart, Response, abort, request, send_file
 
-from config import HLS_OUTPUT_DIR, MUX_MODE, NUM_VARIANTS
+from config import HLS_OUTPUT_DIR, MUX_MODE, NUM_VARIANTS, SEGMENT_CACHE_CONTROL
 from hls_viewer_tracker import hls_viewer_tracker
 from segment_store import segment_store
 from utils import wait_for_stable_file
@@ -58,7 +58,7 @@ PLAYLIST_CACHE_HEADERS = {
 
 # Cache headers for segments (can be cached, but not too long)
 SEGMENT_CACHE_HEADERS = {
-    'Cache-Control': 'public, max-age=300, stale-while-revalidate=60',
+    'Cache-Control': SEGMENT_CACHE_CONTROL,
 }
 
 
