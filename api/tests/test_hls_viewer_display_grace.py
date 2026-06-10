@@ -17,6 +17,7 @@ from web.state import (
     HLS_VIEWER_DISPLAY_GRACE_SECONDS,
     WebRouteState,
     apply_hls_viewer_display_grace,
+    hls_viewer_display_key,
 )
 from web.timecode_manager import TimecodeManager
 from web.visitor_tracker import VisitorTracker
@@ -167,6 +168,59 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
         displayed = apply_hls_viewer_display_grace(state, set(), 341.0)
         self.assertEqual(displayed, set())
 
+    def test_ipv6_addresses_in_same_prefix_share_display_key(self):
+        state = make_state()
+
+        displayed = apply_hls_viewer_display_grace(
+            state,
+            {
+                '2a01:5a8:302:59c0:f0f1:21e5:fbc3:7799',
+                '2a01:5a8:302:59c0:abcd:1111:2222:3333',
+            },
+            100.0,
+        )
+
+        self.assertEqual(displayed, {'2a01:5a8:302:59c0::/64'})
+
+    def test_ipv6_addresses_in_different_prefixes_count_separately(self):
+        state = make_state()
+
+        displayed = apply_hls_viewer_display_grace(
+            state,
+            {
+                '2a01:5a8:302:59c0:f0f1:21e5:fbc3:7799',
+                '2a01:5a8:302:59c1:f0f1:21e5:fbc3:7799',
+            },
+            100.0,
+        )
+
+        self.assertEqual(
+            displayed,
+            {
+                '2a01:5a8:302:59c0::/64',
+                '2a01:5a8:302:59c1::/64',
+            },
+        )
+
+    def test_ipv6_rotation_refreshes_existing_display_key(self):
+        state = make_state()
+
+        _ = apply_hls_viewer_display_grace(
+            state,
+            {'2a01:5a8:302:59c0:f0f1:21e5:fbc3:7799'},
+            100.0,
+        )
+        displayed = apply_hls_viewer_display_grace(
+            state,
+            {'2a01:5a8:302:59c0:abcd:1111:2222:3333'},
+            341.0,
+        )
+
+        self.assertEqual(displayed, {'2a01:5a8:302:59c0::/64'})
+
+    def test_invalid_viewer_key_is_preserved(self):
+        self.assertEqual(hls_viewer_display_key('unknown-viewer'), 'unknown-viewer')
+
 
 class DiscordHLSConnectMessageTest(unittest.TestCase):
     def test_sse_connect_no_longer_logs_satellite_connect(self):
@@ -180,7 +234,7 @@ class DiscordHLSConnectMessageTest(unittest.TestCase):
         def fake_register_frontend_routes(app, config, loggers, state):
             pass
 
-        def fake_register_api_routes(app, stream_manager, config, loggers, discord_bot_manager, state):
+        def fake_register_api_routes(app, stream_manager, loggers, discord_bot_manager, state):
             nonlocal captured_tracker
             captured_tracker = state.visitor_tracker
 
@@ -221,11 +275,11 @@ class DiscordHLSConnectMessageTest(unittest.TestCase):
                 return True
 
         manager = Manager()
-        manager.update_hls_viewers({'8.8.8.8'}, 1)
-        manager.update_hls_viewers({'8.8.8.8'}, 1)
-        manager.update_hls_viewers({'8.8.8.8', '1.1.1.1'}, 2)
+        manager.update_hls_viewers({'2a01:5a8:302:59c0::/64'}, 1)
+        manager.update_hls_viewers({'2a01:5a8:302:59c0::/64'}, 1)
+        manager.update_hls_viewers({'2a01:5a8:302:59c0::/64', '1.1.1.1'}, 2)
 
-        self.assertEqual(manager.connects, [('8.8.8.8', 1), ('1.1.1.1', 2)])
+        self.assertEqual(manager.connects, [('2a01:5a8:302:59c0::/64', 1), ('1.1.1.1', 2)])
         self.assertEqual(manager.embed_updates, 2)
 
 

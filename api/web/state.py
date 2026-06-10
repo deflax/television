@@ -1,6 +1,7 @@
 # pyright: reportImplicitRelativeImport=false
 
 import asyncio
+import ipaddress
 from dataclasses import dataclass, field
 
 from web.timecode_manager import TimecodeManager
@@ -23,6 +24,19 @@ class WebRouteState:
 HLS_VIEWER_DISPLAY_GRACE_SECONDS = 240.0
 
 
+def hls_viewer_display_key(viewer_key: str) -> str:
+    """Return the public display identity for a raw mux HLS viewer key."""
+    try:
+        addr = ipaddress.ip_address(viewer_key)
+    except ValueError:
+        return viewer_key
+
+    if isinstance(addr, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network(f'{addr}/64', strict=False))
+
+    return str(addr)
+
+
 def apply_hls_viewer_display_grace(
     state: WebRouteState,
     reported_ips: set[str],
@@ -30,7 +44,7 @@ def apply_hls_viewer_display_grace(
 ) -> set[str]:
     """Update and return grace-smoothed HLS viewer keys for display."""
     for ip in reported_ips:
-        state.hls_viewer_last_seen[ip] = now
+        state.hls_viewer_last_seen[hls_viewer_display_key(ip)] = now
 
     hls_cutoff = now - HLS_VIEWER_DISPLAY_GRACE_SECONDS
     for ip, ts in list(state.hls_viewer_last_seen.items()):

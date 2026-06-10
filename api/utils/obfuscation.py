@@ -2,10 +2,9 @@
 
 import ipaddress
 import socket
-from typing import Optional
 
 
-def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
+def obfuscate_hostname(hostname: str, ip_address: str | None = None) -> str:
     """
     Obfuscate a hostname or IP address for display.
 
@@ -27,7 +26,11 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
     if hostname == "unknown" and ip_address:
         hostname = ip_address
 
-    # Check if it's an IP address
+    # Check if it's an IP address or network display key.
+    network = _parse_ip_network(hostname)
+    if network is not None:
+        return _obfuscate_ip_network(network)
+
     is_ip = _is_ip_address(hostname)
     ip_to_check = ip_address if ip_address else (hostname if is_ip else None)
 
@@ -50,23 +53,11 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
         except (socket.herror, socket.gaierror, OSError):
             # No reverse DNS - obfuscate IP
             if is_ip or ip_to_check:
-                if _is_ipv6(ip_to_check):
-                    addr = ipaddress.ip_address(ip_to_check)
-                    exploded = addr.exploded
-                    segments = exploded.split(':')
-                    return f"{segments[0]}:{segments[1]}:*:*:*:*:*:*"
-                else:
-                    octets = ip_to_check.split('.')
-                    if len(octets) == 4:
-                        return f"{octets[0]}.{octets[1]}.*.*"
-                    return ip_to_check
+                return _obfuscate_ip_string(ip_to_check)
 
     # Check if hostname is an IPv6 address that wasn't handled above
     if _is_ipv6(hostname):
-        addr = ipaddress.ip_address(hostname)
-        exploded = addr.exploded
-        segments = exploded.split(':')
-        return f"{segments[0]}:{segments[1]}:*:*:*:*:*:*"
+        return _obfuscate_ip_string(hostname)
 
     # Regular hostname obfuscation
     parts = hostname.split('.')
@@ -82,6 +73,40 @@ def obfuscate_hostname(hostname: str, ip_address: Optional[str] = None) -> str:
         return _obfuscate_part(hostname)
 
 
+def _parse_ip_network(value: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    """Parse CIDR notation without treating plain IPs as networks."""
+    if '/' not in value:
+        return None
+
+    try:
+        return ipaddress.ip_network(value, strict=False)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _obfuscate_ip_network(network: ipaddress.IPv4Network | ipaddress.IPv6Network) -> str:
+    if isinstance(network, ipaddress.IPv6Network):
+        segments = network.network_address.exploded.split(':')
+        visible = ':'.join(segments[:3])
+        return f'{visible}:*:*:*:*:*/{network.prefixlen}'
+
+    return _obfuscate_ip_address(network.network_address, suffix=f'/{network.prefixlen}')
+
+
+def _obfuscate_ip_string(value: str) -> str:
+    addr = ipaddress.ip_address(value)
+    return _obfuscate_ip_address(addr)
+
+
+def _obfuscate_ip_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address, suffix: str = '') -> str:
+    if isinstance(addr, ipaddress.IPv6Address):
+        segments = addr.exploded.split(':')
+        return f"{segments[0]}:{segments[1]}:*:*:*:*:*:*{suffix}"
+
+    octets = str(addr).split('.')
+    return f"{octets[0]}.{octets[1]}.*.*{suffix}"
+
+
 def _obfuscate_part(part: str) -> str:
     """Obfuscate a single hostname part."""
     if len(part) <= 2:
@@ -92,7 +117,7 @@ def _obfuscate_part(part: str) -> str:
 def _is_ip_address(value: str) -> bool:
     """Check if a string is an IP address (IPv4 or IPv6)."""
     try:
-        ipaddress.ip_address(value)
+        _ = ipaddress.ip_address(value)
         return True
     except (ValueError, AttributeError):
         return False

@@ -8,7 +8,7 @@ import time
 from quart import request
 
 from web.helpers import get_client_address
-from web.state import WebRouteState, apply_hls_viewer_display_grace
+from web.state import WebRouteState, apply_hls_viewer_display_grace, hls_viewer_display_key
 
 
 SSE_TO_HLS_GRACE_SECONDS = 45.0
@@ -73,12 +73,13 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         _prune_recent_sse_disconnects(now)
 
         reported_ips = {str(ip) for ip in data.get('viewers', {}).keys()}
+        current_displayed_ips = {hls_viewer_display_key(ip) for ip in reported_ips}
         displayed_ips = apply_hls_viewer_display_grace(state, reported_ips, now)
         sse_ips = set(state.visitor_tracker.visitors.keys())
         grace_ips = {
             ip for ip, ts in state.recent_sse_disconnects.items() if ts >= now - SSE_TO_HLS_GRACE_SECONDS
         }
-        held_hls_ips = displayed_ips - reported_ips
+        held_hls_ips = displayed_ips - current_displayed_ips
         old_count = state.hls_viewer_count
         old_ips = state.hls_viewer_ips
         state.hls_viewer_ips = displayed_ips
@@ -87,11 +88,13 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         if state.hls_viewer_count != old_count or state.hls_viewer_ips != old_ips:
             message = ' '.join([
                 f'HLS viewers updated: hls={state.hls_viewer_count}',
+                f'hls_current={len(current_displayed_ips)}',
                 f'raw_hls={len(reported_ips)}',
                 f'held_hls={len(held_hls_ips)}',
                 f'sse={state.visitor_tracker.count}',
                 f'grace={len(grace_ips)}',
                 f'hls_ips={sorted(displayed_ips)}',
+                f'current_hls_ips={sorted(current_displayed_ips)}',
                 f'raw_hls_ips={sorted(reported_ips)}',
                 f'sse_ips={sorted(sse_ips)}',
             ])
