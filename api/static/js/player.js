@@ -12,7 +12,7 @@ window.StreamApp = window.StreamApp || {};
   const audioPosterResetBtn = document.getElementById('audio-poster-reset-btn');
   const audioPosterInput = document.getElementById('audio-poster-input');
   const hlsSource = '/live/stream.m3u8';
-  const audioOnlyPosterFallbackSrc = '/static/images/odeala.jpg';
+  const audioOnlyPosterFallbackSrc = '/static/images/derks24-ostfriesland.jpg';
   const audioOnlyPosterStore = {
     dbName: 'stream-audio-only-poster',
     storeName: 'posters',
