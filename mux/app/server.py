@@ -6,6 +6,7 @@ consistency during transitions. Segments are served directly from disk.
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from quart import Quart, Response, abort, request, send_file
@@ -184,26 +185,56 @@ async def segment(filename: str):
 
 async def _serve_segment(file_path: Path) -> Response:
     """Serve a segment file with retry logic for files being written."""
-    total_wait = 0.0
-    
+    request_started = time.perf_counter()
+    exists_wait = 0.0
+
     # Wait for file to appear (may still be written by FFmpeg)
-    while not file_path.exists() and total_wait < SEGMENT_MAX_WAIT:
+    while not file_path.exists() and exists_wait < SEGMENT_MAX_WAIT:
         await asyncio.sleep(SEGMENT_WAIT_INTERVAL)
-        total_wait += SEGMENT_WAIT_INTERVAL
-    
+        exists_wait += SEGMENT_WAIT_INTERVAL
+
     if not file_path.exists():
-        logger.warning(f'Segment not found after {total_wait:.1f}s: {file_path.name}')
+        total_ms = (time.perf_counter() - request_started) * 1000
+        logger.warning(
+            'Segment not found after wait: file=%s exists_wait_ms=%.0f total_ms=%.0f',
+            file_path.name,
+            exists_wait * 1000,
+            total_ms,
+        )
         abort(404)
-    
+
     # Wait for file to be fully written
+    stable_started = time.perf_counter()
     is_stable = await wait_for_stable_file(file_path, check_delay=0.2, max_attempts=25)
+    stable_wait_ms = (time.perf_counter() - stable_started) * 1000
+    file_size = file_path.stat().st_size if file_path.exists() else 0
     if not is_stable:
-        logger.warning(f'Segment not stable, serving anyway: {file_path.name}')
-    
+        logger.warning(
+            'Segment not stable, serving anyway: file=%s exists_wait_ms=%.0f stable_wait_ms=%.0f size=%s',
+            file_path.name,
+            exists_wait * 1000,
+            stable_wait_ms,
+            file_size,
+        )
+
+    response_started = time.perf_counter()
     response = await send_file(
         file_path,
         mimetype='video/mp2t',
     )
+    response_ready_ms = (time.perf_counter() - response_started) * 1000
+    total_ms = (time.perf_counter() - request_started) * 1000
+    logger.debug(
+        'Segment response ready: file=%s exists_wait_ms=%.0f stable_wait_ms=%.0f response_ready_ms=%.0f total_ms=%.0f size=%s stable=%s',
+        file_path.name,
+        exists_wait * 1000,
+        stable_wait_ms,
+        response_ready_ms,
+        total_ms,
+        file_size,
+        is_stable,
+    )
+
     # Apply cache and CORS headers
     for key, value in {**SEGMENT_CACHE_HEADERS, **CORS_HEADERS}.items():
         response.headers[key] = value
