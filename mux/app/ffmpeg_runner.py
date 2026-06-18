@@ -202,6 +202,8 @@ class FFmpegRunner:
         self._stderr_task: Optional[asyncio.Task] = None
         self._known_segments: set[str] = set()
         self._pending_segments: dict[str, int] = {}  # file_key -> retry count
+        self._segments_by_sequence: dict[int, set[int]] = {}
+        self._pending_start_segments: dict[int, tuple[str, float]] = {}
         self._stream_info: Optional[StreamInfo] = None
         self._start_number: int = 0  # Filter to ignore segments below this
     
@@ -226,6 +228,8 @@ class FFmpegRunner:
         
         self._known_segments = self._scan_existing_segments()
         self._pending_segments.clear()
+        self._segments_by_sequence.clear()
+        self._pending_start_segments.clear()
         # Store start_number to filter out old segments that appear after we start
         self._start_number = start_number
         
@@ -444,17 +448,44 @@ class FFmpegRunner:
             return None
         return await self._process.wait()
     
+    def _has_required_start_segments(self, start_count: int) -> bool:
+        if NUM_VARIANTS > 1:
+            ready_variants = self._segments_by_sequence.get(self._start_number, set())
+            return len(ready_variants) >= NUM_VARIANTS
+        return len(self._known_segments) > start_count
+
+    async def _register_segment(self, variant: int, sequence: int, filename: str, duration: float) -> None:
+        if self._on_segment:
+            await self._on_segment(variant, filename, duration)
+        self._segments_by_sequence.setdefault(sequence, set()).add(variant)
+
+    async def _register_start_segment(self, variant: int, filename: str, duration: float) -> None:
+        self._pending_start_segments[variant] = (filename, duration)
+        if len(self._pending_start_segments) < NUM_VARIANTS:
+            return
+
+        for pending_variant, (pending_filename, pending_duration) in sorted(self._pending_start_segments.items()):
+            await self._register_segment(
+                pending_variant,
+                self._start_number,
+                pending_filename,
+                pending_duration,
+            )
+        self._pending_start_segments.clear()
+
     async def wait_for_segment(self, timeout: float = 15.0) -> bool:
-        """Wait for at least one new segment to be produced.
+        """Wait until the new output has enough segments to serve.
         
-        Returns True if a segment was produced within timeout.
+        Copy mode is ready after one segment. ABR mode is ready only after
+        every variant has produced the first segment for this FFmpeg run.
         """
         start_count = len(self._known_segments)
         deadline = time.monotonic() + timeout
         
         while time.monotonic() < deadline:
-            if len(self._known_segments) > start_count:
+            if self._has_required_start_segments(start_count):
                 return True
+
             if not self.is_running:
                 return False
             await asyncio.sleep(0.5)
@@ -527,9 +558,12 @@ class FFmpegRunner:
                             
                             # Use configured segment time as duration estimate
                             duration = float(HLS_SEGMENT_TIME)
+
+                            if NUM_VARIANTS > 1 and seg_num == self._start_number:
+                                await self._register_start_segment(variant, ts_file.name, duration)
+                                continue
                             
-                            if self._on_segment:
-                                await self._on_segment(variant, ts_file.name, duration)
+                            await self._register_segment(variant, seg_num, ts_file.name, duration)
                 
             except asyncio.CancelledError:
                 break

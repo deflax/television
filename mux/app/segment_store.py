@@ -64,9 +64,11 @@ class SegmentStore:
         self._next_sequence = 0
         # FFmpeg file number - tracks highest segment number on disk to avoid collisions
         self._next_file_number = 0
-        self._pending_discontinuity = False
+        # sequence -> discontinuity count at that boundary
+        self._discontinuity_sequences: dict[int, int] = {}
         # Count of discontinuities for EXT-X-DISCONTINUITY-SEQUENCE
         self._discontinuity_count = 0
+        self._discontinuity_sequence_floor: int = 0
         # Track seen (variant, sequence) pairs for deduplication
         self._seen_sequences: set[tuple[int, int]] = set()
         # Source stream properties (detected via ffprobe)
@@ -119,27 +121,11 @@ class SegmentStore:
             if seq >= self._next_file_number:
                 self._next_file_number = seq + 1
             
-            # Determine discontinuity - apply to first segment at this sequence
-            discontinuity = False
-            if self._pending_discontinuity:
-                # Check if we already have a segment at this sequence
-                existing_seg = None
-                for segs in self._segments.values():
-                    for seg in segs:
-                        if seg.sequence == seq:
-                            existing_seg = seg
-                            break
-                    if existing_seg:
-                        break
-                
-                if existing_seg is None:
-                    # First segment at this sequence gets the discontinuity
-                    discontinuity = True
-                    logger.info(f'Added discontinuity before segment {seq}')
-                    self._pending_discontinuity = False
-                else:
-                    # Copy discontinuity flag from existing segment at this sequence
-                    discontinuity = existing_seg.discontinuity_before
+            # Apply switch boundaries by media sequence so every ABR variant
+            # emits the same discontinuity marker for the same switch.
+            discontinuity = seq in self._discontinuity_sequences
+            if discontinuity:
+                logger.info(f'Added discontinuity before variant={variant} segment {seq}')
             
             segment = Segment(
                 sequence=seq,
@@ -147,7 +133,7 @@ class SegmentStore:
                 filename=filename,
                 duration=duration,
                 discontinuity_before=discontinuity,
-                discontinuity_sequence=self._discontinuity_count,
+                discontinuity_sequence=self._discontinuity_count_for_sequence(seq),
             )
             
             self._segments[variant].append(segment)
@@ -160,17 +146,61 @@ class SegmentStore:
                 for old_seg in excess:
                     self._seen_sequences.discard((old_seg.variant, old_seg.sequence))
                     self._delete_segment_file(old_seg)
+                self._prune_discontinuity_sequences()
                 logger.debug(f'Trimmed {len(excess)} excess segments from variant {variant}')
             
             logger.debug(f'Added segment: variant={variant} seq={segment.sequence} file={filename} next_seq={self._next_sequence}')
             return segment
     
     async def mark_discontinuity(self) -> None:
-        """Mark that the next segment should have a discontinuity tag."""
+        """Mark that the next media sequence starts a discontinuity."""
         async with self._lock:
-            self._pending_discontinuity = True
+            boundary_sequence = self._next_sequence
+            if boundary_sequence in self._discontinuity_sequences:
+                logger.debug(f'Discontinuity already marked for segment {boundary_sequence}')
+                return
+
             self._discontinuity_count += 1
-            logger.info(f'Discontinuity marked for next segment (count: {self._discontinuity_count})')
+            self._discontinuity_sequences[boundary_sequence] = self._discontinuity_count
+            logger.info(f'Discontinuity marked for segment {boundary_sequence} (count: {self._discontinuity_count})')
+    
+    def _discontinuity_count_for_sequence(self, sequence: int) -> int:
+        count = self._discontinuity_sequence_floor
+        for boundary_sequence, boundary_count in sorted(self._discontinuity_sequences.items()):
+            if boundary_sequence > sequence:
+                break
+            count = boundary_count
+        return count
+
+    def _prune_discontinuity_sequences(self) -> None:
+        oldest_sequence = None
+        for segments in self._segments.values():
+            if not segments:
+                continue
+            sequence = segments[0].sequence
+            if oldest_sequence is None or sequence < oldest_sequence:
+                oldest_sequence = sequence
+
+        if oldest_sequence is None:
+            return
+
+        pruned_counts = [
+            count
+            for sequence, count in self._discontinuity_sequences.items()
+            if sequence < oldest_sequence
+        ]
+        if not pruned_counts:
+            return
+
+        self._discontinuity_sequence_floor = max(
+            self._discontinuity_sequence_floor,
+            max(pruned_counts),
+        )
+        self._discontinuity_sequences = {
+            sequence: count
+            for sequence, count in self._discontinuity_sequences.items()
+            if sequence >= oldest_sequence
+        }
     
     async def get_segments(self, variant: int, count: Optional[int] = None) -> list[Segment]:
         """Get segments for a variant, optionally limited to most recent count."""
@@ -223,6 +253,8 @@ class SegmentStore:
                     self._seen_sequences.discard((seg.variant, seg.sequence))
                     if self._delete_segment_file(seg):
                         removed += 1
+
+            self._prune_discontinuity_sequences()
         
         if removed > 0:
             logger.debug(f'Cleaned up {removed} old segments')
