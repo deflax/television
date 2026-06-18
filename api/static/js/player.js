@@ -30,12 +30,11 @@ window.StreamApp = window.StreamApp || {};
       'current-time',
       'mute',
       'volume',
-      'captions',
       'settings',
       'pip',
       'fullscreen',
     ],
-    settings: ['captions', 'quality', 'speed'],
+    settings: ['quality'],
   };
 
   // Expose for SSE and audio-only toggle
@@ -71,12 +70,12 @@ window.StreamApp = window.StreamApp || {};
 
   function updateQuality(newQuality) {
     if (newQuality === 0) {
-      window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
+      window.hls.currentLevel = -1; // Enable AUTO quality if option.value = 0
     } else {
       window.hls.levels.forEach((level, levelIndex) => {
         if (level.height === newQuality) {
           console.log("HLS.js: Found quality match with " + newQuality);
-          window.hls.currentLevel = levelIndex;
+          window.hls.nextLevel = levelIndex;
         }
       });
     }
