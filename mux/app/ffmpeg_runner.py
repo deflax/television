@@ -158,8 +158,6 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
         width = variant['width']
         height = variant['height']
         vb = variant['video_bitrate']
-        ab = variant['audio_bitrate']
-        
         kbps = parse_bitrate(vb)
         maxrate = f'{int(kbps * 1.07)}k'
         bufsize = f'{int(kbps * 1.5)}k'
@@ -177,9 +175,7 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
             f'-sc_threshold:v:{idx}', '0',
             f'-force_key_frames:v:{idx}', f'expr:gte(t,n_forced*{HLS_SEGMENT_TIME})',
             '-map', '0:a',
-            f'-c:a:{idx}', 'aac',
-            f'-b:a:{idx}', ab,
-            f'-ac:a:{idx}', '2',
+            f'-c:a:{idx}', 'copy',
         ])
     
     # HLS output
