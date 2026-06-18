@@ -191,7 +191,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 ]
 ```
 
-Each variant specifies fixed output dimensions, video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
+Each variant specifies fixed output dimensions and video bitrate. Audio is copied from the source; `audio_bitrate` is used for playlist bandwidth metadata. Source stream (copy) is always included as stream_0.
 
 
 ## Services
@@ -223,7 +223,7 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 **ABR mode output:**
 - `/live/stream.m3u8` - Master playlist (ABR)
 - `/live/stream_0/` - Source (passthrough, no re-encoding)
-- `/live/stream_1/` - 1280x720 (1500k video, 128k audio)
+- `/live/stream_1/` - 1280x720 (1500k video, source audio copy)
 
 **Switching behavior:**
 - On playhead change: segments continue numbering, `#EXT-X-DISCONTINUITY` tag injected, ffmpeg restarts with new input (~4s gap)

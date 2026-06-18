@@ -100,6 +100,8 @@ Default ABR variants:
 ]
 ```
 
+Audio is copied from the source for ABR variants; `audio_bitrate` is used for playlist bandwidth metadata.
+
 ### URL Rewriting
 
 | Variable | Default | Description |
