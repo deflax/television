@@ -193,7 +193,6 @@ The `head` field contains the HLS stream URL to switch to. The `name` field is u
 - In ABR mode, transcoding requires significant CPU
 - Lower `ABR_THREADS` (default: 2) to reduce thread count per encoder (0=auto/unlimited)
 - Consider using `ABR_PRESET=ultrafast` for lower CPU at cost of quality
-- `-tune zerolatency` is applied automatically to skip lookahead and B-frames
 - Reduce ABR variants to a single lower resolution to halve encoding work
 - In copy mode, CPU usage should be minimal
 
