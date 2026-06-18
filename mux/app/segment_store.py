@@ -122,7 +122,10 @@ class SegmentStore:
                 self._next_file_number = seq + 1
             
             # Apply switch boundaries by media sequence so every ABR variant
-            # emits the same discontinuity marker for the same switch.
+            # emits the same discontinuity marker for the same switch. If FFmpeg
+            # skips ahead, move the pending boundary to the first registered
+            # sequence after it.
+            self._align_pending_discontinuity(seq)
             discontinuity = seq in self._discontinuity_sequences
             if discontinuity:
                 logger.info(f'Added discontinuity before variant={variant} segment {seq}')
@@ -171,6 +174,27 @@ class SegmentStore:
                 break
             count = boundary_count
         return count
+
+    def _align_pending_discontinuity(self, sequence: int) -> None:
+        pending_boundaries = [
+            boundary
+            for boundary in self._discontinuity_sequences
+            if boundary < sequence and not self._has_segment_at_or_after(boundary)
+        ]
+        if not pending_boundaries:
+            return
+
+        boundary = max(pending_boundaries)
+        count = self._discontinuity_sequences.pop(boundary)
+        self._discontinuity_sequences[sequence] = count
+        logger.info(f'Moved discontinuity from segment {boundary} to segment {sequence}')
+
+    def _has_segment_at_or_after(self, sequence: int) -> bool:
+        return any(
+            seg.sequence >= sequence
+            for segments in self._segments.values()
+            for seg in segments
+        )
 
     def _prune_discontinuity_sequences(self) -> None:
         oldest_sequence = None

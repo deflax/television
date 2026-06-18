@@ -203,7 +203,8 @@ class FFmpegRunner:
         self._known_segments: set[str] = set()
         self._pending_segments: dict[str, int] = {}  # file_key -> retry count
         self._segments_by_sequence: dict[int, set[int]] = {}
-        self._pending_start_segments: dict[int, tuple[str, float]] = {}
+        self._pending_start_segments: dict[int, dict[int, tuple[str, float]]] = {}
+        self._aligned_start_sequence: int | None = None
         self._stream_info: Optional[StreamInfo] = None
         self._start_number: int = 0  # Filter to ignore segments below this
     
@@ -230,6 +231,7 @@ class FFmpegRunner:
         self._pending_segments.clear()
         self._segments_by_sequence.clear()
         self._pending_start_segments.clear()
+        self._aligned_start_sequence = None
         # Store start_number to filter out old segments that appear after we start
         self._start_number = start_number
         
@@ -449,29 +451,66 @@ class FFmpegRunner:
         return await self._process.wait()
     
     def _has_required_start_segments(self, start_count: int) -> bool:
-        if NUM_VARIANTS > 1:
-            ready_variants = self._segments_by_sequence.get(self._start_number, set())
-            return len(ready_variants) >= NUM_VARIANTS
-        return len(self._known_segments) > start_count
+        _ = start_count
+        return any(
+            sequence >= self._start_number and len(variants) >= NUM_VARIANTS
+            for sequence, variants in self._segments_by_sequence.items()
+        )
 
     async def _register_segment(self, variant: int, sequence: int, filename: str, duration: float) -> None:
         if self._on_segment:
             await self._on_segment(variant, filename, duration)
         self._segments_by_sequence.setdefault(sequence, set()).add(variant)
 
-    async def _register_start_segment(self, variant: int, filename: str, duration: float) -> None:
-        self._pending_start_segments[variant] = (filename, duration)
-        if len(self._pending_start_segments) < NUM_VARIANTS:
+    async def _register_start_segment(
+        self,
+        variant: int,
+        sequence: int,
+        filename: str,
+        duration: float,
+    ) -> None:
+        self._pending_start_segments.setdefault(sequence, {})[variant] = (filename, duration)
+
+        if self._aligned_start_sequence is not None:
+            await self._publish_complete_pending_sequences()
             return
 
-        for pending_variant, (pending_filename, pending_duration) in sorted(self._pending_start_segments.items()):
-            await self._register_segment(
-                pending_variant,
-                self._start_number,
-                pending_filename,
-                pending_duration,
-            )
-        self._pending_start_segments.clear()
+        ready_sequence = self._first_complete_start_sequence()
+        if ready_sequence is None:
+            return
+
+        self._aligned_start_sequence = ready_sequence
+        await self._publish_complete_pending_sequences()
+
+    def _first_complete_start_sequence(self) -> int | None:
+        for sequence in sorted(self._pending_start_segments):
+            if sequence < self._start_number:
+                continue
+            if len(self._pending_start_segments[sequence]) >= NUM_VARIANTS:
+                return sequence
+        return None
+
+    async def _publish_complete_pending_sequences(self) -> None:
+        if self._aligned_start_sequence is None:
+            return
+
+        for sequence in sorted(list(self._pending_start_segments)):
+            if sequence < self._aligned_start_sequence:
+                _ = self._pending_start_segments.pop(sequence, None)
+                continue
+
+            pending_segments = self._pending_start_segments[sequence]
+            if len(pending_segments) < NUM_VARIANTS:
+                continue
+
+            for pending_variant, (pending_filename, pending_duration) in sorted(pending_segments.items()):
+                await self._register_segment(
+                    pending_variant,
+                    sequence,
+                    pending_filename,
+                    pending_duration,
+                )
+            _ = self._pending_start_segments.pop(sequence, None)
 
     async def wait_for_segment(self, timeout: float = 15.0) -> bool:
         """Wait until the new output has enough segments to serve.
@@ -559,8 +598,12 @@ class FFmpegRunner:
                             # Use configured segment time as duration estimate
                             duration = float(HLS_SEGMENT_TIME)
 
-                            if NUM_VARIANTS > 1 and seg_num == self._start_number:
-                                await self._register_start_segment(variant, ts_file.name, duration)
+                            if self._aligned_start_sequence is not None and seg_num < self._aligned_start_sequence:
+                                logger.debug(f'Ignoring pre-alignment segment {ts_file.name} (aligned start {self._aligned_start_sequence})')
+                                continue
+
+                            if NUM_VARIANTS > 1 and (not self._has_required_start_segments(0) or seg_num in self._pending_start_segments):
+                                await self._register_start_segment(variant, seg_num, ts_file.name, duration)
                                 continue
                             
                             await self._register_segment(variant, seg_num, ts_file.name, duration)
