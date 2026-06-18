@@ -3,12 +3,18 @@
 import os
 import json
 import logging
-from typing import Callable, TypeAlias, TypeVar, cast
+from typing import Callable, TypeVar, TypedDict, cast
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', int, float)
-ABRVariant: TypeAlias = dict[str, int | str]
+
+
+class ABRVariant(TypedDict):
+    width: int
+    height: int
+    video_bitrate: str
+    audio_bitrate: str
 
 
 def _parse_env(
@@ -125,8 +131,7 @@ ABR_THREADS = _parse_env('ABR_THREADS', 2, int, min_val=0, max_val=64)
 
 # ABR variants configuration
 DEFAULT_ABR_VARIANTS: list[ABRVariant] = [
-    {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
-    {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"},
+    {"width": 1280, "height": 720, "video_bitrate": "1500k", "audio_bitrate": "128k"},
 ]
 
 
@@ -149,10 +154,13 @@ def parse_abr_variants() -> list[ABRVariant]:
                     raise ValueError(f'Variant {i} is not an object')
 
                 item_map = cast(dict[object, object], item)
+                width = item_map.get('width')
                 height = item_map.get('height')
                 video_bitrate = item_map.get('video_bitrate')
                 audio_bitrate = item_map.get('audio_bitrate')
 
+                if not isinstance(width, int):
+                    raise ValueError(f'Variant {i} width must be an integer')
                 if not isinstance(height, int):
                     raise ValueError(f'Variant {i} height must be an integer')
                 if not isinstance(video_bitrate, str):
@@ -161,6 +169,7 @@ def parse_abr_variants() -> list[ABRVariant]:
                     raise ValueError(f'Variant {i} audio_bitrate must be a string')
 
                 variants.append({
+                    'width': width,
                     'height': height,
                     'video_bitrate': video_bitrate,
                     'audio_bitrate': audio_bitrate,

@@ -136,7 +136,7 @@ async def main() -> None:
                 HLS_SEGMENT_CACHE_MAX_AGE, HLS_SEGMENT_CACHE_STALE_REVALIDATE, SEGMENT_CACHE_CONTROL)
     if MUX_MODE == 'abr':
         variant_desc = ', '.join(
-            f"{v['height']}p@{v['video_bitrate']}" for v in ABR_VARIANTS
+            f"{v['width']}x{v['height']}@{v['video_bitrate']}" for v in ABR_VARIANTS
         )
         logger.info('ABR settings: preset=%s gop_size=%s threads=%s variants=source(copy)+%s',
                     ABR_PRESET, ABR_GOP_SIZE, ABR_THREADS, variant_desc)

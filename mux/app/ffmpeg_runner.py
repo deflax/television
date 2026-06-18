@@ -140,26 +140,12 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
     num_variants = len(ABR_VARIANTS)
     total_streams = num_variants + 1
     
-    # Build filter complex
-    split_outputs = ''.join(f'[v_{i}_in]' for i in range(num_variants))
-    filter_parts = [f'[0:v]split={num_variants}{split_outputs}']
-    
-    for i, variant in enumerate(ABR_VARIANTS):
-        h = variant['height']
-        filter_parts.append(
-            f"[v_{i}_in]scale=w=-2:h='min({h},ih)'"
-            f":force_original_aspect_ratio=decrease[v_{i}]"
-        )
-    
-    filter_complex = '; '.join(filter_parts)
-    
     cmd = [
         'ffmpeg',
         '-y',
         # No -re flag: input is a live HLS stream already paced in realtime.
         '-threads', str(ABR_THREADS),
         '-i', input_url,
-        '-filter_complex', filter_complex,
         '-map', '0:v',
         '-c:v:0', 'copy',
         '-map', '0:a',
@@ -169,6 +155,8 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
     # Add transcoded variants
     for i, variant in enumerate(ABR_VARIANTS):
         idx = i + 1
+        width = variant['width']
+        height = variant['height']
         vb = variant['video_bitrate']
         ab = variant['audio_bitrate']
         
@@ -177,8 +165,9 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
         bufsize = f'{int(kbps * 1.5)}k'
         
         cmd.extend([
-            '-map', f'[v_{i}]',
+            '-map', '0:v',
             f'-c:v:{idx}', 'libx264',
+            f'-filter:v:{idx}', f'scale={width}:{height}',
             '-preset', ABR_PRESET,
             f'-threads:v:{idx}', str(ABR_THREADS),
             f'-b:v:{idx}', vb,
@@ -186,6 +175,7 @@ def _build_abr_command(input_url: str, start_number: int) -> list[str]:
             f'-bufsize:v:{idx}', bufsize,
             f'-g:v:{idx}', str(ABR_GOP_SIZE),
             f'-sc_threshold:v:{idx}', '0',
+            f'-force_key_frames:v:{idx}', f'expr:gte(t,n_forced*{HLS_SEGMENT_TIME})',
             '-map', '0:a',
             f'-c:a:{idx}', 'aac',
             f'-b:a:{idx}', ab,

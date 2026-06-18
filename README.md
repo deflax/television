@@ -35,7 +35,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
        │   :8080     │   /events    │    :8091    │              │   (:8080)   │
        │             │              │             │              │    :1935    │
        │ - Web UI    │              │ - ABR HLS   │◄────HLS──────│    :6000    │
-       │ - SSE       │              │ - 720p/576p │              │             │
+       │ - SSE       │              │ - 720p ABR  │              │             │
        │ - Schedule  │              │ - Playhead  │              │ - Ingest    │
        │ - Discord   │              │   switching │              │ - Transcode │
        │ - Archive   │              │             │              │ - HLS out   │
@@ -55,7 +55,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | Backend | Python 3.13, Quart (async Flask) |
 | Frontend | Bootstrap 5, Plyr.js, HLS.js |
 | Streaming | Datarhei Restreamer 2.12 |
-| Mux | FFmpeg ABR (720p + 576p) |
+| Mux | FFmpeg ABR (source + 720p) |
 | Proxy | HAProxy (HTTP/2, health checks) |
 | ASGI Server | Uvicorn |
 | Containerization | Docker Compose |
@@ -187,12 +187,11 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 **ABR_VARIANTS format:**
 ```json
 [
-  {"height": 720, "video_bitrate": "2800k", "audio_bitrate": "128k"},
-  {"height": 576, "video_bitrate": "1400k", "audio_bitrate": "96k"}
+  {"width": 1280, "height": 720, "video_bitrate": "1500k", "audio_bitrate": "128k"}
 ]
 ```
 
-Each variant specifies a resolution height (source is capped at this), video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
+Each variant specifies fixed output dimensions, video bitrate, and audio bitrate. Source stream (copy) is always included as stream_0.
 
 
 ## Services
@@ -207,7 +206,7 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 - **Crash recovery** - Automatic recovery with discontinuity markers on ffmpeg crashes. No full resets that break clients.
 - **Internal routing** - Direct container-to-container access bypasses Cloudflare for optimal performance
 - **Two modes** - Copy (passthrough) or ABR (adaptive bitrate)
-- **No upscaling** - ABR mode caps output at source resolution
+- **Fixed 720p fallback** - ABR mode outputs a 1280x720 transcoded variant alongside the source copy
 - **Stale segment cleanup** - Background cleanup of old `.ts` segments to prevent disk filling
 - **Modular architecture** - Separated concerns: config, ffmpeg runner, segment store, stream management, playhead monitoring
 
@@ -224,8 +223,7 @@ Stream multiplexer that monitors the API's playhead and outputs a continuous str
 **ABR mode output:**
 - `/live/stream.m3u8` - Master playlist (ABR)
 - `/live/stream_0/` - Source (passthrough, no re-encoding)
-- `/live/stream_1/` - 720p (2800k video, 128k audio) - only if source > 720p
-- `/live/stream_2/` - 576p (1400k video, 96k audio) - only if source > 576p
+- `/live/stream_1/` - 1280x720 (1500k video, 128k audio)
 
 **Switching behavior:**
 - On playhead change: segments continue numbering, `#EXT-X-DISCONTINUITY` tag injected, ffmpeg restarts with new input (~4s gap)

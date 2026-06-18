@@ -306,13 +306,9 @@ class SegmentStore:
         for i, variant in enumerate(ABR_VARIANTS):
             bandwidth = parse_bitrate(variant['video_bitrate']) * 1000
             bandwidth += parse_bitrate(variant['audio_bitrate']) * 1000
+            width = variant['width']
             height = variant['height']
-            # Calculate width maintaining source aspect ratio
-            aspect_ratio = source_width / source_height if source_height > 0 else 16 / 9
-            width = int(height * aspect_ratio)
-            # Ensure width is even (required for most codecs)
-            width = width - (width % 2)
-            
+
             lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={width}x{height}')
             lines.append(f'stream_{i + 1}/playlist.m3u8')
         
