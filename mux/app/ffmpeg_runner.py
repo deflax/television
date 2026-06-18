@@ -5,13 +5,14 @@ registering them with the segment store as they appear.
 """
 
 import asyncio
-import json
 import logging
 import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Callable, Awaitable
+
+import httpx
 
 from config import (
     HLS_OUTPUT_DIR, HLS_SEGMENT_TIME, HLS_LIST_SIZE,
@@ -25,85 +26,66 @@ logger = logging.getLogger(__name__)
 
 # Regex to extract segment number from filename
 SEGMENT_PATTERN = re.compile(r'segment_(\d+)\.ts$')
+STREAM_INF_PATTERN = re.compile(r'^#EXT-X-STREAM-INF:(.*)$', re.MULTILINE)
+BANDWIDTH_PATTERN = re.compile(r'(?:^|,)BANDWIDTH=(\d+)(?:,|$)')
+RESOLUTION_PATTERN = re.compile(r'(?:^|,)RESOLUTION=(\d+)x(\d+)(?:,|$)')
 
 
 @dataclass
 class StreamInfo:
     """Detected properties of an input stream."""
-    width: int = 1920
-    height: int = 1080
-    bitrate: int = 8000000  # bits per second
+    width: int
+    height: int
+    bitrate: int
     
     @property
     def resolution(self) -> str:
         return f'{self.width}x{self.height}'
 
 
-async def probe_stream(url: str, timeout: float = 10.0) -> Optional[StreamInfo]:
-    """Probe a stream URL to detect its properties.
-    
-    Returns StreamInfo with detected values, or None if probing fails.
-    """
-    cmd = [
-        'ffprobe',
-        '-v', 'quiet',
-        '-print_format', 'json',
-        '-show_format',
-        '-show_streams',
-        '-select_streams', 'v:0',  # First video stream only
-        url,
-    ]
-    
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        
-        if proc.returncode != 0:
-            logger.debug(f'ffprobe failed with code {proc.returncode}')
-            return None
-        
-        data = json.loads(stdout.decode())
-        
-        # Extract video stream info
-        streams = data.get('streams', [])
-        if not streams:
-            logger.debug('No video streams found')
-            return None
-        
-        video = streams[0]
-        width = video.get('width', 1920)
-        height = video.get('height', 1080)
-        
-        # Try to get bitrate from stream or format
-        bitrate = video.get('bit_rate')
-        if not bitrate:
-            format_info = data.get('format', {})
-            bitrate = format_info.get('bit_rate')
-        
-        # Convert to int, default to 8Mbps if not available
-        try:
-            bitrate = int(bitrate) if bitrate else 8000000
-        except (ValueError, TypeError):
-            bitrate = 8000000
-        
+def _parse_hls_master_stream_info(playlist: str) -> StreamInfo | None:
+    """Parse source metadata from an HLS master playlist."""
+    best_info: StreamInfo | None = None
+
+    for match in STREAM_INF_PATTERN.finditer(playlist):
+        attrs = match.group(1)
+        bandwidth_match = BANDWIDTH_PATTERN.search(attrs)
+        resolution_match = RESOLUTION_PATTERN.search(attrs)
+        if not bandwidth_match or not resolution_match:
+            continue
+
+        bitrate = int(bandwidth_match.group(1))
+        width = int(resolution_match.group(1))
+        height = int(resolution_match.group(2))
         info = StreamInfo(width=width, height=height, bitrate=bitrate)
-        logger.info(f'Probed stream: {info.resolution} @ {info.bitrate // 1000}kbps')
-        return info
-        
-    except asyncio.TimeoutError:
-        logger.warning(f'Stream probe timed out after {timeout}s')
+        if best_info is None or info.bitrate > best_info.bitrate:
+            best_info = info
+
+    return best_info
+
+
+async def probe_hls_master_playlist(url: str, timeout: float) -> StreamInfo | None:
+    """Fetch an HLS master playlist and extract advertised stream metadata."""
+    if not url.lower().split('?', 1)[0].endswith('.m3u8'):
         return None
-    except json.JSONDecodeError as e:
-        logger.warning(f'Failed to parse ffprobe output: {e}')
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url)
+            _ = response.raise_for_status()
+    except (httpx.HTTPError, ValueError) as e:
+        logger.debug(f'HLS master playlist probe failed: {e}')
         return None
-    except Exception as e:
-        logger.warning(f'Stream probe failed: {e}')
-        return None
+
+    info = _parse_hls_master_stream_info(response.text)
+    if info:
+        logger.info(f'Probed HLS master playlist: {info.resolution} @ {info.bitrate // 1000}kbps')
+    return info
+
+
+async def probe_stream(url: str, timeout: float = 10.0) -> StreamInfo | None:
+    """Probe an HLS master playlist to detect source stream properties."""
+    return await probe_hls_master_playlist(url, timeout)
 
 
 
