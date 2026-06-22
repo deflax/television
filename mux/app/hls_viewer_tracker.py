@@ -121,11 +121,10 @@ class HLSViewerTracker:
     @property
     async def viewer_report(self) -> dict[str, ViewerReport]:
         await self.cleanup_expired()
-        now = time.monotonic()
         async with self._lock:
             return {
                 viewer_key: {
-                    'connected_seconds': now - session.connected_at,
+                    'connected_seconds': session.last_seen - session.connected_at,
                 }
                 for viewer_key, session in self._viewers.items()
             }

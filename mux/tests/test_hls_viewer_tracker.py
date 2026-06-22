@@ -100,7 +100,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         finally:
             tracker_module.time.monotonic = original_monotonic
 
-    def test_viewer_report_includes_connection_duration(self):
+    def test_viewer_report_uses_last_playlist_fetch_for_connection_duration(self):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
 
@@ -111,12 +111,15 @@ class HLSViewerTrackerTest(unittest.TestCase):
             tracker_module.time.monotonic = lambda: 100.0
             asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
 
+            tracker_module.time.monotonic = lambda: 103.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
             tracker_module.time.monotonic = lambda: 142.5
             report = asyncio.run(read_viewer_report())
 
             self.assertEqual(
                 report['8.8.8.8'],
-                {'connected_seconds': 42.5},
+                {'connected_seconds': 3.0},
             )
         finally:
             tracker_module.time.monotonic = original_monotonic
