@@ -439,7 +439,7 @@ class DiscordHLSConnectMessageTest(unittest.TestCase):
 
         message = asyncio.run(run_scenario())
 
-        self.assertIn('disconnected after 1m 5s', message.content)
+        self.assertEqual(message.content, ':satellite: `8.8.*.*` 1m 5s')
 
 
 if __name__ == '__main__':
