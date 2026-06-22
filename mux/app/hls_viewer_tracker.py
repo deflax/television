@@ -13,6 +13,9 @@ import asyncio
 import ipaddress
 import logging
 import time
+from dataclasses import dataclass
+from typing import TypedDict
+
 import httpx
 
 from config import HLS_VIEWER_TTL
@@ -24,6 +27,16 @@ CLEANUP_INTERVAL = 10.0
 
 # How often (seconds) to report viewer count to the API
 REPORT_INTERVAL = 5.0
+
+
+@dataclass(frozen=True, slots=True)
+class ViewerSession:
+    connected_at: float
+    last_seen: float
+
+
+class ViewerReport(TypedDict):
+    connected_seconds: float
 
 
 def _viewer_key(ip: str) -> str | None:
@@ -48,7 +61,7 @@ class HLSViewerTracker:
     """
 
     def __init__(self):
-        self._viewers: dict[str, float] = {}  # viewer_key -> last_seen timestamp
+        self._viewers: dict[str, ViewerSession] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
 
     async def record_playlist_fetch(self, ip: str) -> None:
@@ -59,17 +72,22 @@ class HLSViewerTracker:
             return
 
         now = time.monotonic()
-        previous_seen = None
         async with self._lock:
-            previous_seen = self._viewers.get(viewer_key)
-            is_new_viewer = previous_seen is None
-            self._viewers[viewer_key] = now
+            previous_session = self._viewers.get(viewer_key)
+            if previous_session is None:
+                connected_at = now
+                age = 0.0
+                is_new_viewer = True
+            else:
+                connected_at = previous_session.connected_at
+                age = now - previous_session.last_seen
+                is_new_viewer = False
+            self._viewers[viewer_key] = ViewerSession(connected_at=connected_at, last_seen=now)
             active_count = len(self._viewers)
 
         if is_new_viewer:
             logger.info(f'HLS viewer connected: viewer={viewer_key} active={active_count}')
         else:
-            age = now - previous_seen
             logger.debug(f'HLS viewer refreshed: viewer={viewer_key} ip={ip} age={age:.1f}s ttl={HLS_VIEWER_TTL:.1f}s')
 
     async def cleanup_expired(self) -> None:
@@ -77,7 +95,7 @@ class HLSViewerTracker:
         cutoff = time.monotonic() - HLS_VIEWER_TTL
         active_count = 0
         async with self._lock:
-            expired = [ip for ip, ts in self._viewers.items() if ts < cutoff]
+            expired = [ip for ip, session in self._viewers.items() if session.last_seen < cutoff]
             for ip in expired:
                 del self._viewers[ip]
             if expired:
@@ -95,11 +113,22 @@ class HLSViewerTracker:
             return len(self._viewers)
 
     @property
-    async def viewers(self) -> dict[str, float]:
-        """Return a snapshot of active viewers (viewer_key -> last_seen)."""
+    async def viewers(self) -> dict[str, ViewerSession]:
         await self.cleanup_expired()
         async with self._lock:
             return self._viewers.copy()
+
+    @property
+    async def viewer_report(self) -> dict[str, ViewerReport]:
+        await self.cleanup_expired()
+        now = time.monotonic()
+        async with self._lock:
+            return {
+                viewer_key: {
+                    'connected_seconds': now - session.connected_at,
+                }
+                for viewer_key, session in self._viewers.items()
+            }
 
 
 # Module-level singleton
@@ -129,14 +158,14 @@ async def report_loop(api_url: str) -> None:
             try:
                 await asyncio.sleep(REPORT_INTERVAL)
                 count = await hls_viewer_tracker.count
-                viewers = await hls_viewer_tracker.viewers
+                viewers = await hls_viewer_tracker.viewer_report
 
                 try:
                     resp = await client.post(
                         f'{api_url}/hls-viewers',
                         json={
                             'count': count,
-                            'viewers': {viewer_key: 1 for viewer_key in viewers},
+                            'viewers': viewers,
                         },
                         timeout=5.0,
                     )

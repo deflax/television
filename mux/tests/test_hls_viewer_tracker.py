@@ -66,7 +66,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         async def read_count() -> int:
             return await tracker.count
 
-        async def read_viewers() -> dict[str, float]:
+        async def read_viewers() -> dict[str, tracker_module.ViewerSession]:
             return await tracker.viewers
 
         try:
@@ -77,6 +77,47 @@ class HLSViewerTrackerTest(unittest.TestCase):
 
             self.assertEqual(asyncio.run(read_count()), 0)
             self.assertEqual(asyncio.run(read_viewers()), {})
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+    def test_viewer_session_keeps_original_connected_at_across_refreshes(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        async def read_viewers() -> dict[str, tracker_module.ViewerSession]:
+            return await tracker.viewers
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            tracker_module.time.monotonic = lambda: 125.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            viewers = asyncio.run(read_viewers())
+            self.assertEqual(viewers['8.8.8.8'].connected_at, 100.0)
+            self.assertEqual(viewers['8.8.8.8'].last_seen, 125.0)
+        finally:
+            tracker_module.time.monotonic = original_monotonic
+
+    def test_viewer_report_includes_connection_duration(self):
+        tracker = tracker_module.HLSViewerTracker()
+        original_monotonic = tracker_module.time.monotonic
+
+        async def read_viewer_report() -> dict[str, tracker_module.ViewerReport]:
+            return await tracker.viewer_report
+
+        try:
+            tracker_module.time.monotonic = lambda: 100.0
+            asyncio.run(tracker.record_playlist_fetch('8.8.8.8'))
+
+            tracker_module.time.monotonic = lambda: 142.5
+            report = asyncio.run(read_viewer_report())
+
+            self.assertEqual(
+                report['8.8.8.8'],
+                {'connected_seconds': 42.5},
+            )
         finally:
             tracker_module.time.monotonic = original_monotonic
 
@@ -106,7 +147,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
 
-        async def read_viewers() -> dict[str, float]:
+        async def read_viewers() -> dict[str, tracker_module.ViewerSession]:
             return await tracker.viewers
 
         try:
@@ -128,7 +169,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         tracker = tracker_module.HLSViewerTracker()
         original_monotonic = tracker_module.time.monotonic
 
-        async def read_viewers() -> dict[str, float]:
+        async def read_viewers() -> dict[str, tracker_module.ViewerSession]:
             return await tracker.viewers
 
         try:
@@ -149,7 +190,7 @@ class HLSViewerTrackerTest(unittest.TestCase):
         async def read_count() -> int:
             return await tracker.count
 
-        async def read_viewers() -> dict[str, float]:
+        async def read_viewers() -> dict[str, tracker_module.ViewerSession]:
             return await tracker.viewers
 
         try:
