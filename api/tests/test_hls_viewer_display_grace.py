@@ -1,6 +1,8 @@
 # pyright: reportImplicitRelativeImport=false
 
 import importlib.util
+import asyncio
+import contextlib
 import sys
 import types
 import unittest
@@ -15,12 +17,24 @@ _ = sys.modules.setdefault('web', web_module)
 
 from web.state import (
     HLS_VIEWER_DISPLAY_GRACE_SECONDS,
+    HLSViewerSession,
     WebRouteState,
     apply_hls_viewer_display_grace,
     hls_viewer_display_key,
+    update_hls_viewer_display_state,
 )
 from web.timecode_manager import TimecodeManager
 from web.visitor_tracker import VisitorTracker
+
+
+@contextlib.contextmanager
+def patched_attr(module, name: str, value):
+    original = getattr(module, name)
+    setattr(module, name, value)
+    try:
+        yield
+    finally:
+        setattr(module, name, original)
 
 
 class FakeDiscordBotManager:
@@ -61,6 +75,8 @@ def load_routes_module():
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    sys.modules.pop('utils.obfuscation', None)
+    sys.modules.pop('utils', None)
     return module
 
 
@@ -221,6 +237,70 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
     def test_invalid_viewer_key_is_preserved(self):
         self.assertEqual(hls_viewer_display_key('unknown-viewer'), 'unknown-viewer')
 
+    def test_dropped_viewer_reports_final_connection_duration(self):
+        state = make_state()
+
+        first_drop = update_hls_viewer_display_state(
+            state,
+            {'8.8.8.8': HLSViewerSession(connected_seconds=20.0, last_seen=120.0)},
+            120.0,
+        )
+        held_drop = update_hls_viewer_display_state(state, {}, 350.0)
+        final_drop = update_hls_viewer_display_state(state, {}, 361.0)
+
+        self.assertEqual(first_drop.displayed_ips, {'8.8.8.8'})
+        self.assertEqual(first_drop.disconnected_durations, {})
+        self.assertEqual(held_drop.displayed_ips, {'8.8.8.8'})
+        self.assertEqual(held_drop.disconnected_durations, {})
+        self.assertEqual(final_drop.displayed_ips, set())
+        self.assertEqual(final_drop.disconnected_durations, {'8.8.8.8': 20.0})
+
+    def test_hls_viewers_route_rejects_malformed_connected_seconds(self):
+        quart_module = types.ModuleType('quart')
+        setattr(quart_module, 'request', None)
+        sys.modules.setdefault('quart', quart_module)
+        helpers_module = types.ModuleType('web.helpers')
+        setattr(helpers_module, 'get_client_address', lambda request: '8.8.8.8')
+        sys.modules.setdefault('web.helpers', helpers_module)
+
+        from web import sse_routes as module
+
+        state = make_state()
+        captured_handler = None
+
+        class FakeLogger:
+            def info(self, message: str) -> None:
+                pass
+
+        class FakeLoggers:
+            sse = FakeLogger()
+
+        class FakeApp:
+            def route(self, path: str, methods: list[str]):
+                def decorator(func):
+                    nonlocal captured_handler
+                    if path == '/hls-viewers':
+                        captured_handler = func
+                    return func
+                return decorator
+
+            def before_serving(self, func):
+                return func
+
+        class FakeRequest:
+            async def get_json(self):
+                return {'count': 1, 'viewers': {'8.8.8.8': {'connected_seconds': 'bad'}}}
+
+        register_sse_routes = getattr(module, 'register_sse_routes')
+        register_sse_routes(FakeApp(), None, FakeLoggers(), None, state)
+        if captured_handler is None:
+            raise AssertionError('hls-viewers handler was not captured')
+
+        with patched_attr(module, 'request', FakeRequest()):
+            response = asyncio.run(captured_handler())
+
+        self.assertEqual(response, ('Bad request', 400))
+
 
 class DiscordHLSConnectMessageTest(unittest.TestCase):
     def test_sse_connect_no_longer_logs_satellite_connect(self):
@@ -281,6 +361,85 @@ class DiscordHLSConnectMessageTest(unittest.TestCase):
 
         self.assertEqual(manager.connects, [('2a01:5a8:302:59c0::/64', 1), ('1.1.1.1', 2)])
         self.assertEqual(manager.embed_updates, 2)
+
+    def test_hls_disappearance_logs_disconnect_duration_once(self):
+        module = load_discord_bot_manager_module()
+
+        class Manager:
+            update_hls_viewers = module.DiscordBotManager.update_hls_viewers
+
+            def __init__(self):
+                self.hls_viewer_ips: set[str] = {'8.8.8.8'}
+                self.connects: list[tuple[str, int]] = []
+                self.disconnects: list[tuple[str, float]] = []
+                self.embed_updates = 0
+
+            def log_visitor_connect(self, ip: str, count: int) -> bool:
+                self.connects.append((ip, count))
+                return True
+
+            def log_visitor_disconnect(self, ip: str, connected_seconds: float) -> bool:
+                self.disconnects.append((ip, connected_seconds))
+                return True
+
+            def _schedule_debounced_visitor_update(self) -> bool:
+                self.embed_updates += 1
+                return True
+
+        manager = Manager()
+        manager.update_hls_viewers(set(), 0, {'8.8.8.8': 261.0})
+        manager.update_hls_viewers(set(), 0, {'8.8.8.8': 999.0})
+
+        self.assertEqual(manager.connects, [])
+        self.assertEqual(manager.disconnects, [('8.8.8.8', 261.0)])
+        self.assertEqual(manager.embed_updates, 1)
+
+    def test_disconnect_edits_original_connect_message(self):
+        module = load_discord_bot_manager_module()
+
+        class Message:
+            def __init__(self, content: str):
+                self.content = content
+
+            async def edit(self, content: str) -> None:
+                self.content = content
+
+        class Channel:
+            def __init__(self):
+                self.message: Message | None = None
+
+            async def send(self, content: str) -> Message:
+                self.message = Message(content)
+                return self.message
+
+        class Bot:
+            def __init__(self, channel: Channel):
+                self.channel = channel
+
+            def get_channel(self, channel_id: int) -> Channel:
+                return self.channel
+
+        class Manager:
+            _send_visitor_connect_log_async = module.DiscordBotManager._send_visitor_connect_log_async
+            _edit_visitor_disconnect_log_async = module.DiscordBotManager._edit_visitor_disconnect_log_async
+
+            def __init__(self):
+                self.live_channel_id = 1
+                self.channel = Channel()
+                self.bot = Bot(self.channel)
+                self._visitor_connect_messages = {}
+
+        async def run_scenario() -> Message:
+            manager = Manager()
+            await manager._send_visitor_connect_log_async('8.8.8.8', 1)
+            if manager.channel.message is None:
+                raise AssertionError('connect message was not sent')
+            await manager._edit_visitor_disconnect_log_async('8.8.8.8', 65.0)
+            return manager.channel.message
+
+        message = asyncio.run(run_scenario())
+
+        self.assertIn('disconnected after 1m 5s', message.content)
 
 
 if __name__ == '__main__':

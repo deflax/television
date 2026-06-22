@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false, reportImplicitRelativeImport=false
 
 import asyncio
+from collections.abc import Mapping
 import copy
 import json
 import time
@@ -8,10 +9,11 @@ import time
 from quart import request
 
 from web.helpers import get_client_address
-from web.state import WebRouteState, apply_hls_viewer_display_grace, hls_viewer_display_key
+from web.state import HLSViewerSession, WebRouteState, hls_viewer_display_key, update_hls_viewer_display_state
 
 
 SSE_TO_HLS_GRACE_SECONDS = 45.0
+MAX_HLS_VIEWER_REPORT_SIZE = 1000
 
 
 def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state: WebRouteState) -> None:
@@ -72,9 +74,28 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
         now = time.monotonic()
         _prune_recent_sse_disconnects(now)
 
-        reported_ips = {str(ip) for ip in data.get('viewers', {}).keys()}
+        viewers_data = data.get('viewers', {})
+        if not isinstance(viewers_data, Mapping):
+            return 'Bad request', 400
+        if len(viewers_data) > MAX_HLS_VIEWER_REPORT_SIZE:
+            return 'Bad request', 400
+
+        reported_sessions: dict[str, HLSViewerSession] = {}
+        for ip, session_data in viewers_data.items():
+            viewer_key = str(ip)
+            try:
+                if isinstance(session_data, Mapping):
+                    connected_seconds = max(0.0, float(session_data.get('connected_seconds', 0.0)))
+                else:
+                    connected_seconds = 0.0
+            except (TypeError, ValueError):
+                return 'Bad request', 400
+            reported_sessions[viewer_key] = HLSViewerSession(connected_seconds=connected_seconds, last_seen=now)
+
+        reported_ips = set(reported_sessions.keys())
         current_displayed_ips = {hls_viewer_display_key(ip) for ip in reported_ips}
-        displayed_ips = apply_hls_viewer_display_grace(state, reported_ips, now)
+        display_update = update_hls_viewer_display_state(state, reported_sessions, now)
+        displayed_ips = display_update.displayed_ips
         sse_ips = set(state.visitor_tracker.visitors.keys())
         grace_ips = {
             ip for ip, ts in state.recent_sse_disconnects.items() if ts >= now - SSE_TO_HLS_GRACE_SECONDS
@@ -104,7 +125,11 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
             await _broadcast_visitors()
 
         if discord_bot_manager is not None:
-            discord_bot_manager.update_hls_viewers(displayed_ips, state.hls_viewer_count)
+            discord_bot_manager.update_hls_viewers(
+                displayed_ips,
+                state.hls_viewer_count,
+                display_update.disconnected_durations,
+            )
 
         return 'OK', 200
 

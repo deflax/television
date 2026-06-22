@@ -65,6 +65,7 @@ class DiscordBotManager:
         self._visitor_debounce_seconds = 5.0  # coalesce rapid visitor changes into one Discord update
         self._visitor_connect_log_last_sent = {}
         self._visitor_connect_log_window_seconds = 300.0
+        self._visitor_connect_messages: dict[str, discord.Message] = {}
 
         # Setup bot commands and events
         self._setup_bot_events()
@@ -662,6 +663,18 @@ class DiscordBotManager:
             f'Failed to log visitor connect for {ip}'
         )
 
+    def log_visitor_disconnect(self, ip: str, connected_seconds: float) -> bool:
+        if self.live_channel_id == 0:
+            return False
+        if not self.bot.is_ready():
+            self.logger.warning('Discord bot is not ready yet')
+            return False
+
+        return self._schedule_async(
+            self._edit_visitor_disconnect_log_async(ip, connected_seconds),
+            f'Failed to log visitor disconnect for {ip}'
+        )
+
     async def _send_visitor_connect_log_async(self, ip: str, count: int) -> None:
         if self.live_channel_id == 0:
             return
@@ -672,7 +685,25 @@ class DiscordBotManager:
             return
 
         hostname = obfuscate_hostname(ip, ip)
-        await channel.send(f':satellite: `{hostname}`')
+        message = await channel.send(f':satellite: `{hostname}`')
+        self._visitor_connect_messages[ip] = message
+
+    async def _edit_visitor_disconnect_log_async(self, ip: str, connected_seconds: float) -> None:
+        message = self._visitor_connect_messages.pop(ip, None)
+        if message is None:
+            return
+
+        hostname = obfuscate_hostname(ip, ip)
+        total_seconds = max(0, int(connected_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours > 0:
+            duration = f'{hours}h {minutes}m {seconds}s'
+        elif minutes > 0:
+            duration = f'{minutes}m {seconds}s'
+        else:
+            duration = f'{seconds}s'
+        await message.edit(content=f':satellite: `{hostname}` disconnected after {duration}')
 
     async def _prune_all(self, channel):
         """Delete all tracked bot messages for a channel without sending a new one."""
@@ -950,14 +981,26 @@ class DiscordBotManager:
         except Exception as e:
             self.logger.error(f'Failed to send visitors embed to Discord: {e}')
 
-    def update_hls_viewers(self, new_ips: set, total_count: int) -> None:
+    def update_hls_viewers(
+        self,
+        new_ips: set[str],
+        total_count: int,
+        disconnected_durations: dict[str, float] | None = None,
+    ) -> None:
         """Update HLS viewer state and send visitors embed on changes."""
         old_ips = self.hls_viewer_ips
         new_viewer_ips = new_ips - old_ips
+        disconnected_viewer_ips = old_ips - new_ips
         self.hls_viewer_ips = new_ips
 
         for ip in sorted(new_viewer_ips):
             self.log_visitor_connect(ip, total_count)
+
+        final_durations = disconnected_durations or {}
+        for ip in sorted(disconnected_viewer_ips):
+            connected_seconds = final_durations.get(ip)
+            if connected_seconds is not None:
+                self.log_visitor_disconnect(ip, connected_seconds)
 
         if new_ips != old_ips:
             self._schedule_debounced_visitor_update()
