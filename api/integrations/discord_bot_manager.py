@@ -703,7 +703,7 @@ class DiscordBotManager:
             duration = f'{minutes}m {seconds}s'
         else:
             duration = f'{seconds}s'
-        await message.edit(content=f':satellite: `{hostname}` {duration}')
+        await message.edit(content=f':satellite: `{hostname}` :clock3: `{duration}`')
 
     async def _prune_all(self, channel):
         """Delete all tracked bot messages for a channel without sending a new one."""
