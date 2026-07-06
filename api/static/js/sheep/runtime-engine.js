@@ -4,6 +4,7 @@ window.SheepInternals = window.SheepInternals || {};
   function createRuntimeEngine(context) {
     const { window, state, helpers, effects, services } = context;
     const { randomBetween, clamp, composeCallbacks } = helpers;
+    let lastSideEffectActionTimestamp = null;
 
     function getDefaults() {
       return services.actionCatalog.DEFAULTS;
@@ -228,11 +229,17 @@ window.SheepInternals = window.SheepInternals || {};
       });
     }
 
-    function queueSpecialActionPlan() {
+    function queueSpecialActionPlan(timestamp) {
       const actionName = pickWeightedAction(services.actionCatalog.getSpecialActions());
 
       if (actionName === 'roll') {
         queueRollAction();
+        return;
+      }
+
+      if (actionName === 'spawn') {
+        effects.spawnManualSheep();
+        lastSideEffectActionTimestamp = timestamp;
         return;
       }
 
@@ -313,7 +320,7 @@ window.SheepInternals = window.SheepInternals || {};
       return true;
     }
 
-    function queueMarkedSurfaceDwellPlan() {
+    function queueMarkedSurfaceDwellPlan(timestamp) {
       const defaults = getDefaults();
       const surface = services.surfacePlanner.getCurrentSurface();
       const availableDistance = Math.max(0, surface.maxX - surface.minX);
@@ -358,6 +365,10 @@ window.SheepInternals = window.SheepInternals || {};
     function queueAutonomousPlan(timestamp) {
       const defaults = getDefaults();
 
+      if (lastSideEffectActionTimestamp === timestamp) {
+        return;
+      }
+
       if (state.activeAction || state.actionQueue.length) {
         return;
       }
@@ -376,7 +387,7 @@ window.SheepInternals = window.SheepInternals || {};
       const currentSurface = services.surfacePlanner.getCurrentSurface();
 
       if (services.surfacePlanner.isMarkedSurface(currentSurface) && Math.random() < defaults.markedSurfaceDwellChance) {
-        queueMarkedSurfaceDwellPlan();
+        queueMarkedSurfaceDwellPlan(timestamp);
         return;
       }
 
@@ -388,7 +399,7 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       if (Math.random() < defaults.specialActionChance) {
-        queueSpecialActionPlan();
+        queueSpecialActionPlan(timestamp);
         return;
       }
 

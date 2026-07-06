@@ -18,7 +18,6 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.initialized = true;
 
-  const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
   const MAX_SHEEP_COUNT = 6;
   const config = Object.freeze({
     SPRITE_SHEET_URL: '/static/vendor/sheep/rsc/sheep.png',
@@ -37,8 +36,7 @@ window.SheepInternals = window.SheepInternals || {};
     enabled: true,
     instances: [],
     nextSheepId: 1,
-    capResetPending: false,
-    spawnTimer: 0
+    capResetPending: false
   };
 
   function randomBetween(min, max) {
@@ -313,7 +311,6 @@ window.SheepInternals = window.SheepInternals || {};
     if (manager.enabled) {
       ensurePrimarySheep();
       syncInstancesEnabled(true);
-      startSpawnTimer();
     }
   }
 
@@ -386,7 +383,6 @@ window.SheepInternals = window.SheepInternals || {};
     sheep.ensureInitialized();
 
     if (manager.instances.length >= MAX_SHEEP_COUNT) {
-      stopSpawnTimer();
       triggerCapAlienVisitReset();
     }
 
@@ -405,23 +401,6 @@ window.SheepInternals = window.SheepInternals || {};
     return getPrimarySheep() || spawnSheep();
   }
 
-  function startSpawnTimer() {
-    if (manager.spawnTimer || !manager.enabled || manager.instances.length >= MAX_SHEEP_COUNT) {
-      return;
-    }
-
-    manager.spawnTimer = window.setInterval(spawnSheep, SHEEP_SPAWN_INTERVAL_MS);
-  }
-
-  function stopSpawnTimer() {
-    if (!manager.spawnTimer) {
-      return;
-    }
-
-    window.clearInterval(manager.spawnTimer);
-    manager.spawnTimer = 0;
-  }
-
   function syncInstancesEnabled(enabled) {
     manager.instances.forEach((sheep) => {
       sheep.setEnabled(enabled);
@@ -435,11 +414,9 @@ window.SheepInternals = window.SheepInternals || {};
     if (manager.enabled) {
       ensurePrimarySheep();
       syncInstancesEnabled(true);
-      startSpawnTimer();
       return true;
     }
 
-    stopSpawnTimer();
     syncInstancesEnabled(false);
     return false;
   }
@@ -452,7 +429,6 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     ensurePrimarySheep();
-    startSpawnTimer();
   }
 
   app.enable = function enableSheep() {

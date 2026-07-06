@@ -749,14 +749,14 @@ window.SheepInternals = window.SheepInternals || {};
       Object.freeze({ name: 'stare', weight: 0.8 }),
       Object.freeze({ name: 'roll', weight: 0.55 }),
       Object.freeze({ name: 'alienVisit', weight: 0.04 }),
+      Object.freeze({ name: 'spawn', weight: 0.08 }),
       Object.freeze({ name: 'bath', weight: 0.7 }),
       Object.freeze({ name: 'eat', weight: 0.9 }),
       Object.freeze({ name: 'water', weight: 0.7 })
     ]);
 
     const MENU_ACTIONS = Object.freeze([
-      ...SPECIAL_ACTIONS,
-      Object.freeze({ name: 'spawn' })
+      ...SPECIAL_ACTIONS
     ]);
 
     function getActionDefinition(name) {
