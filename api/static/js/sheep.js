@@ -78,7 +78,6 @@ window.SheepInternals = window.SheepInternals || {};
       menuOpen: false,
       enabled: manager.enabled,
       sheepVisible: true,
-      blushing: false,
       abducted: false,
       abductedReturnAt: 0,
       activeAction: null,

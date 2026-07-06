@@ -166,16 +166,6 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
-    function applySpriteStateClasses() {
-      const sprite = getSprite();
-
-      if (!sprite) {
-        return;
-      }
-
-      sprite.classList.toggle('is-blushing', Boolean(state.blushing));
-    }
-
     function applyPropPosition(propState, propSprite) {
       if (!propSprite) {
         return;
@@ -204,7 +194,6 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       sprite.hidden = !state.sheepVisible;
-      applySpriteStateClasses();
       sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
 
       applyPropPosition(state.prop, getPropSprite());
@@ -248,8 +237,6 @@ window.SheepInternals = window.SheepInternals || {};
       if (typeof onEnter === 'function') {
         onEnter(action, action.frames[action.frameIndex]);
       }
-
-      applySpriteStateClasses();
     }
 
     function createSpriteElement(className) {

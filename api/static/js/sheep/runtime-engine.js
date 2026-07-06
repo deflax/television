@@ -123,7 +123,6 @@ window.SheepInternals = window.SheepInternals || {};
 
     function cancelActiveAction() {
       state.activeAction = null;
-      state.blushing = false;
     }
 
     function pickTarget(surface, minDistance) {
