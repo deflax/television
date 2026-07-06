@@ -278,7 +278,8 @@ window.SheepInternals = window.SheepInternals || {};
       menu.className = 'sheep-layer__menu';
       menu.hidden = true;
       menu.setAttribute('role', 'menu');
-      menu.setAttribute('aria-label', 'Sheep special actions');
+      menu.setAttribute('aria-label', "Sheepy's special actions");
+      menu.title = "Sheepy's special actions";
 
       services.actionCatalog.getMenuActions().forEach((entry) => {
         menu.appendChild(createMenuButton(entry.name));
@@ -297,6 +298,7 @@ window.SheepInternals = window.SheepInternals || {};
       refs.menu = layer.querySelector('.sheep-layer__menu');
 
       if (refs.sprite) {
+        refs.sprite.title = 'Sheepy';
         applySpriteSheetStyles(refs.sprite);
         applySpriteHueStyles(refs.sprite);
       }
@@ -328,6 +330,7 @@ window.SheepInternals = window.SheepInternals || {};
       secondaryPropSprite.hidden = true;
 
       const sprite = createSpriteElement('sheep-layer__sprite');
+      sprite.title = 'Sheepy';
       applySpriteHueStyles(sprite);
       const menu = createMenuElement();
 
