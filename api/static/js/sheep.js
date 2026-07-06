@@ -19,8 +19,7 @@ window.SheepInternals = window.SheepInternals || {};
   app.initialized = true;
 
   const SHEEP_SPAWN_INTERVAL_MS = 60 * 60 * 1000;
-  const MAX_SHEEP_COUNT = 4;
-  const MANUAL_MAX_SHEEP_COUNT = 7;
+  const MAX_SHEEP_COUNT = 6;
   const config = Object.freeze({
     SPRITE_SHEET_URL: '/static/vendor/sheep/rsc/sheep.png',
     SPRITE_COLUMNS: 16,
@@ -38,7 +37,7 @@ window.SheepInternals = window.SheepInternals || {};
     enabled: true,
     instances: [],
     nextSheepId: 1,
-    manualCapResetPending: false,
+    capResetPending: false,
     spawnTimer: 0
   };
 
@@ -146,7 +145,10 @@ window.SheepInternals = window.SheepInternals || {};
       spawnSheep: (options) => spawnSheep(options),
       spawnManualSheep: spawnManualSheep,
       resetSheepInstancesToPrimary: resetSheepInstancesToPrimary,
-      triggerManualCapAlienVisitReset: triggerManualCapAlienVisitReset,
+      triggerCapAlienVisitReset: triggerCapAlienVisitReset,
+      handleAlienVisitComplete(options) {
+        handleAlienVisitComplete(context, options);
+      },
       queueAction(name, overrides) {
         context.services.runtimeEngine.queueAction(name, overrides);
       },
@@ -306,7 +308,7 @@ window.SheepInternals = window.SheepInternals || {};
       sheep.destroy();
     });
     manager.instances = primarySheep ? [primarySheep] : [];
-    manager.manualCapResetPending = false;
+    manager.capResetPending = false;
 
     if (manager.enabled) {
       ensurePrimarySheep();
@@ -315,7 +317,27 @@ window.SheepInternals = window.SheepInternals || {};
     }
   }
 
-  function triggerManualCapAlienVisitReset() {
+  function handleAlienVisitComplete(context, options) {
+    if (options?.capReset || getPrimarySheep()?.state === context.state) {
+      return;
+    }
+
+    const sheepIndex = manager.instances.findIndex((sheep) => sheep.state === context.state);
+
+    if (sheepIndex <= 0) {
+      return;
+    }
+
+    const [sheep] = manager.instances.splice(sheepIndex, 1);
+    sheep.destroy();
+  }
+
+  function triggerCapAlienVisitReset() {
+    if (manager.capResetPending) {
+      return;
+    }
+
+    manager.capResetPending = true;
     const sheepSnapshot = manager.instances.slice();
     let pendingCompletions = 0;
     let resetApplied = false;
@@ -331,6 +353,7 @@ window.SheepInternals = window.SheepInternals || {};
 
     sheepSnapshot.forEach((sheep) => {
       const triggered = sheep.runtimeEngine.triggerMenuAction('alienVisit', {
+        capReset: true,
         onComplete: () => {
           pendingCompletions -= 1;
 
@@ -353,7 +376,7 @@ window.SheepInternals = window.SheepInternals || {};
   function spawnSheep(options) {
     const { maxCount = MAX_SHEEP_COUNT } = options || {};
 
-    if (!manager.enabled || manager.instances.length >= maxCount) {
+    if (!manager.enabled || manager.capResetPending || manager.instances.length >= maxCount) {
       return null;
     }
 
@@ -364,24 +387,18 @@ window.SheepInternals = window.SheepInternals || {};
 
     if (manager.instances.length >= MAX_SHEEP_COUNT) {
       stopSpawnTimer();
+      triggerCapAlienVisitReset();
     }
 
     return sheep;
   }
 
   function spawnManualSheep() {
-    if (manager.manualCapResetPending) {
-      return { spawned: false, reachedCap: false };
+    if (manager.capResetPending) {
+      return { spawned: false };
     }
 
-    const sheep = spawnSheep({ maxCount: MANUAL_MAX_SHEEP_COUNT });
-    const reachedCap = Boolean(sheep && manager.instances.length >= MANUAL_MAX_SHEEP_COUNT);
-
-    if (reachedCap) {
-      manager.manualCapResetPending = true;
-    }
-
-    return { spawned: Boolean(sheep), reachedCap };
+    return { spawned: Boolean(spawnSheep()) };
   }
 
   function ensurePrimarySheep() {

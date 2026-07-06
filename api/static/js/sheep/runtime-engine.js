@@ -34,6 +34,7 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalSurfaceId: options.arrivalSurfaceId ?? null,
         keepPlayingOnArrival: options.keepPlayingOnArrival ?? definition.keepPlayingOnArrival,
         waitForLanding: options.waitForLanding ?? definition.waitForLanding,
+        capReset: options.capReset === true,
         onStart: composeCallbacks(definition.onStart, options.onStart),
         onComplete: composeCallbacks(definition.onComplete, options.onComplete)
       };
@@ -70,6 +71,7 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalSurfaceId: action.arrivalSurfaceId,
         keepPlayingOnArrival: action.keepPlayingOnArrival,
         waitForLanding: action.waitForLanding,
+        capReset: action.capReset,
         onStart: action.onStart,
         onComplete: action.onComplete,
         frameIndex: 0,
@@ -113,6 +115,9 @@ window.SheepInternals = window.SheepInternals || {};
 
       services.presentation.applyPosition();
 
+      if (action.name === 'alienVisit' && typeof effects.handleAlienVisitComplete === 'function') {
+        effects.handleAlienVisitComplete({ capReset: action.capReset });
+      }
     }
 
     function cancelActiveAction() {
@@ -269,10 +274,6 @@ window.SheepInternals = window.SheepInternals || {};
 
         if (!spawnResult.spawned) {
           return false;
-        }
-
-        if (spawnResult.reachedCap) {
-          effects.triggerManualCapAlienVisitReset();
         }
 
         return true;
