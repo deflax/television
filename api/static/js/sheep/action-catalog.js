@@ -247,11 +247,6 @@ window.SheepInternals = window.SheepInternals || {};
     function createRollAction() {
       const sequence = createSequence();
 
-      addSequenceFrame(sequence, 3, 200);
-      addSequenceFrame(sequence, 9, 200);
-      addSequenceFrame(sequence, 10, 200);
-      addSequenceFrame(sequence, 126, 3000);
-
       for (let frame = 125; frame >= 112; frame -= 1) {
         addSequenceFrame(sequence, frame, 200);
       }
