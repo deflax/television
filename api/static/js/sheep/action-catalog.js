@@ -347,31 +347,27 @@ window.SheepInternals = window.SheepInternals || {};
         showVisitorFrame(action, visitorFrames[3], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -76 : 76;
       });
-      addSequenceFrame(sequence, 172, frameTimings[4], (action) => {
+      addSequenceFrame(sequence, 127, frameTimings[4], (action) => {
         action.startDirection = action.startDirection ?? state.direction;
         state.direction = action.approachFromLeft ? -1 : 1;
-        state.blushing = true;
         showSheep();
         showVisitorFrame(action, visitorFrames[0], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -26 : 26;
       });
-      addSequenceFrame(sequence, 173, frameTimings[5], (action) => {
+      addSequenceFrame(sequence, 128, frameTimings[5], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        state.blushing = true;
         showSheep();
         showVisitorFrame(action, visitorFrames[1], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -18 : 18;
       });
-      addSequenceFrame(sequence, 174, frameTimings[6], (action) => {
+      addSequenceFrame(sequence, 129, frameTimings[6], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        state.blushing = true;
         showSheep();
         showVisitorFrame(action, visitorFrames[2], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -12 : 12;
       });
-      addSequenceFrame(sequence, 173, frameTimings[7], (action) => {
+      addSequenceFrame(sequence, 130, frameTimings[7], (action) => {
         state.direction = action.startDirection ?? state.direction;
-        state.blushing = false;
         showSheep();
         showVisitorFrame(action, visitorFrames[3], 'away');
         state.prop.offsetX = action.approachFromLeft ? -14 : 14;
@@ -395,15 +391,12 @@ window.SheepInternals = window.SheepInternals || {};
 
       return finalizeSequenceAction(sequence, {
         onStart: () => {
-          state.blushing = false;
           showSheep();
         },
         onComplete: (action) => {
           if (typeof action.startDirection === 'number') {
             state.direction = action.startDirection;
           }
-
-          state.blushing = false;
           hideProp();
         }
       });
