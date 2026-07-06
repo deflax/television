@@ -482,11 +482,11 @@ window.StreamApp = window.StreamApp || {};
     if (enabled) {
       sheepBtn.classList.remove('btn-outline-secondary');
       sheepBtn.classList.add('btn-outline-success');
-      sheepBtn.title = 'Sheep on';
+      sheepBtn.title = 'Sheepy on';
     } else {
       sheepBtn.classList.remove('btn-outline-success');
       sheepBtn.classList.add('btn-outline-secondary');
-      sheepBtn.title = 'Sheep off';
+      sheepBtn.title = 'Sheepy off';
     }
   }
 
