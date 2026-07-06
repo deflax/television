@@ -315,8 +315,17 @@ window.SheepInternals = window.SheepInternals || {};
 
     function createBlackSheepAction() {
       const sequence = createSequence();
-      const frameTimings = [260, 240, 220, 280, 260, 340, 280, 240, 220, 260, 300, 220];
+      const frameTimings = [260, 240, 220, 280, 360, 620, 520, 420, 280, 300, 340, 240];
       const visitorFrames = [154, 155, 156, 157];
+
+      function showVisitorFrame(action, frame, travelPhase) {
+        const movingAway = travelPhase === 'away';
+        const travelDirection = action.approachFromLeft === movingAway ? 1 : -1;
+
+        showProp(frame, PROP_PRESETS.blackSheepVisitor);
+        state.prop.flipWithDirection = true;
+        state.prop.direction = travelDirection;
+      }
 
       addSequenceFrame(sequence, 73, frameTimings[0], (action) => {
         const bounds = getBounds();
@@ -328,65 +337,78 @@ window.SheepInternals = window.SheepInternals || {};
         action.entryOffsetX = action.approachFromLeft
           ? bounds.minX - state.x
           : bounds.maxX - state.x;
-        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[0], 'toward');
         state.prop.offsetX = action.entryOffsetX;
       });
       addSequenceFrame(sequence, 74, frameTimings[1], (action) => {
-        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[1], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -136 : 136;
       });
       addSequenceFrame(sequence, 75, frameTimings[2], (action) => {
-        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[2], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -108 : 108;
       });
       addSequenceFrame(sequence, 76, frameTimings[3], (action) => {
-        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[3], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -76 : 76;
       });
       addSequenceFrame(sequence, 172, frameTimings[4], (action) => {
         action.startDirection = action.startDirection ?? state.direction;
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
+        state.blushing = true;
+        showSheep();
+        showVisitorFrame(action, visitorFrames[0], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -26 : 26;
       });
       addSequenceFrame(sequence, 173, frameTimings[5], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
+        state.blushing = true;
+        showSheep();
+        showVisitorFrame(action, visitorFrames[1], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -18 : 18;
       });
       addSequenceFrame(sequence, 174, frameTimings[6], (action) => {
         state.direction = action.approachFromLeft ? -1 : 1;
-        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
+        state.blushing = true;
+        showSheep();
+        showVisitorFrame(action, visitorFrames[2], 'toward');
         state.prop.offsetX = action.approachFromLeft ? -12 : 12;
       });
       addSequenceFrame(sequence, 173, frameTimings[7], (action) => {
         state.direction = action.startDirection ?? state.direction;
-        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
+        state.blushing = false;
+        showSheep();
+        showVisitorFrame(action, visitorFrames[3], 'away');
         state.prop.offsetX = action.approachFromLeft ? -14 : 14;
       });
       addSequenceFrame(sequence, 74, frameTimings[8], (action) => {
-        showProp(visitorFrames[0], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[0], 'away');
         state.prop.offsetX = action.approachFromLeft ? -72 : 72;
       });
       addSequenceFrame(sequence, 73, frameTimings[9], (action) => {
-        showProp(visitorFrames[1], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[1], 'away');
         state.prop.offsetX = action.approachFromLeft ? -104 : 104;
       });
       addSequenceFrame(sequence, 74, frameTimings[10], (action) => {
-        showProp(visitorFrames[2], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[2], 'away');
         state.prop.offsetX = action.approachFromLeft ? -136 : 136;
       });
       addSequenceFrame(sequence, 3, frameTimings[11], (action) => {
-        showProp(visitorFrames[3], PROP_PRESETS.blackSheepVisitor);
+        showVisitorFrame(action, visitorFrames[3], 'away');
         state.prop.offsetX = action.approachFromLeft ? -184 : 184;
       });
 
       return finalizeSequenceAction(sequence, {
+        onStart: () => {
+          state.blushing = false;
+          showSheep();
+        },
         onComplete: (action) => {
           if (typeof action.startDirection === 'number') {
             state.direction = action.startDirection;
           }
 
+          state.blushing = false;
           hideProp();
         }
       });

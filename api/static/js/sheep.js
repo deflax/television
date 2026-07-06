@@ -81,6 +81,7 @@ window.SheepInternals = window.SheepInternals || {};
       menuOpen: false,
       enabled: manager.enabled,
       sheepVisible: true,
+      blushing: false,
       abducted: false,
       abductedReturnAt: 0,
       activeAction: null,
@@ -93,7 +94,8 @@ window.SheepInternals = window.SheepInternals || {};
         offsetX: 0,
         offsetY: 0,
         attachToFacing: false,
-        flipWithDirection: false
+        flipWithDirection: false,
+        direction: null
       },
       secondaryProp: {
         visible: false,
@@ -101,7 +103,8 @@ window.SheepInternals = window.SheepInternals || {};
         offsetX: 0,
         offsetY: 0,
         attachToFacing: false,
-        flipWithDirection: false
+        flipWithDirection: false,
+        direction: null
       }
     };
   }

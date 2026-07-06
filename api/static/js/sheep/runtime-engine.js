@@ -112,10 +112,12 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       services.presentation.applyPosition();
+
     }
 
     function cancelActiveAction() {
       state.activeAction = null;
+      state.blushing = false;
     }
 
     function pickTarget(surface, minDistance) {

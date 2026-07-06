@@ -116,6 +116,7 @@ window.SheepInternals = window.SheepInternals || {};
       state.prop.offsetY = nextPreset.offsetY;
       state.prop.attachToFacing = nextPreset.attachToFacing;
       state.prop.flipWithDirection = nextPreset.flipWithDirection;
+      state.prop.direction = null;
       setPropFrame(frame, false);
     }
 
@@ -127,6 +128,7 @@ window.SheepInternals = window.SheepInternals || {};
       state.secondaryProp.offsetY = nextPreset.offsetY;
       state.secondaryProp.attachToFacing = nextPreset.attachToFacing;
       state.secondaryProp.flipWithDirection = nextPreset.flipWithDirection;
+      state.secondaryProp.direction = null;
       setSecondaryPropFrame(frame, false);
     }
 
@@ -164,6 +166,16 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
+    function applySpriteStateClasses() {
+      const sprite = getSprite();
+
+      if (!sprite) {
+        return;
+      }
+
+      sprite.classList.toggle('is-blushing', Boolean(state.blushing));
+    }
+
     function applyPropPosition(propState, propSprite) {
       if (!propSprite) {
         return;
@@ -177,7 +189,8 @@ window.SheepInternals = window.SheepInternals || {};
       const propOffsetX = propState.attachToFacing
         ? propState.offsetX * state.direction * -1
         : propState.offsetX;
-      const propScaleX = propState.flipWithDirection ? state.direction : 1;
+      const propDirection = typeof propState.direction === 'number' ? propState.direction : state.direction;
+      const propScaleX = propState.flipWithDirection ? propDirection : 1;
 
       propSprite.hidden = false;
       propSprite.style.transform = `translate3d(${state.x + propOffsetX}px, ${state.y + propState.offsetY}px, 0) scaleX(${propScaleX})`;
@@ -191,6 +204,7 @@ window.SheepInternals = window.SheepInternals || {};
       }
 
       sprite.hidden = !state.sheepVisible;
+      applySpriteStateClasses();
       sprite.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scaleX(${state.direction})`;
 
       applyPropPosition(state.prop, getPropSprite());
@@ -234,6 +248,8 @@ window.SheepInternals = window.SheepInternals || {};
       if (typeof onEnter === 'function') {
         onEnter(action, action.frames[action.frameIndex]);
       }
+
+      applySpriteStateClasses();
     }
 
     function createSpriteElement(className) {

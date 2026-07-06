@@ -14,6 +14,7 @@
     --sheep-saturation: 1;
     --sheep-contrast: 1;
     --sheep-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+    --sheep-blush-color: rgba(255, 124, 150, 0.78);
     --sheep-menu-bg: rgba(14, 14, 18, 0.94);
     --sheep-menu-border: rgba(255, 255, 255, 0.16);
     --sheep-menu-text: rgba(255, 255, 255, 0.96);
@@ -59,6 +60,21 @@
     filter: sepia(var(--sheep-colorize)) hue-rotate(var(--sheep-hue-rotation)) saturate(var(--sheep-saturation)) contrast(var(--sheep-contrast)) var(--sheep-shadow);
     pointer-events: auto;
     cursor: pointer;
+}
+
+.sheep-layer__sprite.is-blushing::after {
+    content: '';
+    position: absolute;
+    top: 42%;
+    left: 24%;
+    width: 12%;
+    height: 9%;
+    border-radius: 999px;
+    background: var(--sheep-blush-color);
+    box-shadow: calc(var(--sheep-size) * 0.28) 0 0 var(--sheep-blush-color);
+    opacity: 0.72;
+    pointer-events: none;
+    transform: translateY(-50%);
 }
 
 .sheep-layer__prop {
