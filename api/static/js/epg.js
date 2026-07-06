@@ -69,7 +69,7 @@ window.StreamApp.renderEpg = function(database, playheadId) {
       for (const s of scheduled) {
         const isActive = playheadId === s.id;
         const cls = isActive ? '' : 'text-secondary';
-        const style = isActive ? 'style="color: rgb(132,4,217);"' : '';
+        const style = isActive ? 'style="color: var(--epg-active-purple);"' : '';
         const icon = isActive ? ' <i class="fa fa-volume-up"></i>' : '';
         const detail = s.details ? ` <small class="text-muted">- ${s.details}</small>` : '';
         const localStr = s.localHour.toString().padStart(2, '0') + ':' + s.localMinute.toString().padStart(2, '0');

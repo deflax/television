@@ -1,3 +1,8 @@
+:root {
+    --epg-active-purple: rgb(132, 4, 217);
+    --plyr-color-main: var(--epg-active-purple);
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -17,7 +22,11 @@ a {
 }
 
 a:hover {
-    color: rgb(132,4,217) !important;
+    color: var(--epg-active-purple) !important;
+}
+
+a.stream-link:hover {
+    color: #fff !important;
 }
 
 video {
@@ -25,7 +34,7 @@ video {
 }
 
 .violet {
-    color: rgb(132, 4, 217) !important;
+    color: var(--epg-active-purple) !important;
 }
 
 .content-container {
