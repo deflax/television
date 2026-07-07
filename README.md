@@ -151,6 +151,8 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `CORE_API_HOSTNAME` | Restreamer hostname (e.g., `stream.example.com`) |
 | `CORE_API_AUTH_USERNAME` | Restreamer admin username |
 | `CORE_API_AUTH_PASSWORD` | Restreamer admin password |
+| `METADATA_POLL_INTERVAL` | Seconds between current-channel ICY metadata checks (default: `15`) |
+| `METADATA_TIMEOUT` | Timeout in seconds for each ICY metadata request (default: `3.5`) |
 | `API_LOG_LEVEL_API` | Log level for Uvicorn/API (default: `INFO`) |
 | `API_LOG_LEVEL_JOB` | Log level for APScheduler (default: `WARN`) |
 | `API_LOG_LEVEL_STREAM` | Log level for stream manager (default: `INFO`) |
