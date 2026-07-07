@@ -128,6 +128,23 @@ async def variant_playlist(variant: int):
     )
 
 
+@app.route('/live/audio.m3u8')
+async def audio_playlist():
+    await hls_viewer_tracker.record_playlist_fetch(_get_client_ip())
+
+    playlist_path = Path(HLS_OUTPUT_DIR) / 'audio' / 'audio.m3u8'
+    if not playlist_path.exists():
+        abort(404)
+
+    response = await send_file(
+        playlist_path,
+        mimetype='application/vnd.apple.mpegurl',
+    )
+    for key, value in {**PLAYLIST_CACHE_HEADERS, **CORS_HEADERS}.items():
+        response.headers[key] = value
+    return response
+
+
 def _is_safe_path(base_dir: Path, requested_path: Path) -> bool:
     """Check if requested_path is safely within base_dir (no traversal)."""
     try:
@@ -157,6 +174,21 @@ async def variant_segment(variant: int, filename: str):
         logger.warning(f'Path traversal attempt blocked: {filename}')
         abort(403)
     
+    return await _serve_segment(file_path)
+
+
+@app.route('/live/audio/<path:filename>')
+async def audio_segment(filename: str):
+    if not filename.endswith('.ts'):
+        abort(404)
+
+    base_dir = Path(HLS_OUTPUT_DIR) / 'audio'
+    file_path = base_dir / filename
+
+    if not _is_safe_path(base_dir, file_path):
+        logger.warning(f'Path traversal attempt blocked: {filename}')
+        abort(403)
+
     return await _serve_segment(file_path)
 
 
