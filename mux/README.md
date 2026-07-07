@@ -8,6 +8,7 @@ HLS stream multiplexer that monitors an API playhead via SSE and switches betwee
 - **ABR support** - Adaptive bitrate with source passthrough + transcoded variants
 - **Copy mode** - Simple passthrough for single-quality output
 - **Dynamic playlists** - Generated on-demand from segment store for consistency
+- **Audio-only HLS endpoint** - Shared sidecar FFmpeg writes a standalone audio media playlist
 - **Crash recovery** - Auto-restarts FFmpeg on failures with discontinuity markers
 
 ## Architecture
@@ -53,6 +54,7 @@ HLS stream multiplexer that monitors an API playhead via SSE and switches betwee
 | `utils.py` | Shared utilities (file stability checks) |
 | `segment_store.py` | Central store for segments, generates playlists |
 | `ffmpeg_runner.py` | FFmpeg process wrapper with segment detection |
+| `audio_hls_sidecar.py` | Shared audio-only FFmpeg sidecar process |
 | `stream_manager.py` | Handles stream lifecycle and transitions |
 | `playhead_monitor.py` | SSE client watching API for URL changes |
 | `server.py` | HTTP server for HLS output |
@@ -66,7 +68,8 @@ The key improvement over typical implementations is that transitions happen at *
 3. **Mark discontinuity** in segment store
 4. **Start new FFmpeg** with next sequence number
 5. **Wait for first segment** from new stream
-6. **Resume normal operation**
+6. **Start the shared audio-only sidecar** from `/live/stream.m3u8`
+7. **Resume normal operation**
 
 This eliminates the "back and forth" playback issue caused by overlapping FFmpeg instances or segment number collisions.
 
@@ -102,6 +105,10 @@ Default ABR variants:
 
 Audio is copied from the source for ABR variants; `audio_bitrate` is used for playlist bandwidth metadata.
 
+### Audio-Only Sidecar
+
+Audio-only playback is served by one mux-service sidecar FFmpeg process, not by per-listener processes and not by adding an audio ABR variant. `StreamManager` starts it after the primary mux has produced the first segment, stops it when the stream stops or switches, and restarts it if the sidecar exits while the primary mux is still running. The sidecar consumes the existing mux output at `http://127.0.0.1:{SERVER_PORT}/live/stream.m3u8`, copies the first audio stream, disables video, and writes files under `{HLS_OUTPUT_DIR}/audio`.
+
 ### URL Rewriting
 
 | Variable | Default | Description |
@@ -117,6 +124,8 @@ When set, URLs starting with `https://{CORE_API_HOSTNAME}/` are rewritten to use
 |----------|-------------|
 | `GET /health` | Health check, returns `{"status": "ok", "stream_ready": bool}` |
 | `GET /live/stream.m3u8` | Master playlist (ABR) or media playlist (copy mode) |
+| `GET /live/audio.m3u8` | Audio-only media playlist written by the sidecar |
+| `GET /live/audio/*.ts` | Audio-only MPEG-TS segments written by the sidecar |
 | `GET /live/stream_N/playlist.m3u8` | Variant playlist (ABR mode only) |
 | `GET /live/*.ts` | Segment files |
 
@@ -167,6 +176,7 @@ The `head` field contains the HLS stream URL to switch to. The `name` field is u
 │   ├── utils.py            # Shared utilities
 │   ├── segment_store.py    # Segment tracking and playlist generation
 │   ├── ffmpeg_runner.py    # FFmpeg process management
+│   ├── audio_hls_sidecar.py # Audio-only sidecar process
 │   ├── stream_manager.py   # Stream lifecycle and transitions
 │   ├── playhead_monitor.py # SSE client for API events
 │   ├── server.py           # HTTP server (Quart/uvicorn)
