@@ -37,6 +37,8 @@ window.StreamApp = window.StreamApp || {};
     ],
     settings: ['quality'],
   };
+  let player = null;
+  let videoHlsSourceLoaded = false;
 
   // Expose for SSE and audio-only toggle
   window.StreamApp.video = video;
@@ -82,6 +84,19 @@ window.StreamApp = window.StreamApp || {};
     }
   }
 
+  function ensurePlayer() {
+    if (!player) {
+      player = new Plyr(video, defaultOptions);
+    }
+  }
+
+  function loadVideoHlsSource() {
+    if (window.hls && !videoHlsSourceLoaded) {
+      window.hls.loadSource(hlsSource);
+      videoHlsSourceLoaded = true;
+    }
+  }
+
   function initPlayer() {
     // For more options, see: https://github.com/sampotts/plyr/#options
     // Prefer HLS.js over native HLS — it provides quality switching and better error recovery
@@ -92,8 +107,6 @@ window.StreamApp = window.StreamApp || {};
         lowLatencyMode: false,
         backBufferLength: 90
       });
-
-      hls.loadSource(hlsSource);
 
       // HLS.js error handling with automatic recovery
       hls.on(Hls.Events.ERROR, function (event, data) {
@@ -153,19 +166,27 @@ window.StreamApp = window.StreamApp || {};
           }
         });
 
-        const player = new Plyr(video, defaultOptions);
+        ensurePlayer();
         syncAudioOnlyView();
         restoreAudioOnlyPreference();
       });
 
       // Attach media AFTER registering event handlers to avoid race conditions
-      hls.attachMedia(video);
-
       window.hls = hls;
+      if (shouldRestoreAudioOnly) {
+        ensurePlayer();
+        syncAudioOnlyView();
+        restoreAudioOnlyPreference();
+      } else {
+        loadVideoHlsSource();
+        hls.attachMedia(video);
+      }
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS fallback (Safari without HLS.js support)
-      video.src = hlsSource;
-      const player = new Plyr(video, defaultOptions);
+      if (!shouldRestoreAudioOnly) {
+        video.src = hlsSource;
+      }
+      ensurePlayer();
       syncAudioOnlyView();
       restoreAudioOnlyPreference();
 
@@ -362,12 +383,18 @@ window.StreamApp = window.StreamApp || {};
         streamMedia.style.removeProperty('display');
       }
       audioPoster.style.display = 'block';
+      if (audioEl) {
+        audioEl.style.display = 'block';
+      }
       syncSheepSurfaces();
       return;
     }
 
     videoPresentation.style.removeProperty('display');
     audioPoster.style.display = 'none';
+    if (audioEl) {
+      audioEl.style.display = 'none';
+    }
     syncSheepSurfaces();
   }
 
@@ -385,11 +412,12 @@ window.StreamApp = window.StreamApp || {};
     audioOnly = true;
     window.StreamApp.hlsSource = audioHlsSource;
 
-    // 1. Create a hidden <audio> element
     audioEl = document.createElement('audio');
     audioEl.id = 'audio-only-player';
+    audioEl.controls = true;
+    audioEl.className = 'w-100 mt-2';
     audioEl.style.display = 'none';
-    document.body.appendChild(audioEl);
+    (streamMedia || document.body).appendChild(audioEl);
     // Carry over volume and mute state from the video player
     audioEl.volume = video.volume;
     audioEl.muted = video.muted;
@@ -460,6 +488,7 @@ window.StreamApp = window.StreamApp || {};
     // 3. Show the video player and resume
     syncAudioOnlyView();
     if (window.hls) {
+      loadVideoHlsSource();
       window.hls.attachMedia(video);
       window.hls.startLoad();
     } else {
