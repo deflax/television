@@ -37,7 +37,17 @@ window.StreamApp = window.StreamApp || {};
     ],
     settings: ['quality'],
   };
+  const audioOnlyOptions = {
+    controls: [
+      'play',
+      'progress',
+      'current-time',
+      'mute',
+      'volume',
+    ],
+  };
   let player = null;
+  let audioPlayer = null;
   let videoHlsSourceLoaded = false;
 
   // Expose for SSE and audio-only toggle
@@ -357,6 +367,18 @@ window.StreamApp = window.StreamApp || {};
     return video.closest('.plyr') || video;
   }
 
+  function getAudioPresentationElement() {
+    return audioEl ? audioEl.closest('.plyr') || audioEl : null;
+  }
+
+  function applyAudioPresentationClasses() {
+    const audioPresentation = getAudioPresentationElement();
+
+    if (audioPresentation) {
+      audioPresentation.classList.add('w-100', 'mt-2');
+    }
+  }
+
   function syncSheepSurfaces() {
     if (streamMedia) {
       streamMedia.classList.toggle('sheep-surface', !audioOnly);
@@ -369,6 +391,7 @@ window.StreamApp = window.StreamApp || {};
 
   function syncAudioOnlyView() {
     const videoPresentation = getVideoPresentationElement();
+    const audioPresentation = getAudioPresentationElement();
     const audioPoster = audioOnlyPoster;
 
     setAudioOnlyPosterControlsVisible(audioOnly);
@@ -383,8 +406,8 @@ window.StreamApp = window.StreamApp || {};
         streamMedia.style.removeProperty('display');
       }
       audioPoster.style.display = 'block';
-      if (audioEl) {
-        audioEl.style.display = 'block';
+      if (audioPresentation) {
+        audioPresentation.style.display = 'block';
       }
       syncSheepSurfaces();
       return;
@@ -392,8 +415,8 @@ window.StreamApp = window.StreamApp || {};
 
     videoPresentation.style.removeProperty('display');
     audioPoster.style.display = 'none';
-    if (audioEl) {
-      audioEl.style.display = 'none';
+    if (audioPresentation) {
+      audioPresentation.style.display = 'none';
     }
     syncSheepSurfaces();
   }
@@ -414,15 +437,14 @@ window.StreamApp = window.StreamApp || {};
 
     audioEl = document.createElement('audio');
     audioEl.id = 'audio-only-player';
-    audioEl.controls = true;
     audioEl.className = 'w-100 mt-2';
     audioEl.style.display = 'none';
     (streamMedia || document.body).appendChild(audioEl);
-    // Carry over volume and mute state from the video player
+    audioPlayer = new Plyr(audioEl, audioOnlyOptions);
+    applyAudioPresentationClasses();
     audioEl.volume = video.volume;
     audioEl.muted = video.muted;
 
-    // 2. Attach HLS.js to the audio element
     if (Hls.isSupported()) {
       audioHls = new Hls({
         enableWorker: true,
@@ -442,12 +464,10 @@ window.StreamApp = window.StreamApp || {};
         }
       });
     } else if (audioEl.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
       audioEl.src = audioHlsSource;
       audioEl.play().catch(() => console.warn('Audio-only: autoplay blocked'));
     }
 
-    // 3. Pause and hide the video player (stops video decoding)
     video.pause();
     if (window.hls) {
       window.hls.stopLoad();
@@ -468,16 +488,18 @@ window.StreamApp = window.StreamApp || {};
     audioOnly = false;
     window.StreamApp.hlsSource = hlsSource;
 
-    // 1. Carry over volume and mute state before destroying
     if (audioEl) {
       video.volume = audioEl.volume;
       video.muted = audioEl.muted;
     }
 
-    // 2. Destroy the audio element
     if (audioHls) {
       audioHls.destroy();
       audioHls = null;
+    }
+    if (audioPlayer) {
+      audioPlayer.destroy();
+      audioPlayer = null;
     }
     if (audioEl) {
       audioEl.pause();
@@ -485,7 +507,6 @@ window.StreamApp = window.StreamApp || {};
       audioEl = null;
     }
 
-    // 3. Show the video player and resume
     syncAudioOnlyView();
     if (window.hls) {
       loadVideoHlsSource();
