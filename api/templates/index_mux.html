@@ -46,8 +46,17 @@
                   <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
                 </div>
                 <div class="order-1 order-md-2 d-flex flex-wrap gap-2 mb-2 mb-md-0 ms-md-3">
-                  <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle video">
-                    <i class="fa fa-headphones"></i> audio only
+                  <div class="dropdown d-inline-block">
+                    <button class="btn btn-sm btn-outline-secondary sheep-surface stream-link dropdown-toggle" type="button" id="stream-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                      <i class="fa fa-broadcast-tower"></i> streams
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-dark sheep-surface border border-secondary py-1" style="--bs-dropdown-min-width: 100%;" aria-labelledby="stream-dropdown">
+                      <li><a class="dropdown-item small py-1 px-2" href="/live/stream.m3u8" target="_blank" rel="noopener"><i class="fa fa-video me-1" aria-hidden="true"></i> video</a></li>
+                      <li><a class="dropdown-item small py-1 px-2" href="/live/audio.m3u8" target="_blank" rel="noopener"><i class="fa fa-headphones me-1" aria-hidden="true"></i> audio</a></li>
+                    </ul>
+                  </div>
+                  <button type="button" id="sheep-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle Sheepy">
+                    <i class="fa fa-paw"></i> sheepy
                   </button>
                   <button type="button" id="audio-poster-choose-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Choose local audio-only poster" hidden>
                     <i class="fa fa-image"></i> poster
@@ -55,12 +64,10 @@
                   <button type="button" id="audio-poster-reset-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Reset audio-only poster" hidden>
                     <i class="fa fa-rotate-left"></i> reset
                   </button>
-                  <input type="file" id="audio-poster-input" class="visually-hidden" accept="image/*" tabindex="-1" aria-hidden="true">
-                  <button type="button" id="sheep-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle Sheepy">
-                    <i class="fa fa-paw"></i> sheepy
+                  <button type="button" id="audio-only-btn" class="btn btn-sm btn-outline-secondary sheep-surface" title="Toggle video">
+                    <i class="fa fa-headphones"></i> audio only
                   </button>
-                  <a href="/live/stream.m3u8" class="btn btn-sm btn-outline-secondary sheep-surface stream-link" target="_blank"><i class="fa fa-broadcast-tower"></i> stream.m3u8</a>
-                  <!-- <a href="/live/audio.m3u8" class="btn btn-sm btn-outline-secondary" target="_blank">audio.m3u8</a> -->
+                  <input type="file" id="audio-poster-input" class="visually-hidden" accept="image/*" tabindex="-1" aria-hidden="true">
                  </div>
                </div>
            </div>
