@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from services.core_api import CoreAPIClient
+from services.playhead_metadata import PlayheadMetadataPoller
 
 
 
@@ -14,6 +15,7 @@ from services.core_api import CoreAPIClient
 STREAM_ACCESS_RETRY_ATTEMPTS = 15
 STREAM_ACCESS_RETRY_INTERVAL = 6
 STREAM_ACCESS_TIMEOUT = 5
+DEFAULT_METADATA_TIMEOUT = 3.5
 FALLBACK_JOB_ID = 'fallback'
 DISABLED_STREAM_START = 'never'
 
@@ -48,6 +50,7 @@ class StreamManager:
         self.database: Dict[str, Dict[str, Any]] = {}
         self.playhead: Dict[str, Any] = {}
         self.priority = 0
+        self.metadata_poller = PlayheadMetadataPoller(client, logger)
 
         # Discord-initiated command tracking: stream_id -> {action, actor_name}
         # When a Discord user runs .start/.stop, the stream reference is recorded here.
@@ -383,7 +386,16 @@ class StreamManager:
             }
         
         raise ValueError("No streams available for fallback")
-    
+
+    def poll_current_metadata(self) -> None:
+        self.playhead = self.metadata_poller.poll(self.playhead, self._metadata_timeout())
+
+    def _metadata_timeout(self) -> float:
+        timeout = getattr(self.config, 'metadata_timeout', None)
+        if timeout is None:
+            timeout = getattr(self.config, 'icy_timeout', DEFAULT_METADATA_TIMEOUT)
+        return float(timeout)
+
     def update_playhead(
         self, 
         stream_id: str, 

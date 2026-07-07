@@ -36,8 +36,21 @@ def load_stream_manager_module():
         pass
 
     core_api_module.CoreAPIClient = CoreAPIClient
+    playhead_metadata_module = types.ModuleType('services.playhead_metadata')
+
+    class PlayheadMetadataPoller:
+        def __init__(self, client, logger):
+            self.client = client
+            self.logger = logger
+
+        def poll(self, playhead, timeout):
+            _ = timeout
+            return playhead
+
+    playhead_metadata_module.PlayheadMetadataPoller = PlayheadMetadataPoller
     sys.modules['services'] = services_module
     sys.modules['services.core_api'] = core_api_module
+    sys.modules['services.playhead_metadata'] = playhead_metadata_module
 
     module_path = Path(__file__).resolve().parents[1] / 'services' / 'stream_manager.py'
     spec = importlib.util.spec_from_file_location('stream_manager_under_test', module_path)
