@@ -12,6 +12,7 @@ window.StreamApp = window.StreamApp || {};
   const audioPosterResetBtn = document.getElementById('audio-poster-reset-btn');
   const audioPosterInput = document.getElementById('audio-poster-input');
   const hlsSource = '/live/stream.m3u8';
+  const audioHlsSource = '/live/audio.m3u8';
   const audioOnlyPosterFallbackSrc = '/static/images/derks24-ostfriesland.jpg';
   const audioOnlyPosterStore = {
     dbName: 'stream-audio-only-poster',
@@ -399,7 +400,7 @@ window.StreamApp = window.StreamApp || {};
         lowLatencyMode: false,
         backBufferLength: 90
       });
-      audioHls.loadSource(hlsSource);
+      audioHls.loadSource(audioHlsSource);
       audioHls.attachMedia(audioEl);
       audioHls.on(Hls.Events.MANIFEST_PARSED, () => {
         audioEl.play().catch(() => console.warn('Audio-only: autoplay blocked'));
@@ -413,7 +414,7 @@ window.StreamApp = window.StreamApp || {};
       });
     } else if (audioEl.canPlayType('application/vnd.apple.mpegurl')) {
       // Safari native HLS
-      audioEl.src = hlsSource;
+      audioEl.src = audioHlsSource;
       audioEl.play().catch(() => console.warn('Audio-only: autoplay blocked'));
     }
 
