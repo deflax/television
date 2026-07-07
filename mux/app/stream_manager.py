@@ -16,6 +16,7 @@ from typing import Optional, Callable
 from config import TRANSITION_TIMEOUT, HLS_SEGMENT_TIME
 from segment_store import segment_store, setup_output_dirs
 from ffmpeg_runner import FFmpegRunner
+from audio_hls_sidecar import AudioHLSRunner
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class StreamManager:
     def __init__(self):
         self._state = StreamState.IDLE
         self._ffmpeg: Optional[FFmpegRunner] = None
+        self._audio_hls: AudioHLSRunner = AudioHLSRunner()
         self._current_url: Optional[str] = None
         self._lock = asyncio.Lock()
         self._stop_event = asyncio.Event()
@@ -100,10 +102,11 @@ class StreamManager:
         
         # Wait for first segment to confirm stream is working
         if await self._ffmpeg.wait_for_segment(timeout=TRANSITION_TIMEOUT):
+            await self._ensure_audio_hls_running()
             return True
         
         logger.error('No segment produced within timeout')
-        await self._ffmpeg.stop()
+        _ = await self._ffmpeg.stop()
         self._state = StreamState.IDLE
         return False
     
@@ -207,8 +210,9 @@ class StreamManager:
             # last segment, then FFmpeg exits, and the runt segment is deleted.
             # This ensures only complete segments are in the store.
             logger.debug('Stopping current FFmpeg gracefully...')
+            _ = await self._audio_hls.stop()
             if self._ffmpeg:
-                await self._ffmpeg.stop_graceful(timeout=float(HLS_SEGMENT_TIME + 5))
+                _ = await self._ffmpeg.stop_graceful(timeout=float(HLS_SEGMENT_TIME + 5))
             
             # Step 2: Mark discontinuity in segment store
             await segment_store.mark_discontinuity()
@@ -241,9 +245,11 @@ class StreamManager:
         self._state = StreamState.STOPPING
         logger.info('Stopping stream...')
         self._stop_event.set()
+
+        _ = await self._audio_hls.stop()
         
         if self._ffmpeg:
-            await self._ffmpeg.stop()
+            _ = await self._ffmpeg.stop()
             self._ffmpeg = None
         
         self._current_url = None
@@ -274,6 +280,8 @@ class StreamManager:
             
             # Check if FFmpeg is still running
             if self._ffmpeg.is_running:
+                if not self._audio_hls.is_running:
+                    await self._ensure_audio_hls_running()
                 return
             
             exit_code = await self._ffmpeg.wait()
@@ -306,7 +314,15 @@ class StreamManager:
     
     async def _on_segment(self, variant: int, filename: str, duration: float) -> None:
         """Callback when FFmpeg produces a new segment."""
-        await segment_store.add_segment(variant, filename, duration)
+        _ = await segment_store.add_segment(variant, filename, duration)
+
+    async def _ensure_audio_hls_running(self) -> None:
+        if self._audio_hls.is_running:
+            return
+        if await self._audio_hls.start():
+            logger.info('Audio HLS sidecar running')
+            return
+        logger.warning('Audio HLS sidecar failed to start; video stream remains running')
 
 
 # Global stream manager instance
