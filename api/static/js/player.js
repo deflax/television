@@ -383,6 +383,7 @@ window.StreamApp = window.StreamApp || {};
   function enableAudioOnly() {
     if (audioOnly) return;
     audioOnly = true;
+    window.StreamApp.hlsSource = audioHlsSource;
 
     // 1. Create a hidden <audio> element
     audioEl = document.createElement('audio');
@@ -422,7 +423,11 @@ window.StreamApp = window.StreamApp || {};
     video.pause();
     if (window.hls) {
       window.hls.stopLoad();
+      window.hls.detachMedia();
     }
+    video.removeAttribute('src');
+    video.src = '';
+    video.load();
     syncAudioOnlyView();
 
     window.StreamApp.preferences.setBoolean(preferenceKeys.audioOnly, true);
@@ -433,6 +438,7 @@ window.StreamApp = window.StreamApp || {};
   function disableAudioOnly() {
     if (!audioOnly) return;
     audioOnly = false;
+    window.StreamApp.hlsSource = hlsSource;
 
     // 1. Carry over volume and mute state before destroying
     if (audioEl) {
@@ -454,7 +460,11 @@ window.StreamApp = window.StreamApp || {};
     // 3. Show the video player and resume
     syncAudioOnlyView();
     if (window.hls) {
+      window.hls.attachMedia(video);
       window.hls.startLoad();
+    } else {
+      video.src = hlsSource;
+      video.load();
     }
     video.play().catch(() => console.warn('Video resume: autoplay blocked'));
 

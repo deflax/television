@@ -16,6 +16,12 @@ class PlayerAudioSourceTest(unittest.TestCase):
         self.assertIn('video.src = hlsSource;', source)
         self.assertIn('audioHls.loadSource(audioHlsSource);', source)
         self.assertIn('audioEl.src = audioHlsSource;', source)
+        self.assertIn('window.StreamApp.hlsSource = audioHlsSource;', source)
+        self.assertIn('window.StreamApp.hlsSource = hlsSource;', source)
+        self.assertIn('window.hls.detachMedia();', source)
+        self.assertIn("video.removeAttribute('src');", source)
+        self.assertIn("video.src = '';", source)
+        self.assertIn('window.hls.attachMedia(video);', source)
 
 
 if __name__ == '__main__':
