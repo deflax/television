@@ -17,7 +17,10 @@ from integrations.discord_bot_manager import DiscordBotManager
 # Constants
 DEFAULT_REC_PATH = "/recordings"
 DEFAULT_CORE_SYNC_PERIOD = 15
+DEFAULT_METADATA_POLL_INTERVAL = 15
+DEFAULT_METADATA_TIMEOUT = 3.5
 CORE_API_SYNC_JOB_ID = 'core_api_sync'
+METADATA_POLL_JOB_ID = 'metadata_poll'
 
 
 class Config:
@@ -36,6 +39,11 @@ class Config:
         self.core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
         self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
         self.core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', DEFAULT_CORE_SYNC_PERIOD))
+        self.metadata_poll_interval: int = int(os.environ.get('METADATA_POLL_INTERVAL', DEFAULT_METADATA_POLL_INTERVAL))
+        self.metadata_timeout: float = float(
+            os.environ.get('METADATA_TIMEOUT', os.environ.get('ICY_TIMEOUT', DEFAULT_METADATA_TIMEOUT))
+        )
+        self.icy_timeout: float = self.metadata_timeout
         self.rec_path = DEFAULT_REC_PATH
         self.server_name = os.environ.get('SERVER_NAME')
         self.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
@@ -130,6 +138,12 @@ def _setup_scheduler(stream_manager: StreamManager, config: Config) -> None:
         trigger='interval',
         seconds=config.core_sync_period,
         id=CORE_API_SYNC_JOB_ID
+    )
+    scheduler.add_job(
+        func=stream_manager.poll_current_metadata,
+        trigger='interval',
+        seconds=getattr(config, 'metadata_poll_interval', DEFAULT_METADATA_POLL_INTERVAL),
+        id=METADATA_POLL_JOB_ID
     )
     scheduler.get_job(CORE_API_SYNC_JOB_ID).modify(next_run_time=datetime.now())
     scheduler.start()
