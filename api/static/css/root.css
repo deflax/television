@@ -14,6 +14,7 @@
     --plyr-audio-controls-background: var(--audio-plyr-surface);
     --plyr-audio-control-color: var(--audio-plyr-control);
     --plyr-audio-control-color-hover: var(--audio-plyr-control-strong);
+    --plyr-range-fill-background: var(--epg-active-purple);
 }
 
 .plyr.audio-only-plyr .plyr__controls {
@@ -24,8 +25,7 @@
 }
 
 .plyr.audio-only-plyr .plyr__control,
-.plyr.audio-only-plyr .plyr__time,
-.plyr.audio-only-plyr .plyr__volume input[type='range'] {
+.plyr.audio-only-plyr .plyr__time {
     color: var(--audio-plyr-control);
 }
 
