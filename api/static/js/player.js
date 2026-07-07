@@ -375,7 +375,7 @@ window.StreamApp = window.StreamApp || {};
     const audioPresentation = getAudioPresentationElement();
 
     if (audioPresentation) {
-      audioPresentation.classList.add('w-100', 'mt-2');
+      audioPresentation.classList.add('w-100', 'mt-2', 'audio-only-plyr');
     }
   }
 

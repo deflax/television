@@ -1,6 +1,42 @@
 :root {
     --epg-active-purple: rgb(132, 4, 217);
     --plyr-color-main: var(--epg-active-purple);
+    --audio-plyr-surface: rgb(10, 10, 12);
+    --audio-plyr-surface-hover: rgba(255, 255, 255, 0.1);
+    --audio-plyr-control: rgba(255, 255, 255, 0.9);
+    --audio-plyr-control-strong: #fff;
+    --audio-plyr-control-muted: rgba(255, 255, 255, 0.66);
+    --audio-plyr-border: rgba(255, 255, 255, 0.14);
+    --audio-plyr-radius: 8px;
+}
+
+.plyr.audio-only-plyr {
+    --plyr-audio-controls-background: var(--audio-plyr-surface);
+    --plyr-audio-control-color: var(--audio-plyr-control);
+    --plyr-audio-control-color-hover: var(--audio-plyr-control-strong);
+}
+
+.plyr.audio-only-plyr .plyr__controls {
+    color: var(--audio-plyr-control);
+    background: var(--audio-plyr-surface);
+    border: 1px solid var(--audio-plyr-border);
+    border-radius: var(--audio-plyr-radius);
+}
+
+.plyr.audio-only-plyr .plyr__control,
+.plyr.audio-only-plyr .plyr__time,
+.plyr.audio-only-plyr .plyr__volume input[type='range'] {
+    color: var(--audio-plyr-control);
+}
+
+.plyr.audio-only-plyr .plyr__control:hover,
+.plyr.audio-only-plyr .plyr__control:focus-visible {
+    color: var(--audio-plyr-control-strong);
+    background: var(--audio-plyr-surface-hover);
+}
+
+.plyr.audio-only-plyr .plyr__time {
+    color: var(--audio-plyr-control-muted);
 }
 
 body {
