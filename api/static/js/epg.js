@@ -5,20 +5,26 @@
 window.StreamApp = window.StreamApp || {};
 
 window.StreamApp.currentPlayheadId = null;
+window.StreamApp.currentPlayheadMetadata = {};
 window.StreamApp.currentEpgDatabase = {};
 
-window.StreamApp.renderEpg = function(database, playheadId) {
+window.StreamApp.renderEpg = function(database, playheadId, metadata = window.StreamApp.currentPlayheadMetadata) {
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const scheduleDiv = document.getElementById('epg-schedule');
   if (!scheduleDiv) return;
+  window.StreamApp.currentPlayheadMetadata = metadata || {};
 
   const channelCount = Object.keys(database).length;
 
   // Update "Now Playing" from playhead
   if (nowPlaying && nowName) {
     if (playheadId && database[playheadId]) {
-      nowName.textContent = database[playheadId].name;
+      const channelName = database[playheadId].name;
+      const streamTitle = window.StreamApp.currentPlayheadMetadata.stream_title;
+      nowName.textContent = typeof streamTitle === 'string' && streamTitle.trim()
+        ? `${channelName} - ${streamTitle}`
+        : channelName;
       nowPlaying.style.display = 'block';
     } else {
       nowPlaying.style.display = 'none';
