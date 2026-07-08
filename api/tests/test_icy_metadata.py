@@ -11,15 +11,18 @@ sys.path.insert(0, str(api_dir))
 
 
 class FakeIcyResponse:
-    def __init__(self, headers: dict[str, str], payload: bytes):
+    def __init__(self, headers: dict[str, str], payload: bytes, max_read_size: int | None = None):
         self.headers = headers
         self.status_code = 200
         self._payload = payload
+        self._max_read_size = max_read_size
         self.raw = types.SimpleNamespace(read=self._read)
 
     def _read(self, size: int = -1) -> bytes:
         if size < 0:
             size = len(self._payload)
+        if self._max_read_size is not None:
+            size = min(size, self._max_read_size)
         result = self._payload[:size]
         self._payload = self._payload[size:]
         return result
@@ -36,6 +39,27 @@ class FakeIcyResponse:
 
     def __exit__(self, exc_type: object | None, exc: object | None, tb: object | None) -> bool:
         return False
+
+
+class FakeSocket:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+        self.sent: bytes = b''
+        self.closed = False
+
+    def settimeout(self, timeout: float) -> None:
+        _ = timeout
+
+    def sendall(self, data: bytes) -> None:
+        self.sent += data
+
+    def recv(self, size: int) -> bytes:
+        result = self._payload[:size]
+        self._payload = self._payload[size:]
+        return result
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def load_icy_metadata_module():
@@ -114,6 +138,57 @@ class IcyMetadataTest(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_read_icy_stream_title_handles_partial_socket_reads(self):
+        module = load_icy_metadata_module()
+
+        def fake_get(url: str, **kwargs):
+            return FakeIcyResponse(
+                headers={'icy-metaint': '16'},
+                payload=build_metadata_payload('Zeal Litta - Dark Shadows (Original Mix)'),
+                max_read_size=5,
+            )
+
+        original_get = module.requests.get
+        try:
+            module.requests.get = fake_get
+            result = module.read_icy_stream_title('https://example.test/live', timeout=3.5)
+        finally:
+            module.requests.get = original_get
+
+        self.assertEqual(result, 'Zeal Litta - Dark Shadows (Original Mix)')
+
+    def test_read_icy_stream_title_handles_icy_status_line_streams(self):
+        module = load_icy_metadata_module()
+        fake_socket = FakeSocket(
+            b'ICY 200 OK\r\n' +
+            b'icy-name: Example old ICY stream\r\n' +
+            b'icy-metaint: 16\r\n' +
+            b'\r\n'
+            + build_metadata_payload('Example Artist - Example Track')
+        )
+
+        def fake_get(url: str, **kwargs):
+            raise module.requests.RequestException('ICY status line')
+
+        def fake_create_connection(address: tuple[str, int], timeout: float):
+            self.assertEqual(address, ('old-icy.example.test', 8000))
+            self.assertEqual(timeout, 3.5)
+            return fake_socket
+
+        original_get = module.requests.get
+        original_create_connection = module.socket.create_connection
+        try:
+            module.requests.get = fake_get
+            module.socket.create_connection = fake_create_connection
+            result = module.read_icy_stream_title('http://old-icy.example.test:8000/', timeout=3.5)
+        finally:
+            module.requests.get = original_get
+            module.socket.create_connection = original_create_connection
+
+        self.assertEqual(result, 'Example Artist - Example Track')
+        self.assertIn(b'Icy-MetaData: 1', fake_socket.sent)
+        self.assertTrue(fake_socket.closed)
 
     def test_read_icy_stream_title_returns_none_for_empty_metadata_block(self):
         module = load_icy_metadata_module()
