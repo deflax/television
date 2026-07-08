@@ -109,6 +109,10 @@ def build_metadata_payload(title: str | None) -> bytes:
     return audio_prefix + bytes([len(metadata) // 16]) + metadata
 
 
+def build_empty_then_title_payload(title: str) -> bytes:
+    return b'A' * 16 + b'\x00' + build_metadata_payload(title)
+
+
 class IcyMetadataTest(unittest.TestCase):
     def test_read_icy_stream_title_returns_title_for_valid_metadata_block(self):
         module = load_icy_metadata_module()
@@ -157,6 +161,24 @@ class IcyMetadataTest(unittest.TestCase):
             module.requests.get = original_get
 
         self.assertEqual(result, 'Zeal Litta - Dark Shadows (Original Mix)')
+
+    def test_read_icy_stream_title_scans_past_empty_metadata_block(self):
+        module = load_icy_metadata_module()
+
+        def fake_get(url: str, **kwargs):
+            return FakeIcyResponse(
+                headers={'icy-metaint': '16'},
+                payload=build_empty_then_title_payload('Second Block Artist - Second Block Track'),
+            )
+
+        original_get = module.requests.get
+        try:
+            module.requests.get = fake_get
+            result = module.read_icy_stream_title('https://example.test/live', timeout=3.5)
+        finally:
+            module.requests.get = original_get
+
+        self.assertEqual(result, 'Second Block Artist - Second Block Track')
 
     def test_read_icy_stream_title_handles_icy_status_line_streams(self):
         module = load_icy_metadata_module()

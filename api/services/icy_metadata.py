@@ -39,6 +39,7 @@ _STREAM_TITLE_PATTERN = re.compile(r"StreamTitle='(.*?)';")
 _ICY_HEADERS = {'Icy-MetaData': '1'}
 _HEADER_TERMINATOR = b'\r\n\r\n'
 _MAX_HEADER_BYTES = 65536
+_MAX_METADATA_BLOCKS = 5
 
 
 def read_icy_stream_title(source_url: str, timeout: float) -> str | None:
@@ -63,11 +64,19 @@ def _read_stream_title_from_response(response: _IcyResponse) -> str | None:
     if metaint <= 0:
         return None
 
-    audio_bytes = _read_exact(response.raw, metaint)
+    for _ in range(_MAX_METADATA_BLOCKS):
+        title = _read_next_stream_title(response.raw, metaint)
+        if title:
+            return title
+    return None
+
+
+def _read_next_stream_title(raw: _IcyRawResponse, metaint: int) -> str | None:
+    audio_bytes = _read_exact(raw, metaint)
     if len(audio_bytes) != metaint:
         return None
 
-    metadata_length_bytes = _read_exact(response.raw, 1)
+    metadata_length_bytes = _read_exact(raw, 1)
     if len(metadata_length_bytes) != 1:
         return None
 
@@ -75,7 +84,7 @@ def _read_stream_title_from_response(response: _IcyResponse) -> str | None:
     if metadata_length == 0:
         return None
 
-    metadata_bytes = _read_exact(response.raw, metadata_length)
+    metadata_bytes = _read_exact(raw, metadata_length)
     if len(metadata_bytes) != metadata_length:
         return None
 
