@@ -8,7 +8,6 @@ import json
 import base64
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 import httpx
 
@@ -20,6 +19,7 @@ class CoreAPIClient:
     by this application:
       - GET  /api/v3/process          (list processes)
       - GET  /api/v3/process/{id}     (get single process)
+      - GET  /api/v3/process/{id}/config  (get process config)
       - PUT  /api/v3/process/{id}/command  (start/stop/restart/reload)
     """
 
@@ -30,18 +30,18 @@ class CoreAPIClient:
         password: str,
         retries: int = 3,
         timeout: float = 10.0,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
-        self.base_url = base_url.rstrip('/')
-        self.username = username
-        self.password = password
-        self.retries = retries
-        self.timeout = timeout
-        self.logger = logger or logging.getLogger(__name__)
+        self.base_url: str = base_url.rstrip('/')
+        self.username: str = username
+        self.password: str = password
+        self.retries: int = retries
+        self.timeout: float = timeout
+        self.logger: logging.Logger = logger or logging.getLogger(__name__)
 
-        self.access_token: Optional[str] = None
-        self.refresh_token: Optional[str] = None
-        self._access_token_expires_at: Optional[int] = None
+        self.access_token: str | None = None
+        self.refresh_token: str | None = None
+        self._access_token_expires_at: int | None = None
 
     # ------------------------------------------------------------------
     # Auth helpers
@@ -64,8 +64,12 @@ class CoreAPIClient:
         )
         resp.raise_for_status()
         body = resp.json()
-        self.access_token = body['access_token']
-        self.refresh_token = body.get('refresh_token')
+        access_token = body.get('access_token')
+        if not isinstance(access_token, str):
+            raise ValueError('Core login response did not include an access token')
+        refresh_token = body.get('refresh_token')
+        self.access_token = access_token
+        self.refresh_token = refresh_token if isinstance(refresh_token, str) else None
         self._access_token_expires_at = self._decode_token_expiry(self.access_token)
 
     def _token_is_expired(self) -> bool:
@@ -87,14 +91,15 @@ class CoreAPIClient:
             )
             if resp.status_code == 200:
                 body = resp.json()
-                if body.get('access_token'):
-                    self.access_token = body['access_token']
+                access_token = body.get('access_token')
+                if isinstance(access_token, str):
+                    self.access_token = access_token
                     self._access_token_expires_at = self._decode_token_expiry(self.access_token)
                     return
         # Refresh failed or unavailable — do a full login
         self.login()
 
-    def _get_headers(self) -> dict:
+    def _get_headers(self) -> dict[str, str]:
         """Return auth headers, refreshing the token if needed."""
         if self._token_is_expired():
             self._refresh_access_token()
@@ -132,17 +137,21 @@ class CoreAPIClient:
     # Process endpoints
     # ------------------------------------------------------------------
 
-    def v3_process_get_list(self) -> list:
+    def v3_process_get_list(self) -> list[object]:
         """GET /api/v3/process — returns list of process dicts."""
         resp = self._request('GET', '/api/v3/process')
         return resp.json()
 
-    def v3_process_get(self, id: str) -> dict:
+    def v3_process_get(self, id: str) -> dict[str, object]:
         """GET /api/v3/process/{id} — returns a process dict."""
         resp = self._request('GET', f'/api/v3/process/{id}')
         return resp.json()
 
-    def v3_process_put_command(self, id: str, command: str) -> dict:
+    def v3_process_get_config(self, id: str) -> dict[str, object]:
+        resp = self._request('GET', f'/api/v3/process/{id}/config')
+        return resp.json()
+
+    def v3_process_put_command(self, id: str, command: str) -> dict[str, object]:
         """PUT /api/v3/process/{id}/command — send start/stop/restart/reload."""
         resp = self._request('PUT', f'/api/v3/process/{id}/command', json={'command': command})
         return resp.json()
