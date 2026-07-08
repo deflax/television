@@ -146,6 +146,7 @@ def _setup_scheduler(stream_manager: StreamManager, config: Config) -> None:
         id=METADATA_POLL_JOB_ID
     )
     scheduler.get_job(CORE_API_SYNC_JOB_ID).modify(next_run_time=datetime.now())
+    scheduler.get_job(METADATA_POLL_JOB_ID).modify(next_run_time=datetime.now())
     scheduler.start()
 
 

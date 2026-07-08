@@ -181,7 +181,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
                         expected_source_url,
                     ),
                 }
-                manager, _, _ = self.make_manager(processes, process_details)
+                manager, _, logger = self.make_manager(processes, process_details)
                 manager.playhead = {
                     'id': current_process_id,
                     'name': 'Current Channel',
@@ -208,6 +208,12 @@ class StreamManagerMetadataTest(unittest.TestCase):
                     playhead_metadata_module.read_icy_stream_title = original_playhead_reader
 
                 self.assertEqual(calls, [expected_source_url])
+                self.assertTrue(
+                    any('Polling ICY metadata for Current Channel' in message for message in logger.info_messages)
+                )
+                self.assertTrue(
+                    any('Updated ICY metadata for Current Channel: Artist - Track' in message for message in logger.info_messages)
+                )
                 self.assertEqual(
                     manager.playhead,
                     {
@@ -218,6 +224,31 @@ class StreamManagerMetadataTest(unittest.TestCase):
                         'metadata': {'stream_title': 'Artist - Track'},
                     },
                 )
+
+    def test_poll_current_metadata_logs_when_current_source_url_is_missing(self):
+        processes = [{'id': 'channel-current', 'reference': 'channel-current'}]
+        process_details = {
+            'channel-current': {
+                'id': 'channel-current',
+                'reference': 'channel-current',
+                'state': {'exec': 'running'},
+                'config': {'input': []},
+            },
+        }
+        manager, _, logger = self.make_manager(processes, process_details)
+        manager.playhead = {
+            'id': 'channel-current',
+            'name': 'Current Channel',
+            'prio': 5,
+            'head': 'https://example.test/current/live.m3u8',
+        }
+
+        manager.poll_current_metadata()
+
+        self.assertTrue(
+            any('No metadata source URL found for Current Channel' in message for message in logger.info_messages)
+        )
+        self.assertNotIn('metadata', manager.playhead)
 
     def test_update_playhead_removes_stale_metadata_when_switching_channels(self):
         manager, _, _ = self.make_manager([], {})

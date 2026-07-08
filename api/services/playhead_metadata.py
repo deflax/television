@@ -27,13 +27,21 @@ class PlayheadMetadataPoller:
         if not isinstance(current_id, str) or not current_id:
             return playhead
 
+        channel_name = _channel_name(playhead)
         source_url = self._current_source_url(current_id)
-        title = read_icy_stream_title(source_url, timeout) if source_url else None
+        if not source_url:
+            self.logger.info(f'No metadata source URL found for {channel_name}')
+            return _without_metadata(playhead)
+
+        self.logger.info(f'Polling ICY metadata for {channel_name}')
+        title = read_icy_stream_title(source_url, timeout)
         next_playhead = dict(playhead)
         if title:
             next_playhead['metadata'] = {'stream_title': title}
+            self.logger.info(f'Updated ICY metadata for {channel_name}: {title}')
         else:
             _ = next_playhead.pop('metadata', None)
+            self.logger.info(f'No ICY metadata title found for {channel_name}')
         return next_playhead
 
     def _current_source_url(self, current_id: str) -> str | None:
@@ -109,3 +117,16 @@ def _address_from_mapping(value: ProcessDetail) -> str | None:
     if isinstance(address, str) and address:
         return address
     return None
+
+
+def _channel_name(playhead: ProcessDetail) -> str:
+    name = playhead.get('name')
+    if isinstance(name, str) and name:
+        return name
+    return 'current playhead'
+
+
+def _without_metadata(playhead: ProcessDetail) -> ProcessDetail:
+    next_playhead = dict(playhead)
+    _ = next_playhead.pop('metadata', None)
+    return next_playhead
