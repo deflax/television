@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import Protocol, TypeAlias
 
-from .icy_metadata import read_icy_stream_title
+from .icy_metadata import read_icy_metadata_result
 
 
 JsonValue: TypeAlias = str | int | float | bool | None | list['JsonValue'] | dict[str, 'JsonValue']
@@ -33,15 +33,15 @@ class PlayheadMetadataPoller:
             self.logger.info(f'No metadata source URL found for {channel_name}')
             return _without_metadata(playhead)
 
-        self.logger.info(f'Polling ICY metadata for {channel_name}')
-        title = read_icy_stream_title(source_url, timeout)
+        self.logger.info(f'Polling ICY metadata for {channel_name} from {source_url}')
+        metadata_result = read_icy_metadata_result(source_url, timeout)
         next_playhead = dict(playhead)
-        if title:
-            next_playhead['metadata'] = {'stream_title': title}
-            self.logger.info(f'Updated ICY metadata for {channel_name}: {title}')
+        if metadata_result.title:
+            next_playhead['metadata'] = {'stream_title': metadata_result.title}
+            self.logger.info(f'Updated ICY metadata for {channel_name}: {metadata_result.title}')
         else:
             _ = next_playhead.pop('metadata', None)
-            self.logger.info(f'No ICY metadata title found for {channel_name} after scanning metadata blocks')
+            self.logger.info(f'No ICY metadata title found for {channel_name}: {metadata_result.reason}')
         return next_playhead
 
     def _current_source_url(self, current_id: str) -> str | None:

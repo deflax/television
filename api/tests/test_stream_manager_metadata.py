@@ -52,7 +52,13 @@ def load_stream_manager_module():
     def read_icy_stream_title(source_url: str, timeout: float) -> str | None:
         return None
 
+    def read_icy_metadata_result(source_url: str, timeout: float):
+        _ = source_url
+        _ = timeout
+        return types.SimpleNamespace(title=None, reason='test-no-title')
+
     icy_metadata_module.read_icy_stream_title = read_icy_stream_title
+    icy_metadata_module.read_icy_metadata_result = read_icy_metadata_result
 
     services_module.core_api = core_api_module
     services_module.icy_metadata = icy_metadata_module
@@ -191,21 +197,22 @@ class StreamManagerMetadataTest(unittest.TestCase):
 
                 calls = []
 
-                def fake_read_icy_stream_title(source_url: str, timeout: float) -> str | None:
+                def fake_read_icy_metadata_result(source_url: str, timeout: float):
                     calls.append(source_url)
                     self.assertEqual(source_url, expected_source_url)
-                    return 'Artist - Track'
+                    _ = timeout
+                    return types.SimpleNamespace(title='Artist - Track', reason='ok')
 
-                original_icy_reader = icy_metadata_module.read_icy_stream_title
-                original_playhead_reader = playhead_metadata_module.read_icy_stream_title
+                original_icy_reader = icy_metadata_module.read_icy_metadata_result
+                original_playhead_reader = playhead_metadata_module.read_icy_metadata_result
                 try:
-                    icy_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
-                    playhead_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
+                    icy_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+                    playhead_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
 
                     manager.poll_current_metadata()
                 finally:
-                    icy_metadata_module.read_icy_stream_title = original_icy_reader
-                    playhead_metadata_module.read_icy_stream_title = original_playhead_reader
+                    icy_metadata_module.read_icy_metadata_result = original_icy_reader
+                    playhead_metadata_module.read_icy_metadata_result = original_playhead_reader
 
                 self.assertEqual(calls, [expected_source_url])
                 self.assertTrue(
@@ -271,25 +278,25 @@ class StreamManagerMetadataTest(unittest.TestCase):
             'metadata': {'stream_title': 'Stale Track'},
         }
 
-        def fake_read_icy_stream_title(source_url_arg: str, timeout: float) -> str | None:
+        def fake_read_icy_metadata_result(source_url_arg: str, timeout: float):
             self.assertEqual(source_url_arg, source_url)
             _ = timeout
-            return None
+            return types.SimpleNamespace(title=None, reason='missing-or-invalid-icy-metaint')
 
-        original_icy_reader = icy_metadata_module.read_icy_stream_title
-        original_playhead_reader = playhead_metadata_module.read_icy_stream_title
+        original_icy_reader = icy_metadata_module.read_icy_metadata_result
+        original_playhead_reader = playhead_metadata_module.read_icy_metadata_result
         try:
-            icy_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
-            playhead_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
+            icy_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+            playhead_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
 
             manager.poll_current_metadata()
         finally:
-            icy_metadata_module.read_icy_stream_title = original_icy_reader
-            playhead_metadata_module.read_icy_stream_title = original_playhead_reader
+            icy_metadata_module.read_icy_metadata_result = original_icy_reader
+            playhead_metadata_module.read_icy_metadata_result = original_playhead_reader
 
         self.assertTrue(
             any(
-                'No ICY metadata title found for Current Channel after scanning metadata blocks' in message
+                'No ICY metadata title found for Current Channel: missing-or-invalid-icy-metaint' in message
                 for message in logger.info_messages
             )
         )
