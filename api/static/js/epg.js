@@ -22,9 +22,8 @@ window.StreamApp.renderEpg = function(database, playheadId, metadata = window.St
     if (playheadId && database[playheadId]) {
       const channelName = database[playheadId].name;
       const streamTitle = window.StreamApp.currentPlayheadMetadata.stream_title;
-      nowName.textContent = typeof streamTitle === 'string' && streamTitle.trim()
-        ? `${channelName} - ${streamTitle}`
-        : channelName;
+      const trimmedStreamTitle = typeof streamTitle === 'string' ? streamTitle.trim() : '';
+      nowName.textContent = trimmedStreamTitle || channelName;
       nowPlaying.style.display = 'block';
     } else {
       nowPlaying.style.display = 'none';
