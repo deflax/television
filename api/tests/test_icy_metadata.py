@@ -99,9 +99,11 @@ def load_icy_metadata_module():
             raise ModuleNotFoundError("No module named 'services.icy_metadata'")
 
         module = importlib.util.module_from_spec(spec)
+        sys.modules['services.icy_metadata_under_test'] = module
         spec.loader.exec_module(module)
         return module
     finally:
+        sys.modules.pop('services.icy_metadata_under_test', None)
         if original_requests is None:
             sys.modules.pop('requests', None)
         else:

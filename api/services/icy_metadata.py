@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Protocol
 
@@ -42,70 +43,88 @@ _MAX_HEADER_BYTES = 65536
 _MAX_METADATA_BLOCKS = 5
 
 
+@dataclass(frozen=True, slots=True)
+class IcyMetadataResult:
+    title: str | None
+    reason: str
+
+
 def read_icy_stream_title(source_url: str, timeout: float) -> str | None:
+    return read_icy_metadata_result(source_url, timeout).title
+
+
+def read_icy_metadata_result(source_url: str, timeout: float) -> IcyMetadataResult:
     parsed_url = urlsplit(source_url)
     if parsed_url.scheme not in {'http', 'https'}:
-        return None
+        return IcyMetadataResult(title=None, reason=f'unsupported-scheme:{parsed_url.scheme}')
 
-    title = _read_icy_stream_title_from_socket(parsed_url, timeout)
-    if title:
-        return title
+    socket_result = _read_icy_stream_title_from_socket(parsed_url, timeout)
+    if socket_result.title:
+        return socket_result
 
     try:
         response = requests.get(source_url, headers=_ICY_HEADERS, stream=True, timeout=timeout)
     except requests.RequestException:
-        return None
+        return socket_result
 
-    return _read_stream_title_from_response(response)
+    response_result = _read_stream_title_from_response(response)
+    if response_result.title:
+        return response_result
+    return IcyMetadataResult(title=None, reason=f'socket={socket_result.reason};requests={response_result.reason}')
 
 
-def _read_stream_title_from_response(response: _IcyResponse) -> str | None:
+def _read_stream_title_from_response(response: _IcyResponse) -> IcyMetadataResult:
     try:
         metaint = int(response.headers.get('icy-metaint', ''))
     except (TypeError, ValueError):
-        return None
+        return IcyMetadataResult(title=None, reason='missing-or-invalid-icy-metaint')
 
     if metaint <= 0:
-        return None
+        return IcyMetadataResult(title=None, reason=f'invalid-icy-metaint:{metaint}')
 
+    last_reason = 'no-metadata-blocks-read'
     for _ in range(_MAX_METADATA_BLOCKS):
-        title = _read_next_stream_title(response.raw, metaint)
+        title, reason = _read_next_stream_title(response.raw, metaint)
         if title:
-            return title
-    return None
+            return IcyMetadataResult(title=title, reason='ok')
+        last_reason = reason
+    return IcyMetadataResult(
+        title=None,
+        reason=f'no-title-after-{_MAX_METADATA_BLOCKS}-blocks:last={last_reason}',
+    )
 
 
-def _read_next_stream_title(raw: _IcyRawResponse, metaint: int) -> str | None:
+def _read_next_stream_title(raw: _IcyRawResponse, metaint: int) -> tuple[str | None, str]:
     audio_bytes = _read_exact(raw, metaint)
     if len(audio_bytes) != metaint:
-        return None
+        return None, f'short-audio-read:{len(audio_bytes)}/{metaint}'
 
     metadata_length_bytes = _read_exact(raw, 1)
     if len(metadata_length_bytes) != 1:
-        return None
+        return None, 'short-metadata-length-read'
 
     metadata_length = metadata_length_bytes[0] * 16
     if metadata_length == 0:
-        return None
+        return None, 'empty-metadata-block'
 
     metadata_bytes = _read_exact(raw, metadata_length)
     if len(metadata_bytes) != metadata_length:
-        return None
+        return None, f'short-metadata-read:{len(metadata_bytes)}/{metadata_length}'
 
     try:
         metadata_text = metadata_bytes.decode('utf-8')
     except UnicodeDecodeError:
-        return None
+        return None, 'metadata-decode-error'
 
     match = _STREAM_TITLE_PATTERN.search(metadata_text)
     if match is None:
-        return None
+        return None, 'stream-title-missing'
 
     title = match.group(1)
     if not title:
-        return None
+        return None, 'stream-title-empty'
 
-    return title
+    return title, 'ok'
 
 
 def _read_exact(raw: _IcyRawResponse, size: int) -> bytes:
@@ -151,20 +170,20 @@ class _SocketIcyResponse:
         return self._raw
 
 
-def _read_icy_stream_title_from_socket(parsed_url: SplitResult, timeout: float) -> str | None:
+def _read_icy_stream_title_from_socket(parsed_url: SplitResult, timeout: float) -> IcyMetadataResult:
     host = parsed_url.hostname
     if host is None:
-        return None
+        return IcyMetadataResult(title=None, reason='missing-host')
 
     stream = _open_socket_stream(parsed_url, host, timeout)
     if stream is None:
-        return None
+        return IcyMetadataResult(title=None, reason='socket-open-failed')
 
     try:
         stream.sendall(_build_socket_request(parsed_url, host))
         header_bytes, buffered = _read_socket_headers(stream)
         if not header_bytes:
-            return None
+            return IcyMetadataResult(title=None, reason='socket-header-missing')
         headers = _parse_socket_headers(header_bytes)
         return _read_stream_title_from_response(_SocketIcyResponse(headers, _BufferedSocketRaw(stream, buffered)))
     finally:
