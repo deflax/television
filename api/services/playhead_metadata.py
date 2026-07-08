@@ -41,7 +41,7 @@ class PlayheadMetadataPoller:
             self.logger.info(f'Updated ICY metadata for {channel_name}: {title}')
         else:
             _ = next_playhead.pop('metadata', None)
-            self.logger.info(f'No ICY metadata title found for {channel_name}')
+            self.logger.info(f'No ICY metadata title found for {channel_name} after scanning metadata blocks')
         return next_playhead
 
     def _current_source_url(self, current_id: str) -> str | None:

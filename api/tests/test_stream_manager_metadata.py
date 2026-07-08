@@ -250,6 +250,51 @@ class StreamManagerMetadataTest(unittest.TestCase):
         )
         self.assertNotIn('metadata', manager.playhead)
 
+    def test_poll_current_metadata_logs_parser_reason_when_title_is_missing(self):
+        current_process_id = 'channel-current'
+        source_url = 'https://example.test/current/live.m3u8'
+        processes = [{'id': current_process_id, 'reference': current_process_id}]
+        process_details = {
+            current_process_id: build_process_fixture(
+                current_process_id,
+                current_process_id,
+                'config.input[0].address',
+                source_url,
+            ),
+        }
+        manager, _, logger = self.make_manager(processes, process_details)
+        manager.playhead = {
+            'id': current_process_id,
+            'name': 'Current Channel',
+            'prio': 5,
+            'head': 'https://example.test/stale/live.m3u8',
+            'metadata': {'stream_title': 'Stale Track'},
+        }
+
+        def fake_read_icy_stream_title(source_url_arg: str, timeout: float) -> str | None:
+            self.assertEqual(source_url_arg, source_url)
+            _ = timeout
+            return None
+
+        original_icy_reader = icy_metadata_module.read_icy_stream_title
+        original_playhead_reader = playhead_metadata_module.read_icy_stream_title
+        try:
+            icy_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
+            playhead_metadata_module.read_icy_stream_title = fake_read_icy_stream_title
+
+            manager.poll_current_metadata()
+        finally:
+            icy_metadata_module.read_icy_stream_title = original_icy_reader
+            playhead_metadata_module.read_icy_stream_title = original_playhead_reader
+
+        self.assertTrue(
+            any(
+                'No ICY metadata title found for Current Channel after scanning metadata blocks' in message
+                for message in logger.info_messages
+            )
+        )
+        self.assertNotIn('metadata', manager.playhead)
+
     def test_update_playhead_removes_stale_metadata_when_switching_channels(self):
         manager, _, _ = self.make_manager([], {})
         manager.playhead = {
