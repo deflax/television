@@ -118,15 +118,21 @@ class DummyLogger:
 
 
 class DummyCoreClient:
-    def __init__(self, processes, process_details):
+    def __init__(self, processes, process_details, process_configs=None):
         self._processes = processes
         self._process_details = process_details
+        self._process_configs = process_configs or {}
+        self.config_requests = []
 
     def v3_process_get_list(self):
         return self._processes
 
     def v3_process_get(self, id):
         return self._process_details[id]
+
+    def v3_process_get_config(self, id):
+        self.config_requests.append(id)
+        return self._process_configs[id]
 
 
 def build_process_fixture(process_id: str, reference: str, shape: SourceShape, source_url: str, state: str = 'running'):
@@ -146,7 +152,7 @@ def build_process_fixture(process_id: str, reference: str, shape: SourceShape, s
 
 
 class StreamManagerMetadataTest(unittest.TestCase):
-    def make_manager(self, processes, process_details):
+    def make_manager(self, processes, process_details, process_configs=None):
         scheduler = DummyScheduler()
         logger = DummyLogger()
         config = types.SimpleNamespace(
@@ -154,9 +160,9 @@ class StreamManagerMetadataTest(unittest.TestCase):
             icy_timeout=3.5,
             metadata_timeout=3.5,
         )
-        client = DummyCoreClient(processes, process_details)
+        client = DummyCoreClient(processes, process_details, process_configs)
         manager = stream_manager_module.StreamManager(scheduler, client, config, logger)
-        return manager, scheduler, logger
+        return manager, scheduler, logger, client
 
     def test_poll_current_metadata_uses_current_process_source_url_and_ignores_other_processes(self):
         current_process_id = 'channel-current'
@@ -187,7 +193,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
                         expected_source_url,
                     ),
                 }
-                manager, _, logger = self.make_manager(processes, process_details)
+                manager, _, logger, _ = self.make_manager(processes, process_details)
                 manager.playhead = {
                     'id': current_process_id,
                     'name': 'Current Channel',
@@ -232,6 +238,152 @@ class StreamManagerMetadataTest(unittest.TestCase):
                     },
                 )
 
+    def test_poll_current_metadata_prefers_restreamer_ingest_config_source(self):
+        current_process_id = '5de4fabf-1879-4dc0-a11e-e975eab44bd8'
+        ingest_process_id = f'restreamer-ui:ingest:{current_process_id}'
+        expected_source_url = 'http://amoris.sknt.ru/idm'
+        fallback_source_url = 'https://example.test/generated/live.m3u8'
+        processes = [
+            {'id': 'core-hls-output', 'reference': current_process_id},
+        ]
+        process_details = {
+            'core-hls-output': build_process_fixture(
+                'core-hls-output',
+                current_process_id,
+                'config.input[0].address',
+                fallback_source_url,
+            ),
+        }
+        process_configs = {
+            ingest_process_id: {
+                'input': [
+                    {'address': '{memfs}/5de4fabf-1879-4dc0-a11e-e975eab44bd8.m3u8'},
+                    {'address': expected_source_url},
+                ],
+            },
+        }
+        manager, _, _, client = self.make_manager(processes, process_details, process_configs)
+        manager.playhead = {
+            'id': current_process_id,
+            'name': 'Current Channel',
+            'prio': 5,
+            'head': 'https://example.test/stale/live.m3u8',
+        }
+
+        calls = []
+
+        def fake_read_icy_metadata_result(source_url: str, timeout: float):
+            calls.append(source_url)
+            self.assertEqual(source_url, expected_source_url)
+            _ = timeout
+            return types.SimpleNamespace(title='Artist - Track', reason='ok')
+
+        original_icy_reader = icy_metadata_module.read_icy_metadata_result
+        original_playhead_reader = playhead_metadata_module.read_icy_metadata_result
+        try:
+            icy_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+            playhead_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+
+            manager.poll_current_metadata()
+        finally:
+            icy_metadata_module.read_icy_metadata_result = original_icy_reader
+            playhead_metadata_module.read_icy_metadata_result = original_playhead_reader
+
+        self.assertEqual(client.config_requests, [ingest_process_id])
+        self.assertEqual(calls, [expected_source_url])
+        self.assertEqual(manager.playhead['metadata'], {'stream_title': 'Artist - Track'})
+
+    def test_poll_current_metadata_rejects_internal_ingest_config_inputs(self):
+        current_process_id = '5de4fabf-1879-4dc0-a11e-e975eab44bd8'
+        ingest_process_id = f'restreamer-ui:ingest:{current_process_id}'
+        process_configs = {
+            ingest_process_id: {
+                'input': [
+                    {'address': '{memfs}/channel.m3u8'},
+                    {'address': 'http://127.0.0.1:8080/memfs/channel.m3u8'},
+                    {'address': 'https://localhost/memfs/channel.m3u8'},
+                    {'address': '#upstream:output=output_0'},
+                ],
+            },
+        }
+        manager, _, logger, client = self.make_manager([], {}, process_configs)
+        manager.playhead = {
+            'id': current_process_id,
+            'name': 'Current Channel',
+            'prio': 5,
+            'head': 'https://example.test/stale/live.m3u8',
+            'metadata': {'stream_title': 'Stale Track'},
+        }
+
+        manager.poll_current_metadata()
+
+        self.assertEqual(client.config_requests, [ingest_process_id])
+        self.assertTrue(
+            any('No metadata source URL found for Current Channel' in message for message in logger.info_messages)
+        )
+        self.assertNotIn('metadata', manager.playhead)
+
+    def test_poll_current_metadata_skips_internal_generated_source_for_original_http_source(self):
+        current_process_id = 'channel-current'
+        internal_source_url = '{memfs}/5de4fabf-1879-4dc0-a11e-e975eab44bd8.m3u8'
+        expected_source_url = 'http://amoris.sknt.ru/idm'
+        processes = [
+            {'id': 'core-hls-output', 'reference': current_process_id},
+            {'id': 'core-network-input', 'reference': current_process_id},
+        ]
+        process_details = {
+            'core-hls-output': build_process_fixture(
+                'core-hls-output',
+                current_process_id,
+                'config.input[0].address',
+                internal_source_url,
+            ),
+            'core-network-input': build_process_fixture(
+                'core-network-input',
+                current_process_id,
+                'config.input[0].address',
+                expected_source_url,
+            ),
+        }
+        manager, _, _, _ = self.make_manager(processes, process_details)
+        manager.playhead = {
+            'id': current_process_id,
+            'name': 'Current Channel',
+            'prio': 5,
+            'head': 'https://example.test/stale/live.m3u8',
+        }
+
+        calls = []
+
+        def fake_read_icy_metadata_result(source_url: str, timeout: float):
+            calls.append(source_url)
+            self.assertEqual(source_url, expected_source_url)
+            _ = timeout
+            return types.SimpleNamespace(title='Artist - Track', reason='ok')
+
+        original_icy_reader = icy_metadata_module.read_icy_metadata_result
+        original_playhead_reader = playhead_metadata_module.read_icy_metadata_result
+        try:
+            icy_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+            playhead_metadata_module.read_icy_metadata_result = fake_read_icy_metadata_result
+
+            manager.poll_current_metadata()
+        finally:
+            icy_metadata_module.read_icy_metadata_result = original_icy_reader
+            playhead_metadata_module.read_icy_metadata_result = original_playhead_reader
+
+        self.assertEqual(calls, [expected_source_url])
+        self.assertEqual(
+            manager.playhead,
+            {
+                'id': current_process_id,
+                'name': 'Current Channel',
+                'prio': 5,
+                'head': 'https://example.test/stale/live.m3u8',
+                'metadata': {'stream_title': 'Artist - Track'},
+            },
+        )
+
     def test_poll_current_metadata_logs_when_current_source_url_is_missing(self):
         processes = [{'id': 'channel-current', 'reference': 'channel-current'}]
         process_details = {
@@ -242,7 +394,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
                 'config': {'input': []},
             },
         }
-        manager, _, logger = self.make_manager(processes, process_details)
+        manager, _, logger, _ = self.make_manager(processes, process_details)
         manager.playhead = {
             'id': 'channel-current',
             'name': 'Current Channel',
@@ -269,7 +421,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
                 source_url,
             ),
         }
-        manager, _, logger = self.make_manager(processes, process_details)
+        manager, _, logger, _ = self.make_manager(processes, process_details)
         manager.playhead = {
             'id': current_process_id,
             'name': 'Current Channel',
@@ -303,7 +455,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
         self.assertNotIn('metadata', manager.playhead)
 
     def test_update_playhead_removes_stale_metadata_when_switching_channels(self):
-        manager, _, _ = self.make_manager([], {})
+        manager, _, _, _ = self.make_manager([], {})
         manager.playhead = {
             'id': 'channel-current',
             'name': 'Current Channel',
