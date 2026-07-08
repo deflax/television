@@ -47,10 +47,14 @@ def read_icy_stream_title(source_url: str, timeout: float) -> str | None:
     if parsed_url.scheme not in {'http', 'https'}:
         return None
 
+    title = _read_icy_stream_title_from_socket(parsed_url, timeout)
+    if title:
+        return title
+
     try:
         response = requests.get(source_url, headers=_ICY_HEADERS, stream=True, timeout=timeout)
     except requests.RequestException:
-        return _read_icy_stream_title_from_socket(parsed_url, timeout)
+        return None
 
     return _read_stream_title_from_response(response)
 

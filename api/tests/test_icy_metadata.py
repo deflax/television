@@ -42,8 +42,9 @@ class FakeIcyResponse:
 
 
 class FakeSocket:
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, max_read_size: int | None = None):
         self._payload = payload
+        self._max_read_size = max_read_size
         self.sent: bytes = b''
         self.closed = False
 
@@ -54,12 +55,24 @@ class FakeSocket:
         self.sent += data
 
     def recv(self, size: int) -> bytes:
+        if self._max_read_size is not None:
+            size = min(size, self._max_read_size)
         result = self._payload[:size]
         self._payload = self._payload[size:]
         return result
 
     def close(self) -> None:
         self.closed = True
+
+
+def build_socket_response(payload: bytes, metaint: int = 16, name: str = 'Example ICY stream') -> bytes:
+    return (
+        b'HTTP/1.0 200 OK\r\n' +
+        f'icy-name: {name}\r\n'.encode('ascii') +
+        f'icy-metaint: {metaint}\r\n'.encode('ascii') +
+        b'\r\n' +
+        payload
+    )
 
 
 def load_icy_metadata_module():
@@ -116,67 +129,79 @@ def build_empty_then_title_payload(title: str) -> bytes:
 class IcyMetadataTest(unittest.TestCase):
     def test_read_icy_stream_title_returns_title_for_valid_metadata_block(self):
         module = load_icy_metadata_module()
-        calls: list[tuple[str, dict[str, object]]] = []
+        fake_socket = FakeSocket(build_socket_response(build_metadata_payload('Artist - Track')))
 
         def fake_get(url: str, **kwargs):
-            calls.append((url, kwargs))
-            return FakeIcyResponse(
-                headers={'icy-metaint': '16'},
-                payload=build_metadata_payload('Artist - Track'),
-            )
+            raise AssertionError('requests.get should not be called when socket ICY parsing succeeds')
+
+        def fake_create_connection(address: tuple[str, int], timeout: float):
+            self.assertEqual(address, ('example.test', 80))
+            self.assertEqual(timeout, 3.5)
+            return fake_socket
 
         original_get = module.requests.get
+        original_create_connection = module.socket.create_connection
         try:
             module.requests.get = fake_get
-            result = module.read_icy_stream_title('https://example.test/live', timeout=3.5)
+            module.socket.create_connection = fake_create_connection
+            result = module.read_icy_stream_title('http://example.test/live', timeout=3.5)
         finally:
             module.requests.get = original_get
+            module.socket.create_connection = original_create_connection
 
         self.assertEqual(result, 'Artist - Track')
-        self.assertEqual(
-            calls,
-            [
-                (
-                    'https://example.test/live',
-                    {'headers': {'Icy-MetaData': '1'}, 'stream': True, 'timeout': 3.5},
-                ),
-            ],
-        )
+        self.assertIn(b'Icy-MetaData: 1', fake_socket.sent)
 
     def test_read_icy_stream_title_handles_partial_socket_reads(self):
         module = load_icy_metadata_module()
+        fake_socket = FakeSocket(
+            build_socket_response(build_metadata_payload('Zeal Litta - Dark Shadows (Original Mix)')),
+            max_read_size=5,
+        )
 
         def fake_get(url: str, **kwargs):
-            return FakeIcyResponse(
-                headers={'icy-metaint': '16'},
-                payload=build_metadata_payload('Zeal Litta - Dark Shadows (Original Mix)'),
-                max_read_size=5,
-            )
+            raise AssertionError('requests.get should not be called when socket ICY parsing succeeds')
+
+        def fake_create_connection(address: tuple[str, int], timeout: float):
+            _ = address
+            _ = timeout
+            return fake_socket
 
         original_get = module.requests.get
+        original_create_connection = module.socket.create_connection
         try:
             module.requests.get = fake_get
-            result = module.read_icy_stream_title('https://example.test/live', timeout=3.5)
+            module.socket.create_connection = fake_create_connection
+            result = module.read_icy_stream_title('http://example.test/live', timeout=3.5)
         finally:
             module.requests.get = original_get
+            module.socket.create_connection = original_create_connection
 
         self.assertEqual(result, 'Zeal Litta - Dark Shadows (Original Mix)')
 
     def test_read_icy_stream_title_scans_past_empty_metadata_block(self):
         module = load_icy_metadata_module()
+        fake_socket = FakeSocket(build_socket_response(
+            build_empty_then_title_payload('Second Block Artist - Second Block Track')
+        ))
 
         def fake_get(url: str, **kwargs):
-            return FakeIcyResponse(
-                headers={'icy-metaint': '16'},
-                payload=build_empty_then_title_payload('Second Block Artist - Second Block Track'),
-            )
+            raise AssertionError('requests.get should not be called when socket ICY parsing succeeds')
+
+        def fake_create_connection(address: tuple[str, int], timeout: float):
+            _ = address
+            _ = timeout
+            return fake_socket
 
         original_get = module.requests.get
+        original_create_connection = module.socket.create_connection
         try:
             module.requests.get = fake_get
-            result = module.read_icy_stream_title('https://example.test/live', timeout=3.5)
+            module.socket.create_connection = fake_create_connection
+            result = module.read_icy_stream_title('http://example.test/live', timeout=3.5)
         finally:
             module.requests.get = original_get
+            module.socket.create_connection = original_create_connection
 
         self.assertEqual(result, 'Second Block Artist - Second Block Track')
 
