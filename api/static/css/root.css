@@ -65,8 +65,8 @@ a:hover {
     cursor: pointer;
 }
 
-.now-playing-copy:hover,
-.now-playing-copy:focus {
+.now-playing-copy:hover #epg-now-name,
+.now-playing-copy:focus #epg-now-name {
     color: var(--epg-active-purple) !important;
 }
 

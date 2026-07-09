@@ -70,8 +70,11 @@ window.StreamApp.initNowPlayingCopy = function() {
   if (!nowPlaying || nowPlaying.dataset.copyReady === 'true') return;
 
   nowPlaying.dataset.copyReady = 'true';
-  nowPlaying.addEventListener('click', function() {
+  nowPlaying.addEventListener('click', function(event) {
     window.StreamApp.copyNowPlaying();
+    if (event.detail > 0) {
+      nowPlaying.blur();
+    }
   });
   nowPlaying.addEventListener('keydown', function(event) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
