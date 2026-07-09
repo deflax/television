@@ -538,53 +538,19 @@ class DiscordBotManager:
         async def now(ctx):
             playhead = await self.query_playhead()
             stream_name = playhead.get('name', 'Unknown')
+            metadata = playhead.get('metadata')
+            stream_title = metadata.get('stream_title') if isinstance(metadata, dict) else None
+            display_name = (
+                stream_title.strip()
+                if isinstance(stream_title, str) and stream_title.strip()
+                else stream_name
+            )
             embed = self._make_embed(
                 title='▶️ Now Playing',
-                description=f'**{stream_name}**',
+                description=f'**{display_name}**',
                 color=self.COLOR_SUCCESS
             )
             await ctx.channel.send(embed=embed)
-
-        @self.bot.command(name='rnd', help='Switch to a random stream from the database')
-        @self._require_any_role(self.boss_role_name)
-        async def rnd(ctx):
-            # Check if there's only one stream (or none) in the database
-            if len(self.stream_manager.database) <= 1:
-                embed = self._make_embed(
-                    title='⚠️ No Streams Available',
-                    description='There are no other streams in the database to switch to.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-                return
-
-            next_stream = self.stream_manager.get_next_stream()
-            if not next_stream:
-                embed = self._make_embed(
-                    title='⚠️ No Streams Available',
-                    description='There are no other streams in the database to switch to.',
-                    color=self.COLOR_WARNING
-                )
-                await ctx.channel.send(embed=embed)
-                return
-            
-            # Execute the stream switch
-            self.stream_manager.exec_stream(
-                next_stream['stream_id'],
-                next_stream['stream_name'],
-                next_stream['stream_prio'],
-                next_stream['stream_hls_url']
-            )
-            
-            embed = self._make_embed(
-                title='🎲 Random Stream',
-                description=f'Now playing: **{next_stream["stream_name"]}**',
-                color=self.COLOR_SUCCESS,
-                footer=f'ID: {next_stream["stream_id"]}'
-            )
-            await ctx.channel.send(embed=embed)
-
-        rnd.error(_access_denied)
 
         @self.bot.command(name='clearlog', help='Delete previous bot messages in this channel')
         @self._require_any_role(self.boss_role_name)
