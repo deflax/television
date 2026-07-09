@@ -184,8 +184,8 @@ class IcyMetadataTest(unittest.TestCase):
     def test_read_icy_stream_title_removes_domain_noise_from_title(self):
         module = load_icy_metadata_module()
         for raw_title, expected_title in (
-            ('Artist - Track - radio.example.com | https://stream.example.net/live', 'Artist - Track'),
-            ('Brickman - Field.Wind * amoris.example.test', 'Brickman - Field.Wind'),
+            ('Artist - Track - radio.example.com | https://stream.example.net/live', 'Artist - Track'), ('Brickman - Field.Wind * amoris.example.test', 'Brickman - Field.Wind'),
+            *((f'Artist - Track {separator} Station promo', 'Artist - Track') for separator in ('<', '>', '~', '#', '@', '•', '//')),
         ):
             fake_socket = FakeSocket(build_socket_response(build_metadata_payload(raw_title)))
             original_create_connection = module.socket.create_connection
