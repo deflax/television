@@ -37,6 +37,9 @@ class _IcyResponse(Protocol):
 
 
 _STREAM_TITLE_PATTERN = re.compile(r"StreamTitle='(.*?)';")
+_URL_PATTERN = re.compile(r'https?://\S+', re.IGNORECASE)
+_DOMAIN_PATTERN = re.compile(r'(?<![@\w.-])(?:www\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?(?:/\S*)?')
+_DANGLING_SEPARATOR_PATTERN = re.compile(r'(?:\s*[-|/•]+\s*)+$')
 _ICY_HEADERS = {'Icy-MetaData': '1'}
 _HEADER_TERMINATOR = b'\r\n\r\n'
 _MAX_HEADER_BYTES = 65536
@@ -124,7 +127,17 @@ def _read_next_stream_title(raw: _IcyRawResponse, metaint: int) -> tuple[str | N
     if not title:
         return None, 'stream-title-empty'
 
-    return title, 'ok'
+    sanitized_title = _sanitize_stream_title(title)
+    if not sanitized_title:
+        return None, 'stream-title-empty-after-sanitization'
+    return sanitized_title, 'ok'
+
+
+def _sanitize_stream_title(title: str) -> str:
+    cleaned = _URL_PATTERN.sub('', title)
+    cleaned = _DOMAIN_PATTERN.sub('', cleaned)
+    cleaned = _DANGLING_SEPARATOR_PATTERN.sub('', cleaned)
+    return cleaned.strip()
 
 
 def _read_exact(raw: _IcyRawResponse, size: int) -> bytes:
