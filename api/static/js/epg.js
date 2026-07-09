@@ -7,6 +7,78 @@ window.StreamApp = window.StreamApp || {};
 window.StreamApp.currentPlayheadId = null;
 window.StreamApp.currentPlayheadMetadata = {};
 window.StreamApp.currentEpgDatabase = {};
+window.StreamApp.nowPlayingCopyTimeout = null;
+
+window.StreamApp.setNowPlayingText = function(nowName, text) {
+  nowName.textContent = nowName.dataset.copyFeedback === 'true' ? 'copied to clipboard' : text;
+};
+
+window.StreamApp.showNowPlayingCopyFeedback = function(nowName) {
+  if (window.StreamApp.nowPlayingCopyTimeout) {
+    clearTimeout(window.StreamApp.nowPlayingCopyTimeout);
+  }
+  nowName.dataset.copyFeedback = 'true';
+  nowName.textContent = 'copied to clipboard';
+  window.StreamApp.nowPlayingCopyTimeout = setTimeout(function() {
+    nowName.dataset.copyFeedback = 'false';
+    nowName.textContent = nowName.dataset.trackText || '';
+    window.StreamApp.nowPlayingCopyTimeout = null;
+  }, 1600);
+};
+
+window.StreamApp.writeClipboardText = async function(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    const copied = await navigator.clipboard.writeText(text).then(
+      function() { return true; },
+      function() { return false; }
+    );
+    if (copied) return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
+    textarea.remove();
+  }
+  return copied;
+};
+
+window.StreamApp.copyNowPlaying = async function() {
+  const nowName = document.getElementById('epg-now-name');
+  if (!nowName) return;
+
+  const trackText = nowName.dataset.trackText || nowName.textContent;
+  if (!trackText) return;
+
+  if (await window.StreamApp.writeClipboardText(trackText)) {
+    window.StreamApp.showNowPlayingCopyFeedback(nowName);
+  }
+};
+
+window.StreamApp.initNowPlayingCopy = function() {
+  const nowPlaying = document.getElementById('epg-now-playing');
+  if (!nowPlaying || nowPlaying.dataset.copyReady === 'true') return;
+
+  nowPlaying.dataset.copyReady = 'true';
+  nowPlaying.addEventListener('click', function() {
+    window.StreamApp.copyNowPlaying();
+  });
+  nowPlaying.addEventListener('keydown', function(event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    window.StreamApp.copyNowPlaying();
+  });
+};
 
 window.StreamApp.renderEpg = function(database, playheadId, metadata = window.StreamApp.currentPlayheadMetadata) {
   const nowPlaying = document.getElementById('epg-now-playing');
@@ -19,11 +91,14 @@ window.StreamApp.renderEpg = function(database, playheadId, metadata = window.St
 
   // Update "Now Playing" from playhead
   if (nowPlaying && nowName) {
+    window.StreamApp.initNowPlayingCopy();
     if (playheadId && database[playheadId]) {
       const channelName = database[playheadId].name;
       const streamTitle = window.StreamApp.currentPlayheadMetadata.stream_title;
       const trimmedStreamTitle = typeof streamTitle === 'string' ? streamTitle.trim() : '';
-      nowName.textContent = trimmedStreamTitle || channelName;
+      const trackText = trimmedStreamTitle || channelName;
+      nowName.dataset.trackText = trackText;
+      window.StreamApp.setNowPlayingText(nowName, trackText);
       nowPlaying.style.display = 'block';
     } else {
       nowPlaying.style.display = 'none';

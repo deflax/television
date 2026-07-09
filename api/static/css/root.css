@@ -61,6 +61,15 @@ a:hover {
     color: var(--epg-active-purple) !important;
 }
 
+.now-playing-copy {
+    cursor: pointer;
+}
+
+.now-playing-copy:hover,
+.now-playing-copy:focus {
+    color: var(--epg-active-purple) !important;
+}
+
 a.stream-link:hover {
     color: #fff !important;
 }
