@@ -38,8 +38,8 @@ class _IcyResponse(Protocol):
 
 _STREAM_TITLE_PATTERN = re.compile(r"StreamTitle='(.*?)';")
 _URL_PATTERN = re.compile(r'https?://\S+', re.IGNORECASE)
-_DOMAIN_PATTERN = re.compile(r'(?<![@\w.-])(?:www\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?(?:/\S*)?')
-_DANGLING_SEPARATOR_PATTERN = re.compile(r'(?:\s*[-|/•]+\s*)+$')
+_DOMAIN_PATTERN = re.compile(r'(?<![@\w.-])(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:/\S*)?')
+_DANGLING_SEPARATOR_PATTERN = re.compile(r'(?:\s*[-|/•*]+\s*)+$')
 _ICY_HEADERS = {'Icy-MetaData': '1'}
 _HEADER_TERMINATOR = b'\r\n\r\n'
 _MAX_HEADER_BYTES = 65536

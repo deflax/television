@@ -241,7 +241,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
     def test_poll_current_metadata_prefers_restreamer_ingest_config_source(self):
         current_process_id = '5de4fabf-1879-4dc0-a11e-e975eab44bd8'
         ingest_process_id = f'restreamer-ui:ingest:{current_process_id}'
-        expected_source_url = 'http://amoris.sknt.ru/idm'
+        expected_source_url = 'http://amoris.example.test/idm'
         fallback_source_url = 'https://example.test/generated/live.m3u8'
         processes = [
             {'id': 'core-hls-output', 'reference': current_process_id},
@@ -326,7 +326,7 @@ class StreamManagerMetadataTest(unittest.TestCase):
     def test_poll_current_metadata_skips_internal_generated_source_for_original_http_source(self):
         current_process_id = 'channel-current'
         internal_source_url = '{memfs}/5de4fabf-1879-4dc0-a11e-e975eab44bd8.m3u8'
-        expected_source_url = 'http://amoris.sknt.ru/idm'
+        expected_source_url = 'http://amoris.example.test/idm'
         processes = [
             {'id': 'core-hls-output', 'reference': current_process_id},
             {'id': 'core-network-input', 'reference': current_process_id},

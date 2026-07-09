@@ -183,20 +183,19 @@ class IcyMetadataTest(unittest.TestCase):
 
     def test_read_icy_stream_title_removes_domain_noise_from_title(self):
         module = load_icy_metadata_module()
-        fake_socket = FakeSocket(
-            build_socket_response(build_metadata_payload(
-                'Artist - Track - radio.example.com | https://stream.example.net/live',
-            )),
-        )
+        for raw_title, expected_title in (
+            ('Artist - Track - radio.example.com | https://stream.example.net/live', 'Artist - Track'),
+            ('Brickman - Field.Wind * amoris.example.test', 'Brickman - Field.Wind'),
+        ):
+            fake_socket = FakeSocket(build_socket_response(build_metadata_payload(raw_title)))
+            original_create_connection = module.socket.create_connection
+            try:
+                module.socket.create_connection = lambda address, timeout: fake_socket
+                result = module.read_icy_stream_title('http://example.test/live', timeout=3.5)
+            finally:
+                module.socket.create_connection = original_create_connection
 
-        original_create_connection = module.socket.create_connection
-        try:
-            module.socket.create_connection = lambda address, timeout: fake_socket
-            result = module.read_icy_stream_title('http://example.test/live', timeout=3.5)
-        finally:
-            module.socket.create_connection = original_create_connection
-
-        self.assertEqual(result, 'Artist - Track')
+            self.assertEqual(result, expected_title)
 
     def test_read_icy_stream_title_scans_past_empty_metadata_block(self):
         module = load_icy_metadata_module()
