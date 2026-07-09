@@ -15,6 +15,13 @@ class DiscordBotManager:
     """Manages Discord bot functionality integrated with the Flask API."""
 
     @staticmethod
+    def _escape_discord_markdown(text: str) -> str:
+        escaped = text.replace('\\', '\\\\')
+        for marker in ('*', '_', '`', '~', '|', '>'):
+            escaped = escaped.replace(marker, f'\\{marker}')
+        return escaped
+
+    @staticmethod
     def _read_int_env(name: str, default: int, logger: logging.Logger) -> int:
         """Read an integer environment variable with fallback."""
         raw_value = os.environ.get(name)
@@ -545,9 +552,10 @@ class DiscordBotManager:
                 if isinstance(stream_title, str) and stream_title.strip()
                 else stream_name
             )
+            escaped_display_name = self._escape_discord_markdown(display_name)
             embed = self._make_embed(
                 title='▶️ Now Playing',
-                description=f'**{display_name}**',
+                description=f'**{escaped_display_name}**',
                 color=self.COLOR_SUCCESS
             )
             await ctx.channel.send(embed=embed)

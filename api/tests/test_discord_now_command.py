@@ -101,6 +101,7 @@ class DiscordNowCommandTest(unittest.TestCase):
         class Manager:
             _setup_bot_commands = module.DiscordBotManager._setup_bot_commands
             _require_any_role = module.DiscordBotManager._require_any_role
+            _escape_discord_markdown = staticmethod(module.DiscordBotManager._escape_discord_markdown)
             COLOR_SUCCESS = module.DiscordBotManager.COLOR_SUCCESS
 
             def __init__(self):
@@ -138,6 +139,18 @@ class DiscordNowCommandTest(unittest.TestCase):
         asyncio.run(commands['now'](ctx))
 
         self.assertEqual(ctx.channel.embeds[-1].description, '**Current Channel**')
+
+    def test_now_command_escapes_markdown_in_icy_title(self):
+        commands, ctx = self.make_command_manager(
+            {
+                'name': 'Current Channel',
+                'metadata': {'stream_title': 'artist_name - track_title'},
+            }
+        )
+
+        asyncio.run(commands['now'](ctx))
+
+        self.assertEqual(ctx.channel.embeds[-1].description, '**artist\\_name - track\\_title**')
 
     def test_random_command_is_not_registered(self):
         commands, _ = self.make_command_manager({'name': 'Current Channel'})
