@@ -3,6 +3,7 @@
 import importlib.util
 import asyncio
 import contextlib
+import json
 import sys
 import types
 import unittest
@@ -359,9 +360,11 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
 
         self.assertEqual(response, ('Bad request', 400))
 
-    def test_hls_viewers_route_keeps_subthreshold_viewer_out_of_discord(self):
+    def test_hls_viewers_route_keeps_subthreshold_viewer_out_of_public_state_and_discord(self):
         state = make_state()
         discord = FakeDiscordBotManager()
+        sse_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        state.sse_clients.add(sse_queue)
 
         response = post_hls_viewers_report(
             state,
@@ -371,13 +374,36 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
         )
 
         self.assertEqual(response, ('OK', 200))
-        self.assertEqual(state.hls_viewer_ips, {'8.8.8.8'})
-        self.assertEqual(state.hls_viewer_count, 1)
+        self.assertEqual(state.hls_viewer_ips, set())
+        self.assertEqual(state.hls_viewer_count, 0)
         self.assertEqual(discord.hls_updates, [(set(), 0, {})])
+        self.assertEqual(
+            state.hls_viewer_last_seen,
+            {'8.8.8.8': 100.0},
+        )
+        self.assertEqual(
+            state.hls_viewer_connected_seconds,
+            {'8.8.8.8': 29.9},
+        )
+        self.assertTrue(sse_queue.empty())
 
-    def test_hls_viewers_route_admits_viewer_to_discord_at_threshold(self):
+    def test_hls_viewers_route_admits_viewer_to_public_state_and_discord_at_threshold(self):
         state = make_state()
         discord = FakeDiscordBotManager()
+        sse_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        state.sse_clients.add(sse_queue)
+
+        subthreshold_response = post_hls_viewers_report(
+            state,
+            discord,
+            100.0,
+            {'8.8.8.8': {'connected_seconds': 29.9}},
+        )
+        self.assertEqual(subthreshold_response, ('OK', 200))
+        self.assertEqual(state.hls_viewer_ips, set())
+        self.assertEqual(state.hls_viewer_count, 0)
+        self.assertEqual(discord.hls_updates, [(set(), 0, {})])
+        self.assertTrue(sse_queue.empty())
 
         response = post_hls_viewers_report(
             state,
@@ -385,13 +411,23 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
             100.0,
             {'8.8.8.8': {'connected_seconds': 30.0}},
         )
+        threshold_event = sse_queue.get_nowait()
 
         self.assertEqual(response, ('OK', 200))
-        self.assertEqual(discord.hls_updates, [({'8.8.8.8'}, 1, {})])
+        self.assertEqual(state.hls_viewer_ips, {'8.8.8.8'})
+        self.assertEqual(state.hls_viewer_count, 1)
+        self.assertEqual(
+            discord.hls_updates,
+            [(set(), 0, {}), ({'8.8.8.8'}, 1, {})],
+        )
+        self.assertEqual(threshold_event['type'], 'visitors')
+        self.assertEqual(json.loads(threshold_event['data']), {'visitors': 1})
 
-    def test_hls_viewers_route_keeps_admitted_viewer_in_discord_during_grace(self):
+    def test_hls_viewers_route_keeps_admitted_viewer_in_public_state_and_discord_during_grace(self):
         state = make_state()
         discord = FakeDiscordBotManager()
+        sse_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        state.sse_clients.add(sse_queue)
 
         post_hls_viewers_report(
             state,
@@ -399,12 +435,16 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
             100.0,
             {'8.8.8.8': {'connected_seconds': 30.0}},
         )
+        event = sse_queue.get_nowait()
+        self.assertEqual(event['type'], 'visitors')
+        self.assertEqual(json.loads(event['data']), {'visitors': 1})
         response = post_hls_viewers_report(state, discord, 339.9, {})
 
         self.assertEqual(response, ('OK', 200))
         self.assertEqual(state.hls_viewer_ips, {'8.8.8.8'})
         self.assertEqual(state.hls_viewer_count, 1)
         self.assertEqual(discord.hls_updates[-1], ({'8.8.8.8'}, 1, {}))
+        self.assertTrue(sse_queue.empty())
 
 
 class DiscordHLSConnectMessageTest(unittest.TestCase):

@@ -14,7 +14,7 @@ from web.state import HLSViewerSession, WebRouteState, hls_viewer_display_key, u
 
 SSE_TO_HLS_GRACE_SECONDS = 45.0
 MAX_HLS_VIEWER_REPORT_SIZE = 1000
-HLS_VIEWER_DISCORD_MIN_CONNECTED_SECONDS = 30.0
+HLS_VIEWER_DISPLAY_MIN_CONNECTED_SECONDS = 30.0
 
 
 def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state: WebRouteState) -> None:
@@ -93,13 +93,17 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
                 return 'Bad request', 400
             reported_sessions[viewer_key] = HLSViewerSession(connected_seconds=connected_seconds, last_seen=now)
 
-        reported_ips = set(reported_sessions.keys())
-        current_displayed_ips = {hls_viewer_display_key(ip) for ip in reported_ips}
         display_update = update_hls_viewer_display_state(state, reported_sessions, now)
-        displayed_ips = display_update.displayed_ips
-        discord_displayed_ips = {
-            ip for ip in displayed_ips
-            if state.hls_viewer_connected_seconds[ip] >= HLS_VIEWER_DISCORD_MIN_CONNECTED_SECONDS
+        tracked_displayed_ips = display_update.displayed_ips
+        displayed_ips = {
+            ip for ip in tracked_displayed_ips
+            if state.hls_viewer_connected_seconds[ip] >= HLS_VIEWER_DISPLAY_MIN_CONNECTED_SECONDS
+        }
+        reported_ips = set(reported_sessions.keys())
+        current_displayed_ips = {
+            hls_viewer_display_key(ip)
+            for ip, session in reported_sessions.items()
+            if session.connected_seconds >= HLS_VIEWER_DISPLAY_MIN_CONNECTED_SECONDS
         }
         sse_ips = set(state.visitor_tracker.visitors.keys())
         grace_ips = {
@@ -131,8 +135,8 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
 
         if discord_bot_manager is not None:
             discord_bot_manager.update_hls_viewers(
-                discord_displayed_ips,
-                len(discord_displayed_ips),
+                displayed_ips,
+                len(displayed_ips),
                 display_update.disconnected_durations,
             )
 
