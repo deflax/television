@@ -42,6 +42,7 @@ class FakeDiscordBotManager:
         self.connects: list[tuple[str, int]] = []
         self.changes = 0
         self.hls_viewer_ips: set[str] = set()
+        self.hls_updates: list[tuple[set[str], int, dict[str, float]]] = []
 
     def log_visitor_connect(self, ip: str, count: int) -> bool:
         self.connects.append((ip, count))
@@ -50,6 +51,14 @@ class FakeDiscordBotManager:
     def log_visitor_change(self) -> bool:
         self.changes += 1
         return True
+
+    def update_hls_viewers(
+        self,
+        new_ips: set[str],
+        total_count: int,
+        disconnected_durations: dict[str, float],
+    ) -> None:
+        self.hls_updates.append((new_ips, total_count, disconnected_durations))
 
 
 def load_routes_module():
@@ -145,6 +154,55 @@ def make_state() -> WebRouteState:
         timecode_manager=TimecodeManager(),
         visitor_tracker=VisitorTracker(),
     )
+
+
+def post_hls_viewers_report(
+    state: WebRouteState,
+    discord_bot_manager: FakeDiscordBotManager,
+    now: float,
+    viewers: dict[str, dict[str, float]],
+):
+    quart_module = types.ModuleType('quart')
+    setattr(quart_module, 'request', None)
+    sys.modules.setdefault('quart', quart_module)
+    helpers_module = types.ModuleType('web.helpers')
+    setattr(helpers_module, 'get_client_address', lambda request: '8.8.8.8')
+    sys.modules.setdefault('web.helpers', helpers_module)
+
+    from web import sse_routes as module
+
+    captured_handler = None
+
+    class FakeLogger:
+        def info(self, message: str) -> None:
+            pass
+
+    class FakeLoggers:
+        sse = FakeLogger()
+
+    class FakeApp:
+        def route(self, path: str, methods: list[str]):
+            def decorator(func):
+                nonlocal captured_handler
+                if path == '/hls-viewers':
+                    captured_handler = func
+                return func
+            return decorator
+
+        def before_serving(self, func):
+            return func
+
+    class FakeRequest:
+        async def get_json(self):
+            return {'count': len(viewers), 'viewers': viewers}
+
+    register_sse_routes = getattr(module, 'register_sse_routes')
+    register_sse_routes(FakeApp(), None, FakeLoggers(), discord_bot_manager, state)
+    if captured_handler is None:
+        raise AssertionError('hls-viewers handler was not captured')
+
+    with patched_attr(module, 'request', FakeRequest()), patched_attr(module.time, 'monotonic', lambda: now):
+        return asyncio.run(captured_handler())
 
 
 class HLSViewerDisplayGraceTest(unittest.TestCase):
@@ -300,6 +358,53 @@ class HLSViewerDisplayGraceTest(unittest.TestCase):
             response = asyncio.run(captured_handler())
 
         self.assertEqual(response, ('Bad request', 400))
+
+    def test_hls_viewers_route_keeps_subthreshold_viewer_out_of_discord(self):
+        state = make_state()
+        discord = FakeDiscordBotManager()
+
+        response = post_hls_viewers_report(
+            state,
+            discord,
+            100.0,
+            {'8.8.8.8': {'connected_seconds': 29.9}},
+        )
+
+        self.assertEqual(response, ('OK', 200))
+        self.assertEqual(state.hls_viewer_ips, {'8.8.8.8'})
+        self.assertEqual(state.hls_viewer_count, 1)
+        self.assertEqual(discord.hls_updates, [(set(), 0, {})])
+
+    def test_hls_viewers_route_admits_viewer_to_discord_at_threshold(self):
+        state = make_state()
+        discord = FakeDiscordBotManager()
+
+        response = post_hls_viewers_report(
+            state,
+            discord,
+            100.0,
+            {'8.8.8.8': {'connected_seconds': 30.0}},
+        )
+
+        self.assertEqual(response, ('OK', 200))
+        self.assertEqual(discord.hls_updates, [({'8.8.8.8'}, 1, {})])
+
+    def test_hls_viewers_route_keeps_admitted_viewer_in_discord_during_grace(self):
+        state = make_state()
+        discord = FakeDiscordBotManager()
+
+        post_hls_viewers_report(
+            state,
+            discord,
+            100.0,
+            {'8.8.8.8': {'connected_seconds': 30.0}},
+        )
+        response = post_hls_viewers_report(state, discord, 339.9, {})
+
+        self.assertEqual(response, ('OK', 200))
+        self.assertEqual(state.hls_viewer_ips, {'8.8.8.8'})
+        self.assertEqual(state.hls_viewer_count, 1)
+        self.assertEqual(discord.hls_updates[-1], ({'8.8.8.8'}, 1, {}))
 
 
 class DiscordHLSConnectMessageTest(unittest.TestCase):
