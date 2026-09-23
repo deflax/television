@@ -14,3 +14,6 @@ mkdir -v -p data/restreamer/data
 mkdir -v -p data/recorder/live
 mkdir -v -p data/recorder/vod
 mkdir -v -p data/recorder/thumb
+
+# VOD-to-HLS source media
+mkdir -v -p data/archive

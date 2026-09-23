@@ -8,6 +8,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 - **Automatic Fallback** - Falls back to nearest scheduled stream when current ends
 - **Discord Bot Integration** - Live notifications, EPG commands, and stream control
 - **Protected Video Archive** - HMAC-based timecode authentication for secure access
+- **VOD-to-HLS Channel** - Continuously shuffles archive media into an internal Restreamer input
 - **Mux Service** - Seamless stream multiplexer with adaptive bitrate output and crash recovery
 - **HLS Adaptive Streaming** - Quality selection via HLS.js with Plyr player, audio-only mode, and automatic error recovery
 - **Automated SSL** - Let's Encrypt certificates via acme.sh
@@ -47,6 +48,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 3. **Scheduling** → API tracks schedule, broadcasts playhead via SSE
 4. **Muxing** → Mux service follows playhead, switches Restreamer HLS inputs, outputs ABR stream
 5. **Delivery** → HAProxy routes requests, terminates SSL, serves to viewers
+6. **VOD channel** → `vod-producer` reads `data/archive`, and Restreamer can ingest its internal HLS output from `vod-web`
 
 ## Tech Stack
 
@@ -90,7 +92,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 3. **Start the acme.sh service**
 
    ```bash
-   docker-compose up -d acme-sh
+   docker compose --env-file variables.env up -d acme-sh
    ```
 
 4. **Register ACME account**
@@ -105,7 +107,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 5. **Start the stack**
 
    ```bash
-   docker-compose up -d --build --remove-orphans
+   docker compose --env-file variables.env up -d --build --remove-orphans
    ```
 
 6. **Issue SSL certificates**
@@ -195,6 +197,25 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 
 Each variant specifies fixed output dimensions and video bitrate. Audio is copied from the source; `audio_bitrate` is used for playlist bandwidth metadata. Source stream (copy) is always included as stream_0.
 
+### VOD-to-HLS Service Variables
+
+The VOD producer always reads `./data/archive` through a read-only `/media` mount. Its HLS output is held in the `vod-hls` named volume; `MEDIA_DIR` and `HTTP_PORT` are not deployment settings in the integrated stack.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VOD_HLS_PLAYLIST` | `live.m3u8` | Playlist filename under the internal `/hls` path |
+| `VOD_SEGMENT_SECONDS` | `4` | Target segment duration in seconds |
+| `VOD_PLAYLIST_SIZE` | `6` | Segments retained in the rolling playlist |
+| `VOD_RESCAN_SECONDS` | `30` | Delay before rescanning an empty archive |
+| `VOD_OUTPUT_WIDTH` | `1920` | Fixed output width |
+| `VOD_OUTPUT_HEIGHT` | `1080` | Fixed output height |
+| `VOD_OUTPUT_FPS` | `30` | Fixed output frame rate |
+| `VOD_SUPPORTED_EXTENSIONS` | `.mp4,.mkv,.mov,.avi,.webm,.m4v` | Accepted input extensions |
+| `VOD_SHUFFLE_SEED` | empty | Optional deterministic shuffle seed |
+| `VOD_LOG_LEVEL` | `INFO` | Producer log level |
+
+Use `--env-file variables.env` with Compose commands so customized `VOD_*` values are available while Compose renders the producer environment.
+
 
 ## Services
 
@@ -245,6 +266,45 @@ The audio-only endpoint is not an ABR variant and does not change `ABR_VARIANTS`
 - **Responsive design** - Mobile-friendly Bootstrap 5 interface
 
 ## Usage
+
+### VOD-to-HLS Restreamer Input
+
+1. Run `./init.sh` and place supported media files in `data/archive/`.
+2. Start the integrated services (or the whole stack):
+
+   ```bash
+   docker compose --env-file variables.env up -d --build vod-producer vod-web restreamer
+   ```
+
+3. In the Restreamer admin panel, create an HLS-input channel with this source URL:
+
+   ```text
+   http://vod-web/hls/live.m3u8
+   ```
+
+Creating that Restreamer channel is the remaining configuration step; Compose does not modify Restreamer's channel configuration. The raw VOD HLS endpoint is deliberately internal-only: `vod-web` publishes no host port and HAProxy has no route for it.
+
+Useful lifecycle, health, and diagnostic commands:
+
+```bash
+docker compose --env-file variables.env ps vod-producer vod-web
+docker compose --env-file variables.env logs -f vod-producer vod-web
+docker compose --env-file variables.env restart vod-producer vod-web
+docker compose --env-file variables.env stop vod-producer vod-web
+
+# NGINX liveness and playlist access from inside the service network
+docker compose --env-file variables.env exec -T vod-web wget -qO- http://localhost/health
+docker compose --env-file variables.env exec -T vod-web wget -qO- http://localhost/hls/live.m3u8
+
+# Producer output health and private status
+docker compose --env-file variables.env exec -T vod-producer python -m app.health --check
+docker compose --env-file variables.env exec -T vod-producer cat /hls/status.json
+
+# Advance to the next queued file
+docker compose --env-file variables.env exec -T vod-producer python -m app.control skip-current
+```
+
+An empty archive leaves the producer unhealthy until media is added, while `vod-web` remains available. See `vod2hls/README.md` for producer tests and fixture generation.
 
 ### Setting Up Streams
 
@@ -389,7 +449,9 @@ television/
 ├── haproxy/
 │   ├── haproxy.cfg
 │   └── Dockerfile
+├── vod2hls/                      # Internal archive-to-HLS producer and web server
 ├── data/                        # Runtime data (gitignored)
+│   ├── archive/                  # VOD producer inputs (mounted read-only)
 │   ├── acme/                    # ACME certificates data
 │   ├── certificates/
 │   ├── restreamer/

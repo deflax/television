@@ -2,6 +2,9 @@ networks:
   net:
     external: false
 
+volumes:
+  vod-hls:
+
 services:
   haproxy:
     build: ./haproxy
@@ -51,6 +54,62 @@ services:
       - net
     labels:
       - meta.role=restreamer
+
+  vod-producer:
+    build:
+      context: ./vod2hls/producer
+      dockerfile: Dockerfile
+    image: tv-vod-producer:latest
+    working_dir: /app
+    command: python -m app.supervisor
+    env_file:
+      - "variables.env"
+    environment:
+      MEDIA_DIR: /media
+      HLS_DIR: /hls
+      HLS_PLAYLIST: ${VOD_HLS_PLAYLIST:-live.m3u8}
+      SEGMENT_SECONDS: ${VOD_SEGMENT_SECONDS:-4}
+      PLAYLIST_SIZE: ${VOD_PLAYLIST_SIZE:-6}
+      RESCAN_SECONDS: ${VOD_RESCAN_SECONDS:-30}
+      OUTPUT_WIDTH: ${VOD_OUTPUT_WIDTH:-1920}
+      OUTPUT_HEIGHT: ${VOD_OUTPUT_HEIGHT:-1080}
+      OUTPUT_FPS: ${VOD_OUTPUT_FPS:-30}
+      SUPPORTED_EXTENSIONS: ${VOD_SUPPORTED_EXTENSIONS:-.mp4,.mkv,.mov,.avi,.webm,.m4v}
+      SHUFFLE_SEED: ${VOD_SHUFFLE_SEED:-}
+      LOG_LEVEL: ${VOD_LOG_LEVEL:-INFO}
+    volumes:
+      - "./data/archive:/media:ro"
+      - "vod-hls:/hls"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.health", "--check"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - net
+    labels:
+      - meta.role=vod-producer
+
+  vod-web:
+    image: nginx:alpine
+    depends_on:
+      - "vod-producer"
+    volumes:
+      - "./vod2hls/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "vod-hls:/usr/share/nginx/html/hls:ro"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - net
+    labels:
+      - meta.role=vod-web
 
   api:
     depends_on:
