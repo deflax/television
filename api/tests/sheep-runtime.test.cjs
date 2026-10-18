@@ -42,7 +42,10 @@ function scene(elements = []) {
     context.services.presentation = {
       getSpriteMetrics: () => ({ width: 50, height: 50 }), hasSprite: () => true,
       applyPosition() {},
-      enterActionFrame(action) { action.frameEvents?.[action.frameIndex]?.(action); },
+      enterActionFrame(action) {
+        state.currentFrame = action.frames[action.frameIndex];
+        action.frameEvents?.[action.frameIndex]?.(action);
+      },
       showSheep() { state.sheepVisible = true; },
       hideSheep() { state.sheepVisible = false; },
       hideProp() { state.prop.visible = false; },
@@ -83,6 +86,24 @@ function wall() {
     getBoundingClientRect: () => ({ left: 150, right: 750, top: 140, bottom: 690, width: 600, height: 550 })
   };
 }
+
+test('ground encounters recoil and retreat without displaying sleeping frames', () => {
+  const simulation = scene();
+  const mover = simulation.createSheep(1, 300, 734);
+  simulation.createSheep(2, 410, 734);
+  const runtime = mover.services.runtimeEngine;
+  const sleepingFrames = new Set(mover.services.actionCatalog.ACTIONS.sleep.frames);
+  runtime.queueAction('walk', { target: { x: 500, y: 734 }, speed: 100 });
+  runtime.startNextAction();
+  runtime.startLoop();
+  assert.ok(simulation.until(() => mover.state.activeAction?.name !== 'walk'));
+  const contactX = mover.state.x;
+  for (let i = 0; i < 240 && mover.state.x >= contactX - 10; i++) {
+    assert.equal(sleepingFrames.has(mover.state.currentFrame), false);
+    simulation.step();
+  }
+  assert.ok(mover.state.x < contactX - 10);
+});
 
 for (const [location, x] of [['mid-platform', 450], ['at the viewport edge', 934]]) {
   test(`a falling sheep bounces aside ${location} instead of stacking`, () => {

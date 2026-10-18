@@ -273,7 +273,7 @@ The audio-only endpoint is not an ABR variant and does not change `ABR_VARIANTS`
 
 The live page's **sheep** button enables or disables the flock and stores that preference locally. Click a sheep to open its action menu.
 
-- Compact body boxes ignore the sprite atlas's transparent margins. Awareness zones trigger a short pause and retreat; swept body contacts prevent sheep from passing through one another between frames. Encounter ownership and a cooldown avoid repeated reactions.
+- Compact body boxes ignore the sprite atlas's transparent margins. Awareness zones trigger the bump/recoil animation followed by a retreat, rather than a sleep pose; swept body contacts prevent sheep from passing through one another between frames. Encounter ownership and a cooldown avoid repeated reactions.
 - Only real, visible sheep participate. UFOs, visiting black-sheep props, other props, and abducted or disabled sheep do not obstruct movement. Sheep bounce aside rather than forming permanent stacks.
 - `.sheep-surface` elements provide one-way top edges: sheep can pass upward through them and land while descending. Visible sides support longer climbs without increasing the short-jump limit. Sheep can roam through the navigation area and stand on the video's actual top without reserving extra space above the video.
 - Active traversal destinations are refreshed after geometry changes. Removing a destination, including switching to audio-only mode, cancels the stale landing and lets the sheep fall to an available surface.
