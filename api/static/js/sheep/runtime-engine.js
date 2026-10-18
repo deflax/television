@@ -471,7 +471,7 @@ window.SheepInternals = window.SheepInternals || {};
       const surface = services.surfacePlanner.getCurrentSurface();
       const distance = services.presentation.getSpriteMetrics().width * 1.5;
       const away = contact.normal.x || (state.direction === 1 ? 1 : -1);
-      queueAction('bump');
+      queueAction('notice');
       queueTravel('walk', {
         x: services.surfacePlanner.clampXToSurface(surface, state.x + away * distance),
         y: surface.landY

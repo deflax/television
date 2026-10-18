@@ -246,6 +246,18 @@ window.SheepInternals = window.SheepInternals || {};
       return finalizeSequenceAction(sequence);
     }
 
+    function createNoticeAction() {
+      const sequence = createSequence();
+
+      addSequenceFrame(sequence, 9, 80);
+      addSequenceFrame(sequence, 10, 80);
+      addSequenceFrame(sequence, 34, 200);
+      addSequenceFrame(sequence, 10, 80);
+      addSequenceFrame(sequence, 9, 80);
+
+      return finalizeSequenceAction(sequence);
+    }
+
     function createRollAction() {
       const sequence = createSequence();
 
@@ -726,6 +738,7 @@ window.SheepInternals = window.SheepInternals || {};
       call: createCallAction(),
       yawn: createYawnAction(),
       stare: createStareAction(),
+      notice: createNoticeAction(),
       roll: createRollAction(),
       meteor: createMeteorAction(),
       blackSheep: createBlackSheepAction(),

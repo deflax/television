@@ -87,19 +87,29 @@ function wall() {
   };
 }
 
-test('ground encounters recoil and retreat without displaying sleeping frames', () => {
+test('ground encounters glance briefly without sleeping or tumbling, then retreat', () => {
   const simulation = scene();
   const mover = simulation.createSheep(1, 300, 734);
   simulation.createSheep(2, 410, 734);
   const runtime = mover.services.runtimeEngine;
-  const sleepingFrames = new Set(mover.services.actionCatalog.ACTIONS.sleep.frames);
+  const { ACTIONS } = mover.services.actionCatalog;
+  const exaggeratedFrames = new Set([...ACTIONS.sleep.frames, ...ACTIONS.bump.frames]);
   runtime.queueAction('walk', { target: { x: 500, y: 734 }, speed: 100 });
   runtime.startNextAction();
   runtime.startLoop();
   assert.ok(simulation.until(() => mover.state.activeAction?.name !== 'walk'));
   const contactX = mover.state.x;
+  const contactY = mover.state.y;
+  const reaction = mover.state.activeAction;
+  for (let i = 0; i < 60 && mover.state.activeAction === reaction; i++) {
+    assert.equal(exaggeratedFrames.has(mover.state.currentFrame), false);
+    assert.equal(mover.state.x, contactX);
+    assert.equal(mover.state.y, contactY);
+    simulation.step();
+  }
+  assert.notEqual(mover.state.activeAction, reaction);
   for (let i = 0; i < 240 && mover.state.x >= contactX - 10; i++) {
-    assert.equal(sleepingFrames.has(mover.state.currentFrame), false);
+    assert.equal(exaggeratedFrames.has(mover.state.currentFrame), false);
     simulation.step();
   }
   assert.ok(mover.state.x < contactX - 10);
