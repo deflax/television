@@ -1,5 +1,7 @@
+import hashlib
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List
 
 from quart import abort, redirect, render_template, request, session, url_for
@@ -37,12 +39,21 @@ def get_sorted_thumbnails(rec_path: str) -> List[str]:
 def register_frontend_routes(app, config, loggers, state: WebRouteState) -> None:
     """Register human-facing HTML routes and protected media routes."""
 
+    asset_revisions = {}
+
+    def static_asset_url(filename: str) -> str:
+        if filename not in asset_revisions:
+            asset_path = Path(app.static_folder) / filename
+            asset_revisions[filename] = hashlib.sha256(asset_path.read_bytes()).hexdigest()[:16]
+        return url_for('static', filename=filename, v=asset_revisions[filename])
+
     @app.context_processor
     def inject_site_vars():
         return {
             'server_name': config.server_name or 'localhost',
             'core_hostname': config.core_hostname or 'localhost',
             'archive_enabled': config.archive_enabled,
+            'static_asset_url': static_asset_url,
         }
 
     @app.route('/privacy-policy', methods=['GET'])

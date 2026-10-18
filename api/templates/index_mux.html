@@ -17,7 +17,7 @@
 {% block title %}▷ Stream{% endblock %}
 
 {% block extra_head %}
-    <link rel="stylesheet" href="/static/css/sheep.css">
+    <link rel="stylesheet" href="{{ static_asset_url('css/sheep.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -64,9 +64,9 @@
                   </div>
                   <div class="dropdown d-inline-block">
                     <button class="btn btn-sm btn-outline-secondary sheep-surface dropdown-toggle" type="button" id="stream-dropdown" data-bs-toggle="dropdown" aria-expanded="false" title="For VLC and other players">
-                      Stream links <i class="fa fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i>
+                      Stream links
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark sheep-surface border border-secondary py-1" aria-labelledby="stream-dropdown">
+                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark stream-links-menu sheep-surface border border-secondary py-1" aria-labelledby="stream-dropdown">
                       <li><a class="dropdown-item stream-dropdown-item small py-1 px-2" href="/live/stream.m3u8" target="_blank" rel="noopener">Video URL <i class="fa fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i><span class="visually-hidden"> (opens a new tab)</span></a></li>
                       <li><a class="dropdown-item stream-dropdown-item small py-1 px-2" href="/live/audio.m3u8" target="_blank" rel="noopener">Audio URL <i class="fa fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i><span class="visually-hidden"> (opens a new tab)</span></a></li>
                     </ul>
@@ -86,16 +86,16 @@
   </div>
 </div>
 
-<script src="/static/js/epg.js"></script>
-<script src="/static/js/player.js"></script>
-<script src="/static/js/sse.js"></script>
+<script src="{{ static_asset_url('js/epg.js') }}"></script>
+<script src="{{ static_asset_url('js/player.js') }}"></script>
+<script src="{{ static_asset_url('js/sse.js') }}"></script>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="/static/js/sheep/action-catalog.js"></script>
-<script src="/static/js/sheep/surface-planner.js"></script>
-<script src="/static/js/sheep/runtime-engine.js"></script>
-<script src="/static/js/sheep/presentation.js"></script>
-<script src="/static/js/sheep/collision-world.js"></script>
-<script src="/static/js/sheep.js"></script>
+<script src="{{ static_asset_url('js/sheep/action-catalog.js') }}"></script>
+<script src="{{ static_asset_url('js/sheep/surface-planner.js') }}"></script>
+<script src="{{ static_asset_url('js/sheep/runtime-engine.js') }}"></script>
+<script src="{{ static_asset_url('js/sheep/presentation.js') }}"></script>
+<script src="{{ static_asset_url('js/sheep/collision-world.js') }}"></script>
+<script src="{{ static_asset_url('js/sheep.js') }}"></script>
 {% endblock %}

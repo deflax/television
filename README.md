@@ -265,8 +265,9 @@ The audio-only endpoint is not an ABR variant and does not change `ABR_VARIANTS`
 - **Global modals** - Weather is available on all pages; Archive is available only when enabled
 - **SSE real-time updates** - Live visitor count, EPG changes, playhead updates
 - **Responsive design** - Mobile-friendly Bootstrap 5 interface
-- **Playback controls** - The **Video / Audio** selector changes playback on this page and remembers the selected mode. Poster controls appear together in Audio mode. **Stream links** provides separate **Video URL** and **Audio URL** links that open in a new tab for use with external players.
+- **Playback controls** - The **Video / Audio** selector changes playback on this page and remembers the selected mode. Poster controls appear together in Audio mode. The **Stream links** menu matches its button's width; its **Video URL** and **Audio URL** items retain external-link icons and open in a new tab for external players.
 - **Sheep interactions** - Real sheep avoid one another, land on one-way platform tops, and climb visible platform sides
+- **Versioned frontend assets** - Local JavaScript and stylesheets use content-fingerprinted URLs so updated pages do not reuse incompatible cached code. Revisions are cached per API process; restart the API when deploying changed assets.
 
 ### Frontend Sheep
 

@@ -84,6 +84,11 @@ a:hover {
     --bs-btn-active-border-color: var(--epg-active-purple);
 }
 
+.stream-controls .stream-links-menu {
+    --bs-dropdown-min-width: 100%;
+    width: 100%;
+}
+
 .stream-dropdown-item {
     border-radius: var(--bs-border-radius-sm);
     color: rgba(255,255,255,.55) !important;
