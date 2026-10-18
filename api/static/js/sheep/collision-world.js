@@ -322,6 +322,10 @@ window.SheepInternals = window.SheepInternals || {};
       return result;
     }
 
+    function isDebugEnabled() {
+      return debugEnabled;
+    }
+
     function setDebug(enabled) {
       debugEnabled = Boolean(enabled);
       if (!debugEnabled && debugCanvas) {
@@ -412,7 +416,7 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
-    return Object.freeze({ register, unregister, placeOnSurface, resolveMovement, setDebug, renderDebug });
+    return Object.freeze({ register, unregister, placeOnSurface, resolveMovement, isDebugEnabled, setDebug, renderDebug });
   }
 
   internals.createCollisionWorld = createCollisionWorld;

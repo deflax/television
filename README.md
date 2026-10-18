@@ -275,11 +275,11 @@ The live page's **sheep** button enables or disables the flock and stores that p
 
 - Compact body boxes ignore the sprite atlas's transparent margins. Awareness zones trigger a short pause and retreat; swept body contacts prevent sheep from passing through one another between frames. Encounter ownership and a cooldown avoid repeated reactions.
 - Only real, visible sheep participate. UFOs, visiting black-sheep props, other props, and abducted or disabled sheep do not obstruct movement. Sheep bounce aside rather than forming permanent stacks.
-- `.sheep-surface` elements provide one-way top edges: sheep can pass upward through them and land while descending. Visible sides support longer climbs without increasing the short-jump limit. The live page leaves clearance between the fixed navigation and video for a sheep standing on its actual top.
+- `.sheep-surface` elements provide one-way top edges: sheep can pass upward through them and land while descending. Visible sides support longer climbs without increasing the short-jump limit. Sheep can roam through the navigation area and stand on the video's actual top without reserving extra space above the video.
 - Active traversal destinations are refreshed after geometry changes. Removing a destination, including switching to audio-only mode, cancels the stale landing and lets the sheep fall to an available surface.
 - Reaching six sheep starts a group UFO reset. Interrupted actions still settle the reset, so spawning does not remain locked.
 
-For visual debugging, run `SheepApp.setCollisionDebug(true)` in the browser console. The overlay shows body boxes, awareness zones, platform tops, and recent contact normals; pass `false` to hide it.
+For the collision-debug Easter egg, scroll to the very bottom of the live page and click or tap the faint, borderless **π button at the bottom-right of the footer**. It is separate from the sheep action menus and needs no special gestures. Its invisible 44px tap area remains easy to use despite the subdued appearance. The button toggles the shared overlay for enabled sheep, showing body boxes, awareness zones, platform tops, and recent contact normals; it is hidden on pages without the sheep feature. Debug mode defaults to off on page load and is not saved. The console commands `SheepApp.setCollisionDebug(true)` and `SheepApp.setCollisionDebug(false)` still enable and hide the overlay, and the footer button stays synchronized.
 
 Run the deterministic collision, landing, and movement-lifecycle regressions from the repository root with Node.js 18 or newer:
 

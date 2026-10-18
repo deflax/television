@@ -61,11 +61,21 @@ test('the first crossed top wins and departure platforms can be excluded', () =>
   assert.equal(planner.findLandingSurfaceBetween(150, 150, 150, 400, 'surface:upper').surface.id, 'surface:lower');
 });
 
-test('unsafe and hidden tops are not fabricated at the viewport safety boundary', () => {
+test('offscreen and hidden tops are not fabricated at the viewport boundary', () => {
   const hidden = platform('hidden', 100, 300, 300, 30);
   hidden.hidden = true;
-  const { planner } = setup([platform('above-navbar', 100, 70, 300, 300), hidden]);
+  const { planner } = setup([platform('offscreen', 100, 20, 300, 300), hidden]);
   assert.equal(planner.getSurfaces().filter(s => s.type === 'marked').length, 0);
+});
+
+test('the video top remains a real landing surface beside the navigation', () => {
+  const { planner } = setup([platform('media', 120, 66, 1000, 570)], 1248, 771, 52);
+  const media = planner.resolveSurfaceById('surface:media');
+  assert.equal(media.id, 'surface:media');
+  assert.equal(media.landY + 52, 66);
+  const hit = planner.findLandingSurfaceBetween(500, 8, 500, 40);
+  assert.equal(hit.surface.id, 'surface:media');
+  assert.equal(hit.surface.lineY, 66);
 });
 
 test('a tall marked rectangle is reachable by its side without an oversized jump', () => {

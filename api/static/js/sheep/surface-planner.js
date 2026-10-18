@@ -21,11 +21,11 @@ window.SheepInternals = window.SheepInternals || {};
     function getBounds() {
       const { width: spriteWidth, height: spriteHeight } = services.presentation.getSpriteMetrics();
       const edgePadding = readCssPixels('--sheep-edge-padding', 16);
-      const safeTop = readCssPixels('--sheep-safe-top', 68);
+      const safeTop = readCssPixels('--sheep-safe-top', 8);
       const safeBottom = readCssPixels('--sheep-safe-bottom', 16);
 
       const minX = edgePadding;
-      const minY = Math.max(edgePadding, safeTop);
+      const minY = Math.max(0, safeTop);
       const maxX = Math.max(minX, window.innerWidth - spriteWidth - edgePadding);
       const maxY = Math.max(minY, window.innerHeight - spriteHeight - safeBottom);
 

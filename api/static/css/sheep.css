@@ -1,9 +1,9 @@
 :root {
     --sheep-size: clamp(40px, 4.5vw, 52px);
     --sheep-edge-padding: 16px;
-    --sheep-safe-top: 68px;
+    --sheep-safe-top: 8px;
     --sheep-safe-bottom: 16px;
-    --sheep-layer-z: 20;
+    --sheep-layer-z: 1040;
     --sheep-menu-z: 1;
     --sheep-sprite-opacity: 0.94;
     --sheep-prop-opacity: 0.9;
@@ -23,9 +23,33 @@
     --sheep-menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
-/* Leave a real landing strip above the video, below the fixed navigation. */
-#stream {
-    padding-top: calc(var(--sheep-size) + 1.25rem) !important;
+.sheep-debug-easter-egg {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.sheep-debug-toggle {
+    position: relative;
+    z-index: calc(var(--sheep-layer-z) + 1);
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.12);
+    font: 14px/1 Arial, Helvetica, sans-serif;
+    cursor: pointer;
+}
+
+.sheep-debug-toggle:hover,
+.sheep-debug-toggle[aria-pressed="true"] {
+    color: rgba(255, 255, 255, 0.22);
+}
+
+.sheep-debug-toggle:focus-visible {
+    color: var(--sheep-menu-text);
+    outline: 1px solid currentColor;
+    outline-offset: 2px;
 }
 
 .sheep-layer {

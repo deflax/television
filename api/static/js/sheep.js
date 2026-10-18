@@ -449,7 +449,24 @@ window.SheepInternals = window.SheepInternals || {};
     return false;
   }
 
+  function syncCollisionDebugButton() {
+    const button = document.getElementById('sheep-debug-btn');
+    if (button) {
+      button.setAttribute('aria-pressed', String(collisionWorld.isDebugEnabled()));
+    }
+  }
+
   function init() {
+    const debugControls = document.getElementById('sheep-debug-easter-egg');
+    const debugButton = document.getElementById('sheep-debug-btn');
+    if (debugControls && debugButton) {
+      debugButton.addEventListener('click', () => {
+        app.setCollisionDebug(!collisionWorld.isDebugEnabled());
+      });
+      syncCollisionDebugButton();
+      debugControls.hidden = false;
+    }
+
     manager.enabled = readStoredEnabledPreference();
 
     if (!manager.enabled) {
@@ -478,6 +495,7 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.setCollisionDebug = function setSheepCollisionDebug(enabled) {
     collisionWorld.setDebug(Boolean(enabled));
+    syncCollisionDebugButton();
   };
 
   app.refreshSurfaces = function refreshSheepSurfaces() {
