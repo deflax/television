@@ -163,6 +163,7 @@ A multi-channel live streaming platform with automated scheduling, Discord integ
 | `API_LOG_LEVEL_SSE` | Log level for SSE events (default: `WARN`) |
 | `FLASK_SECRET_KEY` | Flask session encryption key |
 | `TIMECODE_SECRET_KEY` | HMAC key for archive timecodes |
+| `ARCHIVE_ENABLED` | Enable the protected archive and its navigation link (`true`/`false`, default: `false`) |
 | `DISCORDBOT_ENABLED` | Enable Discord bot (`true`/`false`, default: `false`) |
 | `DISCORDBOT_TOKEN` | Discord bot token |
 | `DISCORDBOT_LIVE_CHANNEL_ID` | Discord channel ID for live stream announcements |
@@ -261,9 +262,10 @@ The audio-only endpoint is not an ABR variant and does not change `ABR_VARIANTS`
 
 **Frontend Features:**
 - **Automatic error recovery** - HLS.js detects network/media errors and automatically recovers
-- **Global modals** - Weather and Archive modals accessible from all pages
+- **Global modals** - Weather is available on all pages; Archive is available only when enabled
 - **SSE real-time updates** - Live visitor count, EPG changes, playhead updates
 - **Responsive design** - Mobile-friendly Bootstrap 5 interface
+- **Playback controls** - The **Video / Audio** selector changes playback on this page and remembers the selected mode. Poster controls appear together in Audio mode. **Stream links** provides separate **Video URL** and **Audio URL** links that open in a new tab for use with external players.
 - **Sheep interactions** - Real sheep avoid one another, land on one-way platform tops, and climb visible platform sides
 
 ### Frontend Sheep

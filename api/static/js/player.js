@@ -8,6 +8,7 @@ window.StreamApp = window.StreamApp || {};
   const video = document.querySelector("video");
   const streamMedia = document.getElementById('stream-media');
   const audioOnlyPoster = document.getElementById('audio-only-poster');
+  const audioPosterControls = document.getElementById('audio-poster-controls');
   const audioPosterChooseBtn = document.getElementById('audio-poster-choose-btn');
   const audioPosterResetBtn = document.getElementById('audio-poster-reset-btn');
   const audioPosterInput = document.getElementById('audio-poster-input');
@@ -50,7 +51,7 @@ window.StreamApp = window.StreamApp || {};
   let audioPlayer = null;
   let videoHlsSourceLoaded = false;
 
-  // Expose for SSE and audio-only toggle
+  // Expose the current playback source for SSE.
   window.StreamApp.video = video;
   window.StreamApp.hlsSource = hlsSource;
   window.StreamApp.preferences = {
@@ -211,10 +212,11 @@ window.StreamApp = window.StreamApp || {};
   }
 
   // ---------------------------------------------------------------------------
-  //  Audio-Only Toggle (detach video, use <audio> element to save CPU)
+  //  Playback modes (detach video and use <audio> to save CPU in Audio mode)
   // ---------------------------------------------------------------------------
 
-  const audioOnlyBtn = document.getElementById('audio-only-btn');
+  const videoModeBtn = document.getElementById('video-mode-btn');
+  const audioModeBtn = document.getElementById('audio-mode-btn');
   const sheepBtn = document.getElementById('sheep-btn');
   let audioOnly = false;
   let audioHls = null;
@@ -324,6 +326,10 @@ window.StreamApp = window.StreamApp || {};
   }
 
   function setAudioOnlyPosterControlsVisible(visible) {
+    if (audioPosterControls) {
+      audioPosterControls.hidden = !visible;
+    }
+
     [audioPosterChooseBtn, audioPosterResetBtn].forEach((control) => {
       if (control) {
         control.hidden = !visible;
@@ -390,6 +396,7 @@ window.StreamApp = window.StreamApp || {};
   }
 
   function syncAudioOnlyView() {
+    updatePlaybackModeControls(audioOnly);
     const videoPresentation = getVideoPresentationElement();
     const audioPresentation = getAudioPresentationElement();
     const audioPoster = audioOnlyPoster;
@@ -479,7 +486,6 @@ window.StreamApp = window.StreamApp || {};
     syncAudioOnlyView();
 
     window.StreamApp.preferences.setBoolean(preferenceKeys.audioOnly, true);
-    updateAudioOnlyButton(true);
     console.log('Audio-only mode: ON');
   }
 
@@ -497,15 +503,19 @@ window.StreamApp = window.StreamApp || {};
       audioHls.destroy();
       audioHls = null;
     }
-    if (audioPlayer) {
-      audioPlayer.destroy();
-      audioPlayer = null;
-    }
     if (audioEl) {
       audioEl.pause();
-      audioEl.remove();
-      audioEl = null;
     }
+    if (audioPlayer) {
+      // Plyr restores a media clone; remove that element, not the detached original.
+      audioPlayer.destroy(function() {
+        this.remove();
+      });
+      audioPlayer = null;
+    } else if (audioEl) {
+      audioEl.remove();
+    }
+    audioEl = null;
 
     syncAudioOnlyView();
     if (window.hls) {
@@ -519,20 +529,16 @@ window.StreamApp = window.StreamApp || {};
     video.play().catch(() => console.warn('Video resume: autoplay blocked'));
 
     window.StreamApp.preferences.setBoolean(preferenceKeys.audioOnly, false);
-    updateAudioOnlyButton(false);
     console.log('Audio-only mode: OFF');
   }
 
-  function updateAudioOnlyButton(enabled) {
-    if (enabled) {
-      audioOnlyBtn.classList.remove('btn-outline-secondary');
-      audioOnlyBtn.classList.add('btn-outline-warning');
-      audioOnlyBtn.title = 'Video Off (audio only)';
-    } else {
-      audioOnlyBtn.classList.remove('btn-outline-warning');
-      audioOnlyBtn.classList.add('btn-outline-secondary');
-      audioOnlyBtn.title = 'Toggle video';
-    }
+  function updatePlaybackModeControls(audioEnabled) {
+    [[videoModeBtn, !audioEnabled], [audioModeBtn, audioEnabled]].forEach(([button, selected]) => {
+      if (button) {
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      }
+    });
   }
 
   function updateSheepButton(enabled) {
@@ -560,14 +566,12 @@ window.StreamApp = window.StreamApp || {};
     return storedValue === null ? true : storedValue;
   }
 
-  if (audioOnlyBtn) {
-    audioOnlyBtn.addEventListener('click', () => {
-      if (audioOnly) {
-        disableAudioOnly();
-      } else {
-        enableAudioOnly();
-      }
-    });
+  if (videoModeBtn) {
+    videoModeBtn.addEventListener('click', disableAudioOnly);
+  }
+
+  if (audioModeBtn) {
+    audioModeBtn.addEventListener('click', enableAudioOnly);
   }
 
   if (audioPosterChooseBtn) {

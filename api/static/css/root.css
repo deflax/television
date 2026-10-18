@@ -70,8 +70,18 @@ a:hover {
     color: var(--epg-active-purple) !important;
 }
 
-a.stream-link:hover {
-    color: #fff !important;
+.stream-controls {
+    max-width: 100%;
+}
+
+.stream-controls .btn {
+    white-space: nowrap;
+}
+
+.playback-mode .btn {
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--epg-active-purple);
+    --bs-btn-active-border-color: var(--epg-active-purple);
 }
 
 .stream-dropdown-item {
