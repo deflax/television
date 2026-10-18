@@ -5,6 +5,8 @@ window.SheepInternals = window.SheepInternals || {};
     const { window, document, state, config, helpers, services } = context;
     const { clamp } = helpers;
     let markedSurfaces = [];
+    const surfaceIds = new WeakMap();
+    let nextSurfaceId = 0;
 
     function getDefaults() {
       return services.actionCatalog.DEFAULTS;
@@ -68,42 +70,58 @@ window.SheepInternals = window.SheepInternals || {};
       state.currentSurfaceId = surface?.id || config.GROUND_SURFACE_ID;
     }
 
-    function buildSurfaceFromElement(element, index, bounds, spriteMetrics) {
+    function buildSurfaceFromElement(element, bounds, spriteMetrics) {
       const rect = element.getBoundingClientRect();
+      const styles = window.getComputedStyle(element);
+      const landY = rect.top - spriteMetrics.height;
 
+      // A platform is its real top, never a viewport-clamped substitute.
       if (
-        rect.width <= 0
+        element.hidden
+        || styles.display === 'none'
+        || styles.visibility === 'hidden'
+        || styles.visibility === 'collapse'
+        || Number(styles.opacity) === 0
+        || rect.width <= 0
         || rect.height <= 0
-        || rect.bottom <= 0
-        || rect.top >= window.innerHeight
         || rect.right <= 0
         || rect.left >= window.innerWidth
+        || landY < bounds.minY
+        || landY > bounds.maxY
       ) {
         return null;
       }
 
-      const minX = clamp(rect.left, bounds.minX, bounds.maxX);
-      const maxX = clamp(rect.right - spriteMetrics.width, bounds.minX, bounds.maxX);
+      // The compact body must fit on the top; transparent atlas margins may overhang.
+      const minX = Math.max(rect.left - spriteMetrics.width * 0.2, bounds.minX);
+      const maxX = Math.min(rect.right - spriteMetrics.width * 0.8, bounds.maxX);
 
       if ((maxX - minX) < getDefaults().minSurfaceWidth) {
         return null;
       }
 
-      const landY = clamp(rect.top - spriteMetrics.height, bounds.minY, bounds.maxY);
-      const surfaceId = element.id
-        ? `surface:${element.id}`
-        : `surface:${index}`;
+      if (!surfaceIds.has(element)) {
+        surfaceIds.set(element, `surface:anonymous:${nextSurfaceId++}`);
+      }
 
       return {
-        id: surfaceId,
+        id: element.id ? `surface:${element.id}` : surfaceIds.get(element),
         type: 'marked',
         element,
+        rect: {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height
+        },
         minX,
         maxX,
         edgeLeftX: minX,
         edgeRightX: maxX,
         landY,
-        lineY: landY + spriteMetrics.height,
+        lineY: rect.top,
         centerX: (minX + maxX) / 2
       };
     }
@@ -113,13 +131,13 @@ window.SheepInternals = window.SheepInternals || {};
       const spriteMetrics = services.presentation.getSpriteMetrics();
 
       markedSurfaces = Array.from(document.querySelectorAll(config.SURFACE_SELECTOR))
-        .map((element, index) => buildSurfaceFromElement(element, index, bounds, spriteMetrics))
+        .map((element) => buildSurfaceFromElement(element, bounds, spriteMetrics))
         .filter(Boolean)
         .sort((left, right) => left.lineY - right.lineY || left.minX - right.minX);
+    }
 
-      if (state.currentSurfaceId !== config.GROUND_SURFACE_ID && !getMarkedSurfaceById(state.currentSurfaceId)) {
-        state.currentSurfaceId = config.GROUND_SURFACE_ID;
-      }
+    function getSurfaces() {
+      return [...markedSurfaces, getGroundSurface()];
     }
 
     function clampXToSurface(surface, x) {
@@ -133,38 +151,41 @@ window.SheepInternals = window.SheepInternals || {};
       state.y = surface.landY;
     }
 
-    function findLandingSurfaceBetween(fromX, fromY, toX, toY) {
+    function findLandingSurfaceBetween(fromX, fromY, toX, toY, excludedSurfaceId) {
       const verticalTravel = toY - fromY;
 
-      if (verticalTravel < 0) {
+      // One-way tops require a downward crossing, not horizontal proximity.
+      if (verticalTravel <= 0) {
         return null;
       }
 
-      const candidates = [...markedSurfaces, getGroundSurface()]
-        .map((surface) => {
-          if (surface.landY < (fromY - 2) || surface.landY > (toY + 2)) {
-            return null;
-          }
+      const { width: spriteWidth } = services.presentation.getSpriteMetrics();
+      let firstContact = null;
 
-          const progress = verticalTravel <= 0
-            ? 1
-            : clamp((surface.landY - fromY) / verticalTravel, 0, 1);
-          const landingX = fromX + ((toX - fromX) * progress);
+      for (const surface of getSurfaces()) {
+        if (surface.id === excludedSurfaceId || fromY > surface.landY || toY < surface.landY) {
+          continue;
+        }
 
-          if (landingX < surface.minX || landingX > surface.maxX) {
-            return null;
-          }
+        const timeOfImpact = (surface.landY - fromY) / verticalTravel;
+        const crossingX = fromX + (toX - fromX) * timeOfImpact;
+        const landingX = clampXToSurface(surface, crossingX);
+        const footLeft = crossingX + spriteWidth * 0.2;
+        const footRight = crossingX + spriteWidth * 0.8;
 
-          return {
-            surface,
-            landingX,
-            score: surface.landY
-          };
-        })
-        .filter(Boolean)
-        .sort((left, right) => left.score - right.score || left.surface.minX - right.surface.minX);
+        if (
+          Math.abs(landingX - crossingX) > spriteWidth * 0.2
+          || (surface.rect && (footRight <= surface.rect.left || footLeft >= surface.rect.right))
+        ) {
+          continue;
+        }
 
-      return candidates[0] || null;
+        if (!firstContact || timeOfImpact < firstContact.timeOfImpact) {
+          firstContact = { surface, landingX, timeOfImpact };
+        }
+      }
+
+      return firstContact;
     }
 
     function getPathLength(origin, waypoints) {
@@ -180,19 +201,22 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     function configureTraversalMotion(action, name, targetSurface, waypoints, landingPoint) {
-      const path = waypoints.map((point) => ({ x: point.x, y: point.y }));
+      const path = waypoints.map((point) => ({ ...point }));
       const pathLength = getPathLength({ x: state.x, y: state.y }, path);
       const motionBudgetSeconds = Math.max(0.22, services.actionCatalog.getTraversalMotionBudgetMs(name) / 1000);
       const actionConfig = services.actionCatalog.getSurfaceActionConfig(name);
 
       action.target = path.shift() || null;
       action.path = path;
-      action.speed = Math.max(
-        actionConfig.minimumSpeed,
-        pathLength / motionBudgetSeconds
+      action.speed = Math.min(
+        actionConfig.maximumSpeed || Infinity,
+        Math.max(actionConfig.minimumSpeed, pathLength / motionBudgetSeconds)
       );
       action.arrivalPoint = landingPoint;
       action.arrivalSurfaceId = targetSurface.id;
+      action.waitForMotionCompletion = true;
+      action.motionLoopStartIndex = actionConfig.motionLoopStartIndex;
+      action.motionLoopEndIndex = actionConfig.motionLoopEndIndex;
     }
 
     function buildJumpPath(targetPoint, arcLift) {
@@ -206,9 +230,10 @@ window.SheepInternals = window.SheepInternals || {};
       return [
         {
           x: (state.x + targetPoint.x) / 2,
-          y: apexY
+          y: apexY,
+          phase: 'apex'
         },
-        targetPoint
+        { ...targetPoint, phase: 'land' }
       ];
     }
 
@@ -226,19 +251,69 @@ window.SheepInternals = window.SheepInternals || {};
         bounds.maxY
       );
 
-      if (name === 'climbUp') {
-        return [
-          { x: sideX, y: clamp(state.y + actionConfig.verticalLead, bounds.minY, bounds.maxY) },
-          { x: sideX, y: settleY },
-          landingPoint
-        ];
+      return [
+        { x: sideX, y: exitY, phase: 'exit' },
+        { x: sideX, y: settleY, phase: 'settle' },
+        { ...landingPoint, phase: 'land' }
+      ];
+    }
+
+    function getClimbSide(surface, edge) {
+      if (!surface.rect) {
+        return null;
       }
 
+      const bounds = getBounds();
+      const { width } = services.presentation.getSpriteMetrics();
+      const side = edge === 'left' ? surface.rect.left : surface.rect.right;
+      const desiredX = side - width / 2;
+      const x = clamp(desiredX, bounds.minX, bounds.maxX);
+
+      // A visible wall at the viewport rim is climbed from just inside its edge,
+      // keeping the complete sprite onscreen. Offscreen edges remain inaccessible.
+      return side >= 0 && side <= window.innerWidth ? { x } : null;
+    }
+
+    function canClimbFrom(source, target, edge) {
+      const side = getClimbSide(target, edge);
+      if (!side) {
+        return false;
+      }
+
+      const defaults = getDefaults();
+      const { height } = services.presentation.getSpriteMetrics();
+      const bottomGap = Math.max(0, source.landY + height - target.rect.bottom);
+      return source.landY - target.landY >= defaults.minSurfaceGap
+        && bottomGap <= defaults.maxClimbApproachGap
+        && Math.abs(clampXToSurface(source, side.x) - side.x) <= defaults.maxEdgeLandingDelta;
+    }
+
+    function buildSideClimbPath(surface, edge) {
+      const side = getClimbSide(surface, edge);
+      const { height } = services.presentation.getSpriteMetrics();
+      const landingPoint = buildSurfaceTarget(surface, side.x);
+      const entryY = Math.min(state.y, surface.rect.bottom - height);
+
       return [
-        { x: sideX, y: exitY },
-        { x: sideX, y: settleY },
-        landingPoint
+        { x: side.x, y: state.y, phase: 'approach' },
+        { x: side.x, y: Math.max(surface.landY, entryY), phase: 'entry' },
+        { x: side.x, y: surface.landY, phase: 'climb' },
+        { ...landingPoint, phase: 'land' }
       ];
+    }
+
+    function getClimbUpCandidates(source) {
+      const candidates = [];
+
+      for (const surface of markedSurfaces) {
+        for (const edge of ['left', 'right']) {
+          if (surface.id !== source.id && canClimbFrom(source, surface, edge)) {
+            candidates.push({ name: 'climbUp', edge, targetSurfaceId: surface.id, weight: 0.95 });
+          }
+        }
+      }
+
+      return candidates;
     }
 
     function getEdgeDirection(edge) {
@@ -327,13 +402,10 @@ window.SheepInternals = window.SheepInternals || {};
 
       const edge = direction === 1 ? 'left' : 'right';
       const edgeX = edge === 'left' ? sourceSurface.edgeLeftX : sourceSurface.edgeRightX;
-      const wantsUpperSurface = actionName === 'climbUp';
-      const candidates = [...markedSurfaces, getGroundSurface()]
+      const candidates = getSurfaces()
         .filter((surface) => surface.id !== sourceSurface.id)
         .map((surface) => {
-          const verticalDistance = wantsUpperSurface
-            ? sourceSurface.landY - surface.landY
-            : surface.landY - sourceSurface.landY;
+          const verticalDistance = surface.landY - sourceSurface.landY;
           const landingX = clampXToSurface(surface, edgeX);
           const horizontalDelta = Math.abs(landingX - edgeX);
 
@@ -341,7 +413,6 @@ window.SheepInternals = window.SheepInternals || {};
             verticalDistance < defaults.minSurfaceGap
             || verticalDistance > defaults.maxClimbDistance
             || horizontalDelta > defaults.maxEdgeLandingDelta
-            || (wantsUpperSurface && surface.id === config.GROUND_SURFACE_ID)
           ) {
             return null;
           }
@@ -366,16 +437,9 @@ window.SheepInternals = window.SheepInternals || {};
       if (jumpUp) {
         candidates.push({ ...jumpUp, weight: currentSurface.id === config.GROUND_SURFACE_ID ? 1.9 : 1.15 });
       }
+      candidates.push(...getClimbUpCandidates(currentSurface));
 
       if (currentSurface.id !== config.GROUND_SURFACE_ID) {
-        const climbUpLeft = pickEdgeTraversalCandidate(currentSurface, 'climbUp', 1);
-        const climbUpRight = pickEdgeTraversalCandidate(currentSurface, 'climbUp', -1);
-        const climbUp = pickBestSurfaceCandidate([climbUpLeft, climbUpRight].filter(Boolean));
-
-        if (climbUp) {
-          candidates.push({ ...climbUp, weight: 0.95 });
-        }
-
         const jumpDown = pickJumpDownCandidate(currentSurface);
         if (jumpDown) {
           candidates.push({ ...jumpDown, weight: 1.1 });
@@ -416,63 +480,177 @@ window.SheepInternals = window.SheepInternals || {};
       return candidates[candidates.length - 1];
     }
 
-    function queueSurfaceTraversalPlan(plan) {
-      const runtime = services.runtimeEngine;
+    function getTraversalSurface(surfaceId) {
+      return surfaceId === config.GROUND_SURFACE_ID
+        ? getGroundSurface()
+        : getMarkedSurfaceById(surfaceId);
+    }
+
+    function getGeometryKey(surface) {
+      const bounds = getBounds();
+      return [
+        surface.minX, surface.maxX, surface.landY, surface.rect?.bottom,
+        bounds.minX, bounds.maxX, bounds.minY, bounds.maxY
+      ].join(':');
+    }
+
+    function invalidateTraversal(action) {
+      action.target = null;
+      action.path = [];
+      action.arrivalPoint = null;
+      action.arrivalSurfaceId = null;
+      action.traversal.invalid = true;
+      return false;
+    }
+
+    function startTraversal(action, plan) {
+      refreshSurfaces();
+      const source = getCurrentSurface();
+      const target = getTraversalSurface(plan.targetSurfaceId);
+      action.traversal = { ...plan, sourceSurfaceId: source.id };
+
+      if (!target) {
+        return invalidateTraversal(action);
+      }
+
+      let landingPoint;
+      let path;
       const defaults = getDefaults();
 
+      if (plan.name === 'climbUp') {
+        if (!canClimbFrom(source, target, plan.edge)) {
+          return invalidateTraversal(action);
+        }
+        path = buildSideClimbPath(target, plan.edge);
+        action.climbFacingDirection = plan.edge === 'left' ? -1 : 1;
+        landingPoint = path[path.length - 1];
+      } else if (plan.name === 'jumpTo' || plan.name === 'jumpDown') {
+        landingPoint = buildSurfaceTarget(target, state.x);
+        const gap = plan.name === 'jumpTo' ? state.y - landingPoint.y : landingPoint.y - state.y;
+        const limit = plan.name === 'jumpTo' ? defaults.maxJumpUpDistance : defaults.maxJumpDownDistance;
+        if (gap < defaults.minSurfaceGap || gap > limit
+          || Math.abs(landingPoint.x - state.x) > defaults.maxJumpHorizontalDistance) {
+          return invalidateTraversal(action);
+        }
+        path = buildJumpPath(landingPoint, services.actionCatalog.getSurfaceActionConfig(plan.name).arcLift);
+      } else {
+        const edgeX = plan.edge === 'left' ? source.edgeLeftX : source.edgeRightX;
+        landingPoint = buildSurfaceTarget(target, edgeX);
+        const gap = target.landY - state.y;
+        if (gap < defaults.minSurfaceGap || gap > defaults.maxClimbDistance
+          || Math.abs(landingPoint.x - edgeX) > defaults.maxEdgeLandingDelta) {
+          return invalidateTraversal(action);
+        }
+        path = buildClimbPath(plan.name, edgeX, getEdgeDirection(plan.edge), landingPoint);
+      }
+
+      configureTraversalMotion(action, plan.name, target, path, landingPoint);
+      action.traversal.geometryKey = getGeometryKey(target);
+      return true;
+    }
+
+    function refreshActiveTraversal(action) {
+      const traversal = action?.traversal;
+      if (!traversal) {
+        return true;
+      }
+      if (traversal.invalid) {
+        return false;
+      }
+
+      refreshSurfaces();
+      const target = getTraversalSurface(traversal.targetSurfaceId);
+      if (!target) {
+        return invalidateTraversal(action);
+      }
+
+      const geometryKey = getGeometryKey(target);
+      if (geometryKey === traversal.geometryKey) {
+        return true;
+      }
+
+      const defaults = getDefaults();
+      const phase = action.target?.phase || 'land';
+      let landingPoint = buildSurfaceTarget(target, action.arrivalPoint.x);
+      let path;
+
+      if (traversal.name === 'climbUp') {
+        const side = getClimbSide(target, traversal.edge);
+        const { height } = services.presentation.getSpriteMetrics();
+        if (!side
+          || Math.abs(side.x - state.x) > defaults.maxEdgeLandingDelta
+          || state.y + height - target.rect.bottom > defaults.maxClimbApproachGap) {
+          return invalidateTraversal(action);
+        }
+        landingPoint = buildSurfaceTarget(target, side.x);
+        if (phase === 'land') {
+          path = [{ ...landingPoint, phase: 'land' }];
+        } else {
+          path = buildSideClimbPath(target, traversal.edge)
+            .filter((point) => phase !== 'climb' || point.phase !== 'entry');
+        }
+      } else if (traversal.name === 'jumpTo' || traversal.name === 'jumpDown') {
+        if (state.y - landingPoint.y > defaults.maxJumpUpDistance
+          || landingPoint.y - state.y > defaults.maxJumpDownDistance
+          || Math.abs(landingPoint.x - state.x) > defaults.maxJumpHorizontalDistance) {
+          return invalidateTraversal(action);
+        }
+        const landing = { ...landingPoint, phase: 'land' };
+        const bounds = getBounds();
+        path = phase === 'apex'
+          ? [{
+            x: (state.x + landing.x) / 2,
+            y: clamp(Math.min(action.target.y, landing.y), bounds.minY, bounds.maxY),
+            phase: 'apex'
+          }, landing]
+          : [landing];
+      } else {
+        if (landingPoint.y - state.y > defaults.maxClimbDistance
+          || landingPoint.y < state.y
+          || Math.abs(landingPoint.x - state.x) > defaults.maxEdgeLandingDelta) {
+          return invalidateTraversal(action);
+        }
+        path = [{ ...landingPoint, phase: 'land' }];
+      }
+
+      configureTraversalMotion(action, traversal.name, target, path, landingPoint);
+      traversal.geometryKey = geometryKey;
+      return true;
+    }
+
+    function queueSurfaceTraversalPlan(plan) {
       if (!plan) {
         return false;
       }
 
+      refreshSurfaces();
+      const runtime = services.runtimeEngine;
+      const source = getCurrentSurface();
+      const target = getTraversalSurface(plan.targetSurfaceId);
+      if (!target) {
+        return false;
+      }
+
       if (plan.name === 'jumpTo' || plan.name === 'jumpDown') {
-        const targetSurface = resolveSurfaceById(plan.targetSurfaceId);
-        const targetPoint = buildSurfaceTarget(targetSurface, state.x);
-        const targetDirection = Math.abs(targetPoint.x - state.x) <= 1
-          ? state.direction
-          : (targetPoint.x < state.x ? 1 : -1);
-
-        runtime.queueTurn(targetDirection);
-        runtime.queueAction(plan.name, {
-          onStart: (action) => {
-            refreshSurfaces();
-
-            const liveTargetSurface = resolveSurfaceById(plan.targetSurfaceId);
-            const landingPoint = buildSurfaceTarget(liveTargetSurface, state.x);
-            const path = buildJumpPath(landingPoint, services.actionCatalog.getSurfaceActionConfig(plan.name).arcLift);
-
-            configureTraversalMotion(action, plan.name, liveTargetSurface, path, landingPoint);
-          }
-        });
-
-        return true;
-      }
-
-      const sourceSurface = getCurrentSurface();
-      const edgeX = plan.edge === 'left' ? sourceSurface.edgeLeftX : sourceSurface.edgeRightX;
-      const edgePoint = buildSurfaceTarget(sourceSurface, edgeX);
-
-      if (Math.abs(state.x - edgePoint.x) > defaults.surfaceEdgeApproachThreshold) {
-        runtime.queueTravel('walk', edgePoint);
-      } else if (state.direction !== getEdgeDirection(plan.edge)) {
-        runtime.queueTurn(getEdgeDirection(plan.edge));
-      }
-
-      runtime.queueAction(plan.name, {
-        onStart: (action) => {
-          refreshSurfaces();
-
-          const liveSourceSurface = getCurrentSurface();
-          const liveTargetSurface = resolveSurfaceById(plan.targetSurfaceId);
-          const liveEdgeX = plan.edge === 'left'
-            ? liveSourceSurface.edgeLeftX
-            : liveSourceSurface.edgeRightX;
-          const landingPoint = buildSurfaceTarget(liveTargetSurface, liveEdgeX);
-          const path = buildClimbPath(plan.name, liveEdgeX, getEdgeDirection(plan.edge), landingPoint);
-
-          configureTraversalMotion(action, plan.name, liveTargetSurface, path, landingPoint);
+        const landing = buildSurfaceTarget(target, state.x);
+        runtime.queueTurn(Math.abs(landing.x - state.x) <= 1
+          ? state.direction : (landing.x < state.x ? 1 : -1));
+      } else {
+        const side = plan.name === 'climbUp' ? getClimbSide(target, plan.edge) : null;
+        if (plan.name === 'climbUp' && (!side || !canClimbFrom(source, target, plan.edge))) {
+          return false;
         }
-      });
+        const approachX = side ? side.x : (plan.edge === 'left' ? source.edgeLeftX : source.edgeRightX);
+        const approach = buildSurfaceTarget(source, approachX);
+        if (Math.abs(state.x - approach.x) > getDefaults().surfaceEdgeApproachThreshold) {
+          runtime.queueTravel('walk', approach);
+        }
+        runtime.queueTurn(plan.name === 'climbUp'
+          ? (plan.edge === 'left' ? -1 : 1)
+          : getEdgeDirection(plan.edge));
+      }
 
+      runtime.queueAction(plan.name, { onStart: (action) => startTraversal(action, plan) });
       return true;
     }
 
@@ -486,9 +664,11 @@ window.SheepInternals = window.SheepInternals || {};
       getBounds,
       getCurrentSurface,
       getGroundSurface,
+      getSurfaces,
       isMarkedSurface,
       pickSurfaceTraversalPlan,
       queueSurfaceTraversalPlan,
+      refreshActiveTraversal,
       refreshSurfaces,
       resolveSurfaceById,
       setCurrentSurface,

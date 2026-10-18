@@ -23,6 +23,11 @@
     --sheep-menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
+/* Leave a real landing strip above the video, below the fixed navigation. */
+#stream {
+    padding-top: calc(var(--sheep-size) + 1.25rem) !important;
+}
+
 .sheep-layer {
     position: fixed;
     inset: 0;

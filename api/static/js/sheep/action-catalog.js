@@ -31,8 +31,9 @@ window.SheepInternals = window.SheepInternals || {};
       climbUp: Object.freeze({
         motionStartIndex: 2,
         minimumSpeed: 114,
-        edgeOffset: 12,
-        verticalLead: 16
+        maximumSpeed: 156,
+        motionLoopStartIndex: 3,
+        motionLoopEndIndex: 10
       })
     });
 
@@ -99,6 +100,7 @@ window.SheepInternals = window.SheepInternals || {};
       maxJumpUpDistance: 260,
       maxJumpDownDistance: 280,
       maxClimbDistance: 300,
+      maxClimbApproachGap: 260,
       maxEdgeLandingDelta: 40,
       surfaceEdgeApproachThreshold: 16,
       surfaceHorizontalPadding: 8
@@ -652,6 +654,8 @@ window.SheepInternals = window.SheepInternals || {};
           action.speed = 0;
           action.arrivalPoint = null;
           action.arrivalSurfaceId = null;
+          action.traversal = null;
+          action.waitForMotionCompletion = true;
         }
       });
     }

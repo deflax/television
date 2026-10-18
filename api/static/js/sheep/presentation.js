@@ -419,6 +419,7 @@ window.SheepInternals = window.SheepInternals || {};
         hideSecondaryProp();
         layer.hidden = true;
         setFrame(config.NEUTRAL_FRAME, true);
+        services.collisionWorld.renderDebug();
         return;
       }
 
@@ -429,6 +430,7 @@ window.SheepInternals = window.SheepInternals || {};
       const shouldHideLayer = state.modalOpen || state.reducedMotion;
       const shouldPauseLoop = shouldHideLayer || isMenuOpen();
       layer.classList.toggle('is-suspended', shouldHideLayer);
+      services.collisionWorld.renderDebug();
 
       if (shouldPauseLoop) {
         cancelPendingScrollSync();
@@ -486,9 +488,7 @@ window.SheepInternals = window.SheepInternals || {};
     function onResize() {
       services.surfacePlanner.refreshSurfaces();
 
-      if (!state.activeAction) {
-        services.surfacePlanner.snapToCurrentSurface();
-      }
+      services.runtimeEngine.syncSupport();
 
       services.runtimeEngine.clampPosition();
       setFrame(state.currentFrame ?? config.NEUTRAL_FRAME, true);
@@ -504,10 +504,8 @@ window.SheepInternals = window.SheepInternals || {};
         scrollSyncFrame = 0;
         services.surfacePlanner.refreshSurfaces();
 
-        if (!state.activeAction) {
-          services.surfacePlanner.snapToCurrentSurface();
-          applyPosition();
-        }
+        services.runtimeEngine.syncSupport();
+        applyPosition();
       });
     }
 

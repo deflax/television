@@ -5,6 +5,7 @@ window.SheepInternals = window.SheepInternals || {};
     const { window, state, helpers, effects, services } = context;
     const { randomBetween, clamp, composeCallbacks } = helpers;
     let lastSideEffectActionTimestamp = null;
+    let collisionCooldownUntil = 0;
 
     function getDefaults() {
       return services.actionCatalog.DEFAULTS;
@@ -35,9 +36,11 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalSurfaceId: options.arrivalSurfaceId ?? null,
         keepPlayingOnArrival: options.keepPlayingOnArrival ?? definition.keepPlayingOnArrival,
         waitForLanding: options.waitForLanding ?? definition.waitForLanding,
+        waitForMotionCompletion: options.waitForMotionCompletion === true,
         capReset: options.capReset === true,
         onStart: composeCallbacks(definition.onStart, options.onStart),
-        onComplete: composeCallbacks(definition.onComplete, options.onComplete)
+        onComplete: composeCallbacks(definition.onComplete, options.onComplete),
+        onCancel: options.onCancel
       };
     }
 
@@ -72,9 +75,11 @@ window.SheepInternals = window.SheepInternals || {};
         arrivalSurfaceId: action.arrivalSurfaceId,
         keepPlayingOnArrival: action.keepPlayingOnArrival,
         waitForLanding: action.waitForLanding,
+        waitForMotionCompletion: action.waitForMotionCompletion,
         capReset: action.capReset,
         onStart: action.onStart,
         onComplete: action.onComplete,
+        onCancel: action.onCancel,
         frameIndex: 0,
         frameElapsedMs: 0,
         elapsedMs: 0,
@@ -121,8 +126,20 @@ window.SheepInternals = window.SheepInternals || {};
       }
     }
 
-    function cancelActiveAction() {
+    function cancelActiveAction(reason = 'cancelled') {
+      const action = state.activeAction;
       state.activeAction = null;
+
+      if (!action) {
+        return;
+      }
+
+      services.presentation.hideProp();
+      services.presentation.hideSecondaryProp();
+
+      if (typeof action.onCancel === 'function') {
+        action.onCancel(action, state.lastTimestamp, reason);
+      }
     }
 
     function pickTarget(surface, minDistance) {
@@ -329,7 +346,7 @@ window.SheepInternals = window.SheepInternals || {};
         return;
       }
 
-      queueSpecialActionPlan();
+      queueSpecialActionPlan(timestamp);
     }
 
     function getTravelSpeed(mode) {
@@ -405,9 +422,68 @@ window.SheepInternals = window.SheepInternals || {};
       queueTravel(Math.random() < defaults.runChance ? 'run' : 'walk');
     }
 
+    function queueFall(targetX = state.x, bounce = false) {
+      queueAction('jumpDown', {
+        onStart: (fall) => {
+          const ground = services.surfacePlanner.getGroundSurface();
+          fall.motionEnabled = true;
+          const landing = {
+            x: services.surfacePlanner.clampXToSurface(ground, targetX),
+            y: ground.landY
+          };
+          if (bounce) {
+            const bounds = services.surfacePlanner.getBounds();
+            const lift = services.presentation.getSpriteMetrics().height * 0.5;
+            fall.target = { x: landing.x, y: Math.max(bounds.minY, state.y - lift) };
+            fall.path = [landing];
+          } else {
+            fall.target = landing;
+          }
+          fall.speed = 140;
+          fall.waitForLanding = true;
+          fall.waitForMotionCompletion = true;
+        }
+      });
+    }
+
+    function recoverFromContact(action, contact, timestamp) {
+      if (contact.wait || timestamp < collisionCooldownUntil) {
+        return;
+      }
+
+      collisionCooldownUntil = timestamp + 1000;
+      const airborne = Boolean(action.arrivalSurfaceId || action.waitForLanding);
+      cancelActiveAction('collision');
+      clearQueuedActions();
+
+      if (airborne) {
+        const width = services.presentation.getSpriteMetrics().width;
+        const direction = contact.normal.x || (state.direction === 1 ? 1 : -1);
+        const ground = services.surfacePlanner.getGroundSurface();
+        let targetX = services.surfacePlanner.clampXToSurface(ground, state.x + direction * width);
+        if (Math.abs(targetX - state.x) < width * 0.5) {
+          targetX = services.surfacePlanner.clampXToSurface(ground, state.x - direction * width);
+        }
+        queueFall(targetX, contact.normal.y < 0);
+        return;
+      }
+
+      const surface = services.surfacePlanner.getCurrentSurface();
+      const distance = services.presentation.getSpriteMetrics().width * 1.5;
+      const away = contact.normal.x || (state.direction === 1 ? 1 : -1);
+      queueAction(contact.soft ? 'sleep' : 'bump', contact.soft ? { durationMs: 320 } : undefined);
+      queueTravel('walk', {
+        x: services.surfacePlanner.clampXToSurface(surface, state.x + away * distance),
+        y: surface.landY
+      });
+    }
+
     function moveAction(action, deltaSeconds, timestamp) {
       function completeLanding(fromX, fromY, toX, toY) {
-        const landingResult = services.surfacePlanner.findLandingSurfaceBetween(fromX, fromY, toX, toY);
+        const landingResult = services.surfacePlanner.findLandingSurfaceBetween(
+          fromX, fromY, toX, toY,
+          action.traversal ? state.currentSurfaceId : undefined
+        );
 
         if (!landingResult) {
           return false;
@@ -422,6 +498,10 @@ window.SheepInternals = window.SheepInternals || {};
         };
         finishActiveAction(timestamp, 'arrived');
         return true;
+      }
+
+      if (action.waitForLanding && !action.traversal && !action.path?.length && action.target) {
+        action.target.y = services.surfacePlanner.getGroundSurface().landY;
       }
 
       if (!action.target) {
@@ -440,8 +520,26 @@ window.SheepInternals = window.SheepInternals || {};
       action.lastVector = { dx, dy };
 
       if (distance <= 2) {
-        state.x = action.target.x;
-        state.y = action.target.y;
+        const previousX = state.x;
+        const previousY = state.y;
+        const result = services.collisionWorld.resolveMovement(
+          context, { x: state.x, y: state.y }, action.target, timestamp
+        );
+        state.x = result.x;
+        state.y = result.y;
+
+        if (
+          state.y > previousY
+          && (action.waitForLanding || action.traversal)
+          && completeLanding(previousX, previousY, state.x, state.y)
+        ) {
+          return;
+        }
+
+        if (result.contact) {
+          recoverFromContact(action, result.contact, timestamp);
+          return;
+        }
 
         if (action.path?.length) {
           action.target = action.path.shift();
@@ -449,7 +547,7 @@ window.SheepInternals = window.SheepInternals || {};
           return;
         }
 
-        if (action.waitForLanding && completeLanding(state.x, state.y, state.x, state.y)) {
+        if (action.waitForLanding && !action.traversal && completeLanding(state.x, state.y - 0.01, state.x, state.y)) {
           return;
         }
 
@@ -463,27 +561,53 @@ window.SheepInternals = window.SheepInternals || {};
         return;
       }
 
-      state.direction = dx < 0 ? 1 : -1;
+      if (Math.abs(dx) > 0.01) {
+        state.direction = dx < 0 ? 1 : -1;
+      } else if (action.climbFacingDirection) {
+        state.direction = action.climbFacingDirection;
+      }
 
       const step = Math.min(distance, action.speed * deltaSeconds);
       const previousX = state.x;
       const previousY = state.y;
-      state.x += (dx / distance) * step;
-      state.y += (dy / distance) * step;
+      const proposed = {
+        x: state.x + (dx / distance) * step,
+        y: state.y + (dy / distance) * step
+      };
+      const result = services.collisionWorld.resolveMovement(
+        context, { x: previousX, y: previousY }, proposed, timestamp
+      );
+      state.x = result.x;
+      state.y = result.y;
 
-      if (action.waitForLanding) {
-        completeLanding(previousX, previousY, state.x, state.y);
+      if (
+        state.y > previousY
+        && (action.waitForLanding || action.traversal)
+        && completeLanding(previousX, previousY, state.x, state.y)
+      ) {
+        return;
+      }
+
+      if (result.contact) {
+        recoverFromContact(action, result.contact, timestamp);
       }
     }
 
     function animateAction(action, deltaMs, timestamp) {
+      if (action.traversal && !services.surfacePlanner.refreshActiveTraversal(action)) {
+        cancelActiveAction('surface-removed');
+        clearQueuedActions();
+        queueFall();
+        return;
+      }
+
       action.elapsedMs += deltaMs;
       action.frameElapsedMs += deltaMs;
 
       if (action.target && action.speed > 0 && action.motionEnabled !== false) {
         moveAction(action, deltaMs / 1000, timestamp);
 
-        if (!state.activeAction) {
+        if (state.activeAction !== action) {
           return;
         }
       }
@@ -499,13 +623,22 @@ window.SheepInternals = window.SheepInternals || {};
           continue;
         }
 
+        if (
+          action.frameIndex === action.motionLoopEndIndex
+          && (action.target || action.path?.length)
+        ) {
+          action.frameIndex = action.motionLoopStartIndex;
+          services.presentation.enterActionFrame(action, false);
+          continue;
+        }
+
         if (action.frameIndex < action.frames.length - 1) {
           action.frameIndex += 1;
           services.presentation.enterActionFrame(action, false);
           continue;
         }
 
-        if (action.waitForLanding) {
+        if (action.waitForLanding || (action.waitForMotionCompletion && (action.target || action.path?.length))) {
           action.frameElapsedMs = 0;
           return;
         }
@@ -574,10 +707,37 @@ window.SheepInternals = window.SheepInternals || {};
       return hitBounds;
     }
 
+    function syncSupport() {
+      const action = state.activeAction;
+      if (state.abducted || action?.traversal || action?.waitForLanding) {
+        return;
+      }
+
+      const planner = services.surfacePlanner;
+      const previousSurfaceId = state.currentSurfaceId;
+      planner.refreshSurfaces();
+      const surface = planner.getCurrentSurface();
+
+      if (previousSurfaceId !== context.config.GROUND_SURFACE_ID
+        && surface.id === context.config.GROUND_SURFACE_ID) {
+        cancelActiveAction('surface-removed');
+        clearQueuedActions();
+        queueFall();
+        return;
+      }
+
+      state.x = planner.clampXToSurface(surface, state.x);
+      state.y = surface.landY;
+      if (action?.target) {
+        action.target.x = planner.clampXToSurface(surface, action.target.x);
+        action.target.y = surface.landY;
+      }
+    }
+
     function tick(timestamp) {
       state.animationFrame = 0;
 
-      if (state.modalOpen || state.reducedMotion || !services.presentation.hasSprite()) {
+      if (!state.enabled || state.destroyed || state.modalOpen || state.reducedMotion || !services.presentation.hasSprite()) {
         state.lastTimestamp = 0;
         return;
       }
@@ -588,6 +748,7 @@ window.SheepInternals = window.SheepInternals || {};
 
       const deltaMs = Math.min(50, timestamp - state.lastTimestamp);
       state.lastTimestamp = timestamp;
+      syncSupport();
 
       queueAutonomousPlan(timestamp);
       startNextAction();
@@ -609,11 +770,15 @@ window.SheepInternals = window.SheepInternals || {};
       queueAutonomousPlan(timestamp);
       startNextAction();
       services.presentation.applyPosition();
-      state.animationFrame = window.requestAnimationFrame(tick);
+      services.collisionWorld.renderDebug();
+
+      if (state.enabled && !state.destroyed && services.presentation.hasSprite()) {
+        state.animationFrame = window.requestAnimationFrame(tick);
+      }
     }
 
     function startLoop() {
-      if (state.animationFrame || state.modalOpen || state.reducedMotion) {
+      if (state.animationFrame || !state.enabled || state.destroyed || state.modalOpen || state.reducedMotion) {
         return;
       }
 
@@ -642,6 +807,7 @@ window.SheepInternals = window.SheepInternals || {};
       queueTurn,
       triggerMenuAction,
       triggerSpecialAction,
+      syncSupport,
       startLoop,
       startNextAction,
       stopLoop

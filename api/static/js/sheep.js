@@ -11,6 +11,7 @@ window.SheepInternals = window.SheepInternals || {};
     || typeof internals.createSurfacePlanner !== 'function'
     || typeof internals.createRuntimeEngine !== 'function'
     || typeof internals.createPresentation !== 'function'
+    || typeof internals.createCollisionWorld !== 'function'
   ) {
     console.warn('Sheep internals are missing required factories.');
     return;
@@ -32,11 +33,13 @@ window.SheepInternals = window.SheepInternals || {};
   const sheepPreferenceKey = preferenceStorage && preferenceStorage.keys
     ? preferenceStorage.keys.sheepEnabled
     : 'stream.sheepEnabled';
+  const collisionWorld = internals.createCollisionWorld();
   const manager = {
     enabled: true,
     instances: [],
     nextSheepId: 1,
-    capResetPending: false
+    capResetPending: false,
+    capResetGeneration: 0
   };
 
   function randomBetween(min, max) {
@@ -77,6 +80,7 @@ window.SheepInternals = window.SheepInternals || {};
       modalOpen: false,
       menuOpen: false,
       enabled: manager.enabled,
+      destroyed: false,
       sheepVisible: true,
       abducted: false,
       abductedReturnAt: 0,
@@ -135,7 +139,9 @@ window.SheepInternals = window.SheepInternals || {};
         randomBetween
       },
       effects: {},
-      services: {}
+      services: {
+        collisionWorld
+      }
     };
 
     context.effects = Object.freeze({
@@ -186,37 +192,44 @@ window.SheepInternals = window.SheepInternals || {};
 
     const runtimeEngine = internals.createRuntimeEngine(context);
     context.services.runtimeEngine = runtimeEngine;
+    collisionWorld.register(context);
 
     function seedInitialPosition() {
       const bounds = surfacePlanner.getBounds();
       const groundSurface = surfacePlanner.getGroundSurface(bounds);
 
       state.x = groundSurface.maxX;
-      state.y = groundSurface.landY;
+      if (!collisionWorld.placeOnSurface(context, groundSurface)) {
+        return false;
+      }
       state.direction = 1;
       surfacePlanner.setCurrentSurface(groundSurface);
       runtimeEngine.startNextAction();
       runtimeEngine.clampPosition();
       presentation.applyPosition();
+      return true;
     }
 
     function ensureInitialized() {
       const layerState = presentation.ensureLayer();
 
       if (!layerState) {
-        return;
+        return false;
       }
 
       if (!layerState.created) {
         presentation.bindEvents();
         presentation.syncPresentation();
-        return;
+        return true;
       }
 
       surfacePlanner.refreshSurfaces();
-      seedInitialPosition();
+      if (!seedInitialPosition()) {
+        return false;
+      }
       presentation.bindEvents();
       presentation.syncPresentation();
+      return true;
     }
 
     function setEnabled(enabled) {
@@ -233,14 +246,14 @@ window.SheepInternals = window.SheepInternals || {};
     function refreshSurfaces() {
       surfacePlanner.refreshSurfaces();
 
-      if (!state.activeAction) {
-        surfacePlanner.snapToCurrentSurface();
-        runtimeEngine.clampPosition();
-        presentation.applyPosition();
-      }
+      runtimeEngine.syncSupport();
+      runtimeEngine.clampPosition();
+      presentation.applyPosition();
     }
 
     function destroy() {
+      state.destroyed = true;
+      collisionWorld.unregister(context);
       runtimeEngine.stopLoop();
       runtimeEngine.cancelActiveAction();
       runtimeEngine.clearQueuedActions();
@@ -300,6 +313,7 @@ window.SheepInternals = window.SheepInternals || {};
 
   function resetSheepInstancesToPrimary() {
     const primarySheep = getPrimarySheep();
+    manager.capResetGeneration += 1;
 
     manager.instances.slice(1).forEach((sheep) => {
       sheep.destroy();
@@ -334,33 +348,44 @@ window.SheepInternals = window.SheepInternals || {};
     }
 
     manager.capResetPending = true;
+    const generation = ++manager.capResetGeneration;
     const sheepSnapshot = manager.instances.slice();
-    let pendingCompletions = 0;
-    let resetApplied = false;
+    let pendingCompletions = sheepSnapshot.length;
+    let resetScheduled = false;
 
     function resetAfterGroup() {
-      if (resetApplied) {
+      if (resetScheduled || pendingCompletions !== 0) {
         return;
       }
 
-      resetApplied = true;
-      resetSheepInstancesToPrimary();
+      resetScheduled = true;
+      window.queueMicrotask(() => {
+        if (manager.capResetPending && manager.capResetGeneration === generation) {
+          resetSheepInstancesToPrimary();
+        }
+      });
     }
 
     sheepSnapshot.forEach((sheep) => {
+      let settled = false;
+      function settle() {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        pendingCompletions -= 1;
+        resetAfterGroup();
+      }
+
       const triggered = sheep.runtimeEngine.triggerMenuAction('alienVisit', {
         capReset: true,
-        onComplete: () => {
-          pendingCompletions -= 1;
-
-          if (pendingCompletions === 0) {
-            resetAfterGroup();
-          }
-        }
+        onComplete: settle,
+        onCancel: settle
       });
 
-      if (triggered) {
-        pendingCompletions += 1;
+      if (!triggered) {
+        settle();
       }
     });
 
@@ -379,7 +404,11 @@ window.SheepInternals = window.SheepInternals || {};
     const sheep = createSheepInstance(manager.nextSheepId);
     manager.nextSheepId += 1;
     manager.instances.push(sheep);
-    sheep.ensureInitialized();
+    if (!sheep.ensureInitialized()) {
+      manager.instances.pop();
+      sheep.destroy();
+      return null;
+    }
 
     if (manager.instances.length >= MAX_SHEEP_COUNT) {
       triggerCapAlienVisitReset();
@@ -445,6 +474,10 @@ window.SheepInternals = window.SheepInternals || {};
 
   app.isEnabled = function isSheepEnabled() {
     return manager.enabled;
+  };
+
+  app.setCollisionDebug = function setSheepCollisionDebug(enabled) {
+    collisionWorld.setDebug(Boolean(enabled));
   };
 
   app.refreshSurfaces = function refreshSheepSurfaces() {
