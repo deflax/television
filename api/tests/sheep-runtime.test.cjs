@@ -87,33 +87,44 @@ function wall() {
   };
 }
 
-test('ground encounters glance briefly without sleeping or tumbling, then retreat', () => {
-  const simulation = scene();
-  const mover = simulation.createSheep(1, 300, 734);
-  simulation.createSheep(2, 410, 734);
-  const runtime = mover.services.runtimeEngine;
-  const { ACTIONS } = mover.services.actionCatalog;
-  const exaggeratedFrames = new Set([...ACTIONS.sleep.frames, ...ACTIONS.bump.frames]);
-  runtime.queueAction('walk', { target: { x: 500, y: 734 }, speed: 100 });
-  runtime.startNextAction();
-  runtime.startLoop();
-  assert.ok(simulation.until(() => mover.state.activeAction?.name !== 'walk'));
-  const contactX = mover.state.x;
-  const contactY = mover.state.y;
-  const reaction = mover.state.activeAction;
-  for (let i = 0; i < 60 && mover.state.activeAction === reaction; i++) {
-    assert.equal(exaggeratedFrames.has(mover.state.currentFrame), false);
-    assert.equal(mover.state.x, contactX);
-    assert.equal(mover.state.y, contactY);
-    simulation.step();
-  }
-  assert.notEqual(mover.state.activeAction, reaction);
-  for (let i = 0; i < 240 && mover.state.x >= contactX - 10; i++) {
-    assert.equal(exaggeratedFrames.has(mover.state.currentFrame), false);
-    simulation.step();
-  }
-  assert.ok(mover.state.x < contactX - 10);
-});
+for (const approach of [1, -1]) {
+  test(`ground encounters turn once and retreat when approaching ${approach === 1 ? 'right' : 'left'}`, () => {
+    const simulation = scene();
+    const startX = approach === 1 ? 300 : 500;
+    const mover = simulation.createSheep(1, startX, 734);
+    simulation.createSheep(2, startX + approach * 110, 734);
+    const runtime = mover.services.runtimeEngine;
+    const { ACTIONS } = mover.services.actionCatalog;
+    const turnFrames = new Set([...ACTIONS.direction.frames, ...ACTIONS.directionBack.frames]);
+    runtime.queueAction('walk', { target: { x: startX + approach * 200, y: 734 }, speed: 100 });
+    runtime.startNextAction();
+    runtime.startLoop();
+    assert.ok(simulation.until(() => mover.state.activeAction?.name !== 'walk'));
+    const contactX = mover.state.x;
+    const contactY = mover.state.y;
+    const stationaryReactions = new Set();
+    let previousDirection = mover.state.direction;
+    let directionChanges = 0;
+    for (let i = 0; i < 120 && (mover.state.x - contactX) * approach >= -10; i++) {
+      const action = mover.state.activeAction;
+      if (action && !action.loop && !action.target) {
+        stationaryReactions.add(action);
+        assert.equal(turnFrames.has(mover.state.currentFrame), true);
+        assert.equal(mover.state.x, contactX);
+      }
+      assert.equal(mover.state.y, contactY);
+      simulation.step();
+      if (mover.state.direction !== previousDirection) {
+        directionChanges += 1;
+        previousDirection = mover.state.direction;
+      }
+    }
+    assert.equal(stationaryReactions.size, 1);
+    assert.equal(directionChanges, 1);
+    assert.equal(mover.state.direction, approach);
+    assert.ok((mover.state.x - contactX) * approach < -10);
+  });
+}
 
 for (const [location, x] of [['mid-platform', 450], ['at the viewport edge', 934]]) {
   test(`a falling sheep bounces aside ${location} instead of stacking`, () => {

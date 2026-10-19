@@ -36,14 +36,13 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: rgba(255, 255, 255, 0.12);
+    color: rgb(var(--bs-dark-rgb, 33, 37, 41));
     font: 14px/1 Arial, Helvetica, sans-serif;
     cursor: pointer;
 }
 
-.sheep-debug-toggle:hover,
-.sheep-debug-toggle[aria-pressed="true"] {
-    color: rgba(255, 255, 255, 0.22);
+.sheep-debug-toggle:hover {
+    color: rgba(255, 255, 255, 0.12);
 }
 
 .sheep-debug-toggle:focus-visible {
