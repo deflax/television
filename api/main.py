@@ -39,6 +39,7 @@ class Config:
         self.core_username = os.environ.get('CORE_API_AUTH_USERNAME', 'admin')
         self.core_password = os.environ.get('CORE_API_AUTH_PASSWORD', 'pass')
         self.core_sync_period = int(os.environ.get('CORE_SYNC_PERIOD', DEFAULT_CORE_SYNC_PERIOD))
+        self.schedule_state_path = os.environ.get('SCHEDULE_STATE_PATH', '/state/schedule.json')
         self.metadata_poll_interval: int = int(os.environ.get('METADATA_POLL_INTERVAL', DEFAULT_METADATA_POLL_INTERVAL))
         self.metadata_timeout: float = float(
             os.environ.get('METADATA_TIMEOUT', os.environ.get('ICY_TIMEOUT', DEFAULT_METADATA_TIMEOUT))
@@ -104,7 +105,7 @@ class LoggerManager:
 # Global instances (will be initialized in create_app)
 config = Config()
 loggers = LoggerManager(config)
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(timezone='UTC')
 stream_manager: Optional[StreamManager] = None
 client: Optional[CoreAPIClient] = None
 discord_bot_manager: Optional[DiscordBotManager] = None

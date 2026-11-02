@@ -335,14 +335,41 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 2. Create channels and configure them with JSON metadata in the Description field:
 
    ```json
-   { "start_at": "2100", "prio": 0, "details": "Evening show" }
+   { "start_at": "2100", "days": ["mon", "wed", "fri"], "prio": 0, "details": "Evening show" }
    ```
 
    | Field | Description |
    |-------|-------------|
-   | `start_at` | Military time e.g. `"1745"` (HH:MM), `"now"` for immediate, or `"never"` to disable |
-   | `prio` | Priority level (higher takes precedence) |
-   | `details` | Optional description for Discord announcements |
+   | `start_at` | UTC programme start in HHMM, e.g. `"1745"`; legacy hour-only values also work. `"0000"` is valid. `"now"` is live/immediate; `"never"` disables automatic scheduling and guide entries. |
+   | `days` | Optional nonempty list of weekdays: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun` (case-insensitive). Restricts guide entries and opts the input into daily start/stop control. |
+   | `prio` | Integer priority level (higher takes precedence) |
+   | `details` | Optional programme description for the guide and Discord |
+
+#### Weekly Guide and Daily Input Control
+
+The browser guide and `/epg.xml` show **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
+
+- **Without `days`:** timed programmes appear daily, but the API does not automatically start or stop the Restreamer input.
+- **With `days`:** the first successful discovery on each UTC date makes one input decision. On listed days the API sends `start` unless the input is already started (including reconnecting); on excluded days it sends `stop` unless already stopped. Consecutive allowed days do not restart an already-started input.
+- **Manual overrides:** bot and Restreamer commands remain available. After the day's decision, polling and ordinary API restarts leave manual changes alone until the next UTC date. Newly discovered channels receive today's decision once.
+- **Failed commands:** the decision is saved before the command is sent. A failed or ambiguous command is logged, not retried every sync; use manual control if needed. A state-storage failure prevents an unrecorded automatic command.
+- **`never`:** no automatic input commands or programme entries, even with `days`.
+- **`now`:** only currently playable live inputs appear as live entries, not invented recurring programmes. Explicit `days` still controls daily ingest and guide visibility.
+
+Input control and programme timing are separate: an allowed input starts at the beginning of the UTC day, while `start_at` controls programme selection. On every Core sync (normally every 15 seconds), due programmes can be selected once output is playable and priority permits. This catches sources becoming ready just after any scheduled time, including midnight. The previous playable source stays selected while the scheduled source is unavailable. HLS readiness requires playlist advancement and a readable latest segment; output that stops advancing for more than 60 seconds is no longer a playback/fallback candidate.
+
+With the Discord bot enabled and `DISCORDBOT_LIVE_CHANNEL_ID` configured, the bot posts today's UTC schedule after daily reconciliation. The post includes offline scheduled channels, descriptions, a watch link from `SERVER_NAME`, and an availability disclaimer. Empty days are explicit. `.epg` uses the same today's-schedule view. Discord outages are retried when the bot becomes available; old dates are not posted as a backlog.
+
+Daily input decisions and the last successfully announced date are stored separately in `/state/schedule.json`, backed by the Compose `api-state` volume. Keep this volume across redeployments; deleting it resets daily deduplication. Outside Compose, set `SCHEDULE_STATE_PATH` to a persistent writable file. Use a single API worker, as configured. Announcement delivery is at-least-once if a process crashes after Discord accepts a message but before its delivery date is saved, or if only part of a multipart post succeeds.
+
+Scheduling regressions:
+
+```bash
+python -m unittest discover -s api/tests -p 'test_*schedule*.py'
+python -m unittest discover -s api/tests -p 'test_playlist_routes.py'
+python -m unittest discover -s api/tests -p 'test_epg_frontend.py'
+python -m unittest discover -s api/tests -p 'test_discord_now_command.py'
+```
 
 ### Streaming URLs
 
@@ -363,7 +390,7 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | `.help` | - | Show all available commands |
 | `.hello` | worshipper | Bot status check |
 | `.time` | - | Current server time (UTC) |
-| `.epg` | - | Show stream schedule |
+| `.epg` | - | Show today's UTC schedule, including offline scheduled channels |
 | `.now` | - | Current stream info |
 | `.streams` | bosmang | List all Restreamer processes and their states |
 | `.start <name or id>` | bosmang | Start a Restreamer process |

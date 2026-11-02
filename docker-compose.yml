@@ -4,6 +4,7 @@ networks:
 
 volumes:
   vod-hls:
+  api-state:
 
 services:
   haproxy:
@@ -120,6 +121,7 @@ services:
       - "variables.env"
     volumes:
       - "./data/recorder:/recordings"
+      - "api-state:/state"
     restart: unless-stopped
     networks:
       - net

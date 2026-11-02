@@ -17,8 +17,8 @@ window.StreamApp = window.StreamApp || {};
       app.currentPlayheadMetadata = data.metadata || {};
 
       // Re-render EPG to update active highlight
-      if (Object.keys(app.currentEpgDatabase).length > 0) {
-        app.renderEpg(app.currentEpgDatabase, app.currentPlayheadId, app.currentPlayheadMetadata);
+      if (app.currentEpgGuide) {
+        app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
       }
       // Note: Video source is static (/live/stream.m3u8), mux service handles switching
     });
@@ -32,8 +32,8 @@ window.StreamApp = window.StreamApp || {};
 
     evtSource.addEventListener('epg', function(e) {
       try {
-        app.currentEpgDatabase = JSON.parse(e.data);
-        app.renderEpg(app.currentEpgDatabase, app.currentPlayheadId, app.currentPlayheadMetadata);
+        app.currentEpgGuide = JSON.parse(e.data);
+        app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
       } catch (err) {
         console.warn('EPG: failed to parse data', err);
       }

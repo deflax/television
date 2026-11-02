@@ -1,42 +1,25 @@
-import time
-import ast
+import json
+import os
 import random
 import logging
+import threading
+import time
+from pathlib import Path
+from urllib.parse import urljoin
 import requests
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Dict, Optional, Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from services.core_api import CoreAPIClient
 from services.playhead_metadata import PlayheadMetadataPoller
+from services.schedule import parse_channel_settings, programmes_for_days
 
 
 
 # Constants
-STREAM_ACCESS_RETRY_ATTEMPTS = 15
-STREAM_ACCESS_RETRY_INTERVAL = 6
 STREAM_ACCESS_TIMEOUT = 5
 DEFAULT_METADATA_TIMEOUT = 3.5
-FALLBACK_JOB_ID = 'fallback'
 DISABLED_STREAM_START = 'never'
-
-
-def parse_military_time(time_str: str) -> tuple[int, int]:
-    """Parse HHMM or legacy hour-only time into a validated (hour, minute)."""
-    value = str(time_str).strip()
-    if not value.isdigit():
-        raise ValueError(f'invalid schedule time {time_str!r}: expected HHMM or hour')
-
-    if len(value) <= 2:
-        hour, minute = int(value), 0
-    elif len(value) == 4:
-        hour, minute = int(value[:-2]), int(value[-2:])
-    else:
-        raise ValueError(f'invalid schedule time {time_str!r}: expected HHMM or hour')
-
-    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-        raise ValueError(f'invalid schedule time {time_str!r}: out of range')
-
-    return hour, minute
 
 
 class StreamManager:
@@ -51,6 +34,18 @@ class StreamManager:
         self.playhead: Dict[str, Any] = {}
         self.priority = 0
         self.metadata_poller = PlayheadMetadataPoller(client, logger)
+        self.catalogue: Dict[str, Dict[str, Any]] = {}
+        self.schedule_day: str | None = None
+        self._state_path = Path(getattr(config, 'schedule_state_path', '/state/schedule.json'))
+        self._state_lock = threading.Lock()
+        try:
+            self._daily_state = json.loads(self._state_path.read_text())
+            if not isinstance(self._daily_state, dict):
+                raise ValueError('schedule state must be an object')
+        except FileNotFoundError:
+            self._daily_state = {}
+        self._readiness: dict[str, tuple[str, float, bool]] = {}
+        self._executed_programmes: set[tuple[str, str]] = set()
 
         # Discord-initiated command tracking: stream_id -> {action, actor_name}
         # When a Discord user runs .start/.stop, the stream reference is recorded here.
@@ -122,130 +117,75 @@ class StreamManager:
             return None
     
     def process_running_channel(
-        self, 
-        stream_id: str, 
-        stream_name: str, 
-        stream_description: str, 
-        stream_hls_url: str
+        self,
+        stream_id: str,
+        stream_name: str,
+        stream_description: str,
+        stream_hls_url: str,
     ) -> None:
-        """Process and schedule a running channel."""
-        if stream_id in self.database:
-            # Skip already learned channels
-            return
-        
+        """Learn a running channel only after its HLS output makes progress."""
         try:
-            # Get the channel settings from the stream description
-            api_settings = ast.literal_eval(stream_description)
-            stream_start = api_settings.get('start_at')
-            stream_prio = api_settings.get('prio', 0)
-        except Exception as e:
-            # Skip channels without readable meta
-            self.logger.debug(f'Failed to parse stream description for {stream_id}: {e}')
+            settings = parse_channel_settings(stream_description)
+        except (ValueError, TypeError, SyntaxError) as e:
+            self.logger.warning(f'{stream_id} ({stream_name}) skipped: {e}')
             return
-        
-        # Check whether we have stream details
-        stream_details = api_settings.get('details', "")
-        if stream_details:
-            self.logger.info(f'Details found: {stream_details}')
-        
-        if stream_start == DISABLED_STREAM_START:
-            self.logger.debug(f'{stream_id} ({stream_name}) disabled by start_at=never')
+        if settings['start_at'] == DISABLED_STREAM_START:
             return
-
-        if stream_start == "now":
-            if not self._wait_for_stream_access(stream_hls_url, stream_name):
-                return
-            self.scheduler.add_job(
-                func=self.exec_stream, 
-                id=stream_id, 
-                args=(stream_id, stream_name, stream_prio, stream_hls_url)
-            )
-        else:
-            try:
-                cron_hour, cron_minute = parse_military_time(stream_start)
-            except ValueError as e:
-                self.logger.warning(f'{stream_id} ({stream_name}) skipped: {e}')
-                return
-
-            self.scheduler.add_job(
-                func=self.exec_stream, 
-                trigger='cron', 
-                hour=cron_hour,
-                minute=cron_minute,
-                jitter=60,
-                id=stream_id, 
-                args=(stream_id, stream_name, stream_prio, stream_hls_url)
-            )
-        
+        if not self._stream_is_playable(stream_id, stream_hls_url):
+            self.remove_channel_from_database(stream_id, stream_name, {'exec': 'unavailable'})
+            return
         self.database[stream_id] = {
-            'name': stream_name, 
-            'start_at': stream_start, 
-            'prio': stream_prio,
-            'details': stream_details, 
-            'src': stream_hls_url
+            **settings, 'name': stream_name, 'src': stream_hls_url,
+            'details': settings.get('details', ''),
         }
-        self.logger.info(f'{stream_id} ({stream_name}) added to database. Config: {api_settings}')
-
-        # Fire callback if this was a Discord-initiated start
         pending = self._pending_discord_actions.pop(stream_id, None)
         if pending and self._on_db_change_callback:
             self._on_db_change_callback(
                 'added', stream_name, stream_id, pending.get('actor_name', 'Unknown')
             )
 
-
-        # Preempt: if this stream outranks the current playhead, execute immediately
-        if self.playhead and stream_prio > self.playhead.get('prio', 0):
-            self.logger.info(
-                f'{stream_id} ({stream_name}) has higher priority ({stream_prio}) '
-                f'than current playhead ({self.playhead.get("prio", 0)}). Preempting.'
-            )
-            if self._wait_for_stream_access(stream_hls_url, stream_name):
-                self.exec_stream(stream_id, stream_name, stream_prio, stream_hls_url)
-            return
-        
-        # Bootstrap the playhead if it's still empty
-        if not self.playhead:
-            try:
-                fallback = self.fallback_search()
-                self.scheduler.add_job(
-                    func=self.exec_stream, 
-                    id=FALLBACK_JOB_ID, 
-                    args=(fallback['stream_id'], fallback['stream_name'], 0, fallback['stream_hls_url'])
-                )
-            except ValueError as e:
-                self.logger.warning(f'Could not bootstrap playhead: {e}')
-    
-    def _wait_for_stream_access(self, stream_hls_url: str, stream_name: str) -> bool:
-        """Wait for stream to become accessible."""
-        req_counter = 0
-        while True:
-            time.sleep(STREAM_ACCESS_RETRY_INTERVAL)
-            req_counter += 1
-            try:
-                response = requests.get(stream_hls_url, timeout=STREAM_ACCESS_TIMEOUT)
-                if response.status_code == 200:
-                    self.logger.info(
-                        f'{stream_hls_url} accessible after {req_counter} attempts.'
-                    )
-                    return True
-                self.logger.debug(
-                    f'Stream access check returned {response.status_code}: {stream_hls_url}'
-                )
-            except requests.RequestException as e:
-                self.logger.debug(f'Stream access check failed: {e}')
-            
-            if req_counter == STREAM_ACCESS_RETRY_ATTEMPTS:
-                self.logger.error(
-                    f'Stream {stream_name} cancelled after {req_counter} attempts.'
-                )
+    def _stream_is_playable(self, stream_id: str, url: str) -> bool:
+        """Require an advancing media playlist and an accessible latest segment."""
+        try:
+            response = requests.get(url, timeout=STREAM_ACCESS_TIMEOUT)
+            response.raise_for_status()
+            playlist = response.text
+            if '#EXT-X-STREAM-INF:' in playlist:
+                variants = [line.strip() for line in playlist.splitlines()
+                            if line.strip() and not line.startswith('#')]
+                if not variants:
+                    return False
+                url = urljoin(url, variants[0])
+                response = requests.get(url, timeout=STREAM_ACCESS_TIMEOUT)
+                response.raise_for_status()
+                playlist = response.text
+            if not playlist.startswith('#EXTM3U') or '#EXTINF:' not in playlist:
                 return False
+            segments = [line.strip() for line in playlist.splitlines()
+                        if line.strip() and not line.startswith('#')]
+            if not segments or '#EXT-X-ENDLIST' in playlist:
+                return False
+            sequence = next((line for line in playlist.splitlines()
+                             if line.startswith('#EXT-X-MEDIA-SEQUENCE:')), '')
+            signature = sequence + ':' + segments[-1]
+            now = time.monotonic()
+            previous = self._readiness.get(stream_id)
+            changed = previous is not None and previous[0] != signature
+            updated = now if previous is None or changed else previous[1]
+            advancing = changed or (previous is not None and previous[2])
+            self._readiness[stream_id] = (signature, updated, advancing)
+            if not advancing or now - updated > 60:
+                return False
+            segment_url = urljoin(url, segments[-1])
+            with requests.get(segment_url, timeout=STREAM_ACCESS_TIMEOUT,
+                              headers={'Range': 'bytes=0-0'}, stream=True) as segment:
+                segment.raise_for_status()
+                return bool(next(segment.iter_content(chunk_size=1), b''))
+        except (requests.RequestException, ValueError) as e:
+            self.logger.debug(f'HLS readiness check failed for {stream_id}: {e}')
+            return False
     
-    def _recalculate_priority(self) -> int:
-        """Recalculate priority based on the max prio of channels still in the database."""
-        if not self.database:
-            return 0
-        return max(entry.get('prio', 0) for entry in self.database.values())
+    
 
     def remove_channel_from_database(
         self, 
@@ -272,29 +212,12 @@ class StreamManager:
                 'removed', stream_name, stream_id, pending.get('actor_name', 'Unknown')
             )
 
-
-        try:
-            self.scheduler.remove_job(stream_id)
-        except Exception as e:
-            self.logger.error(f'Error removing job {stream_id}: {e}')
-        
-        # Recalculate priority based on remaining channels in the database
-        self.priority = self._recalculate_priority()
-        self.logger.info(f'Source priority recalculated to: {self.priority}')
-
-        # Handle the situation where we remove a stream that is currently playing
+        self._executed_programmes = {
+            key for key in self._executed_programmes if key[0] != stream_id
+        }
         if stream_id == self.playhead.get('id'):
-            self.logger.info(f'{stream_id} was playing.')
-            try:
-                fallback = self.fallback_search()
-                self.scheduler.add_job(
-                    func=self.exec_stream, 
-                    id=FALLBACK_JOB_ID, 
-                    args=(fallback['stream_id'], fallback['stream_name'], self.priority, fallback['stream_hls_url'])
-                )
-            except ValueError as e:
-                self.logger.error(f'Could not find fallback stream after removing {stream_id}: {e}')
-                self.playhead = {}
+            self.playhead = {}
+            self.priority = 0
     
     def get_next_stream(self) -> Optional[Dict[str, Any]]:
         """Pick a random stream from the database, excluding the currently playing one.
@@ -323,69 +246,15 @@ class StreamManager:
                 'stream_hls_url': s['src'], 'stream_prio': s['prio']}
     
     def fallback_search(self) -> Dict[str, str]:
-        """Search for a fallback stream based on current time."""
-        self.logger.warning('Searching for a fallback job.')
-        now = datetime.now()
-        current_minutes = now.hour * 60 + now.minute
-        scheduled_times = []
-        
-        # Collect scheduled times (in total minutes) from database
-        for key, value in self.database.items():
-            if value['start_at'] in ("now", DISABLED_STREAM_START):
-                # Do not use non-time scheduled streams as fallbacks
-                continue
-            try:
-                h, m = parse_military_time(value['start_at'])
-                scheduled_times.append(h * 60 + m)
-            except (ValueError, TypeError):
-                continue
-        
-        if not scheduled_times:
-            # No scheduled streams available, return first available stream
-            if self.database:
-                first_key = next(iter(self.database))
-                first_value = self.database[first_key]
-                return {
-                    "stream_id": first_key,
-                    "stream_name": first_value['name'],
-                    "stream_hls_url": first_value['src']
-                }
-            # No streams at all
-            raise ValueError("No streams available for fallback")
-        
-        # Convert the scheduled times to a circular list (wrap around midnight)
-        scheduled_times = scheduled_times + [t + 1440 for t in scheduled_times]
-        
-        # Find the closest scheduled time
-        closest_minutes = min(scheduled_times, key=lambda x: abs(x - current_minutes))
-        target_minutes = closest_minutes % 1440
-        
-        # Find stream matching the closest time
-        for key, value in self.database.items():
-            if value['start_at'] in ("now", DISABLED_STREAM_START):
-                continue
-            try:
-                h, m = parse_military_time(value['start_at'])
-                if h * 60 + m == target_minutes:
-                    return {
-                        "stream_id": key,
-                        "stream_name": value['name'],
-                        "stream_hls_url": value['src']
-                    }
-            except (ValueError, TypeError):
-                continue
-        
-        # Fallback to first available stream if no match found
-        if self.database:
-            first_key = next(iter(self.database))
-            first_value = self.database[first_key]
-            return {
-                "stream_id": first_key,
-                "stream_name": first_value['name'],
-                "stream_hls_url": first_value['src']
-            }
-        
-        raise ValueError("No streams available for fallback")
+        """Choose a playable fallback, preferring the most recent due schedule."""
+        if not self.database:
+            raise ValueError('No streams available for fallback')
+        now = datetime.now(timezone.utc)
+        due = [item for item in programmes_for_days(self.catalogue, now.date(), 1)
+               if item['start'] <= now and item['id'] in self.database]
+        stream_id = max(due, key=lambda item: item['start'])['id'] if due else next(iter(self.database))
+        entry = self.database[stream_id]
+        return {'stream_id': stream_id, 'stream_name': entry['name'], 'stream_hls_url': entry['src']}
 
     def poll_current_metadata(self) -> None:
         self.playhead = self.metadata_poller.poll(self.playhead, self._metadata_timeout())
@@ -431,57 +300,134 @@ class StreamManager:
                 f'Source with higher priority ({self.priority}) is blocking. Skipping playhead update.'
             )
     
+    def _save_daily_state(self, state: dict) -> None:
+        """Atomically persist decisions before sending commands."""
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self._state_path.with_suffix('.tmp')
+        with temporary.open('w') as handle:
+            json.dump(state, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, self._state_path)
+        self._daily_state = state
+
+    def daily_announcement_date(self) -> str | None:
+        with self._state_lock:
+            return self._daily_state.get('announced')
+
+    def mark_daily_announced(self, day: str) -> None:
+        with self._state_lock:
+            self._save_daily_state({**self._daily_state, 'announced': day})
+
+    def _apply_daily_control(self, stream_id: str, entry: dict, state: dict, today: date) -> bool:
+        if ('days' not in entry or entry['start_at'] == DISABLED_STREAM_START
+                or entry['process_id'] != f'restreamer-ui:ingest:{stream_id}'):
+            return False
+        day = today.isoformat()
+        with self._state_lock:
+            decisions = self._daily_state.get('decisions', {})
+            if decisions.get(stream_id) == day:
+                return False
+            self._save_daily_state({
+                **self._daily_state,
+                'decisions': {**decisions, stream_id: day},
+            })
+        allowed = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')[today.weekday()] in entry['days']
+        command = 'start' if allowed else 'stop'
+        # Core's desired order distinguishes reconnecting inputs from stopped ones.
+        order = state.get('order')
+        already_set = order == command if order else (
+            state.get('exec') == 'running' if allowed else state.get('exec') == 'finished'
+        )
+        if not already_set:
+            self.process_command(entry['process_id'], command)
+            return not allowed
+        return False
+
+    def _select_due_programme(self, now: datetime) -> None:
+        day = now.date()
+        self._executed_programmes = {
+            key for key in self._executed_programmes if key[1].startswith(day.isoformat())
+        }
+        due = [programme for programme in programmes_for_days(self.catalogue, day, 1)
+               if programme['start'] <= now < programme['stop']
+               and programme['id'] in self.database]
+        for stream_id, entry in self.database.items():
+            if entry['start_at'] == 'now':
+                due.append({'id': stream_id, 'start': now.replace(hour=0, minute=0, second=0, microsecond=0),
+                            'prio': entry.get('prio', 0)})
+        due.sort(key=lambda item: (item.get('prio', 0), item['start'], item['id']), reverse=True)
+        for programme in due:
+            stream_id = programme['id']
+            key = (stream_id, programme['start'].isoformat())
+            if key in self._executed_programmes:
+                break
+            entry = self.database[stream_id]
+            self.exec_stream(stream_id, entry['name'], entry.get('prio', 0), entry['src'])
+            if self.playhead.get('id') == stream_id:
+                self._executed_programmes.add(key)
+                break
+        if not self.playhead and self.database:
+            fallback = self.fallback_search()
+            entry = self.database[fallback['stream_id']]
+            self.exec_stream(fallback['stream_id'], entry['name'], entry.get('prio', 0), entry['src'])
+
     def core_api_sync(self) -> None:
-        """Synchronize with Datarhei CORE API."""
-        new_ids = []
-        
+        """Discover all schedules; reconcile inputs daily and playback each sync."""
+        now = datetime.now(timezone.utc)
         try:
             process_list = self.client.v3_process_get_list()
         except Exception as e:
             self.logger.error(f'Error getting process list: {e}')
             return
-        
+        catalogue = {}
+        runtime_details = {}
+        complete = True
         for process in process_list:
+            details = self.get_core_process_details(process['id'])
+            if not details:
+                complete = False
+                continue
+            meta = (details.get('metadata') or {}).get('restreamer-ui', {})
+            if not meta.get('meta'):
+                continue
             try:
-                get_process = self.get_core_process_details(process['id'])
-                if not get_process:
-                    continue
-                
-                stream_id = get_process['reference']
-                meta = get_process.get('metadata')
-                state = get_process.get('state')
-            except Exception as e:
-                self.logger.debug(f'Error processing stream: {process}, {e}')
+                stream_id = details['reference']
+                channel = meta['meta']
+                settings = parse_channel_settings(channel['description'])
+                storage = meta['control']['hls']['storage']
+                url = f'https://{self.config.core_hostname}/{storage}/{stream_id}.m3u8'
+                entry = {**settings, 'name': channel['name'], 'src': url,
+                         'details': settings.get('details', ''), 'process_id': process['id']}
+            except (KeyError, ValueError, TypeError, SyntaxError) as e:
+                self.logger.warning(f'Invalid schedule for {process["id"]}: {e}')
                 continue
-            
-            if meta is None or meta.get('restreamer-ui', {}).get('meta') is None:
-                # Skip processes without metadata or meta key
+            # Ingest owns control; publication processes must not duplicate decisions.
+            if stream_id in catalogue and not process['id'].startswith('restreamer-ui:ingest:'):
                 continue
-            
-            new_ids.append(stream_id)
-            stream_name = meta['restreamer-ui']['meta']['name']
-            stream_description = meta['restreamer-ui']['meta']['description']
-            stream_storage_type = meta['restreamer-ui']['control']['hls']['storage']
-            stream_hls_url = f'https://{self.config.core_hostname}/{stream_storage_type}/{stream_id}.m3u8'
-            
-            if state and state['exec'] == "running":
+            catalogue[stream_id] = entry
+            runtime_details[stream_id] = details
+        for stream_id, entry in catalogue.items():
+            details = runtime_details[stream_id]
+            state = details.get('state') or {}
+            stopped = self._apply_daily_control(stream_id, entry, state, now.date())
+            if entry['start_at'] != DISABLED_STREAM_START and state.get('exec') == 'running' and not stopped:
                 self.process_running_channel(
-                    stream_id, stream_name, stream_description, stream_hls_url
+                    stream_id, entry['name'],
+                    details['metadata']['restreamer-ui']['meta']['description'], entry['src'],
                 )
             else:
-                self.remove_channel_from_database(stream_id, stream_name, state)
-                if stream_id in new_ids:
-                    new_ids.remove(stream_id)
-        
-        # Cleanup orphaned references
-        orphan_keys = [key for key in self.database if key not in new_ids]
-        for orphan_key in orphan_keys:
-            self.logger.warning(f'Key {orphan_key} is an orphan. Removing.')
-            self.database.pop(orphan_key)
-            try:
-                self.scheduler.remove_job(orphan_key)
-            except Exception as e:
-                self.logger.error(f'Error removing orphan job {orphan_key}: {e}')
+                self._readiness.pop(stream_id, None)
+                self.remove_channel_from_database(stream_id, entry['name'], state)
+        if complete:
+            for stream_id in list(self.database):
+                if stream_id not in catalogue:
+                    self.remove_channel_from_database(stream_id, self.database[stream_id]['name'], {'exec': 'removed'})
+            self.catalogue = catalogue
+            self.schedule_day = now.date().isoformat()
+        else:
+            self.catalogue = {**self.catalogue, **catalogue}
+        self._select_due_programme(now)
 
     def register_db_change_callback(self, callback) -> None:
         """Register a callback for Discord-initiated database changes.

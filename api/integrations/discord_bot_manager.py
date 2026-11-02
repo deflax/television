@@ -8,6 +8,7 @@ from typing import Optional
 import discord
 from discord.ext.commands import Bot, CheckFailure, check
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from services.schedule import programmes_for_guide
 from utils.obfuscation import obfuscate_hostname
 
 
@@ -17,7 +18,7 @@ class DiscordBotManager:
     @staticmethod
     def _escape_discord_markdown(text: str) -> str:
         escaped = text.replace('\\', '\\\\')
-        for marker in ('*', '_', '`', '~', '|', '>'):
+        for marker in ('*', '_', '`', '~', '|', '>', '<', '[', ']', '(', ')', '#', '!'):
             escaped = escaped.replace(marker, f'\\{marker}')
         return escaped
 
@@ -68,6 +69,7 @@ class DiscordBotManager:
         self.max_channel_messages = 1
         self._channel_messages = {}  # channel_id -> deque of discord.Message
         self._startup_greeting_sent = False
+        self._daily_announcement_lock = asyncio.Lock()
         self._visitor_debounce_handle = None  # asyncio.TimerHandle for debounced visitor updates
         self._visitor_debounce_seconds = 5.0  # coalesce rapid visitor changes into one Discord update
         self._visitor_connect_log_last_sent = {}
@@ -108,35 +110,82 @@ class DiscordBotManager:
             embed.set_footer(text=footer)
         return embed
 
-    @staticmethod
-    def _format_schedule_time(start_at: str) -> str:
-        """Format a military time or keyword into a display string."""
-        if start_at == 'now':
-            return 'Live now'
-        if start_at == 'never':
-            return 'Unscheduled'
-        time_str = str(start_at).strip()
-        if len(time_str) <= 2:
-            return f'{time_str.zfill(2)}:00 UTC'
-        return f'{time_str[:-2].zfill(2)}:{time_str[-2:]} UTC'
-
-    @staticmethod
-    def _schedule_sort_minutes(start_at: str) -> int:
-        """Convert schedule time to minutes from midnight for sorting."""
-        try:
-            time_str = str(start_at).strip()
-            if len(time_str) <= 2:
-                hour, minute = int(time_str), 0
+    def _schedule_embeds(self, now):
+        """Build the shared UTC day view, including offline catalogue entries."""
+        day = now.date()
+        programmes = programmes_for_guide(
+            self.stream_manager.catalogue, self.stream_manager.database, now, count=1
+        )
+        sections = []
+        for programme in programmes:
+            title = self._escape_discord_markdown(str(programme['title']))
+            description = self._escape_discord_markdown(str(programme['desc'] or ''))
+            start = programme['start'].strftime('%H:%M')
+            stop = programme['stop'].strftime('%H:%M')
+            if programme['stop'].date() > day:
+                stop = '24:00'
+            if programme.get('live'):
+                section = f'Live now (as of {start} UTC) — {title}'
             else:
-                hour, minute = int(time_str[:-2]), int(time_str[-2:])
+                section = f'{start}–{stop} UTC — {title}'
+            if description:
+                section += f'\n{description}'
+            sections.append(section)
 
-            if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                raise ValueError('Invalid time range')
+        text = '\n\n'.join(sections) or 'No streams scheduled for this UTC date.'
+        chunks = []
+        while text:
+            end = min(len(text), 3500)
+            if end < len(text):
+                boundary = max(text.rfind('\n', 0, end), text.rfind(' ', 0, end))
+                if boundary > end // 2:
+                    end = boundary + 1
+                # Keep markdown escape sequences together across messages.
+                trailing = len(text[:end]) - len(text[:end].rstrip('\\'))
+                if trailing % 2:
+                    end -= 1
+            chunks.append(text[:end])
+            text = text[end:]
 
-            return (hour * 60) + minute
-        except (TypeError, ValueError):
-            # Keep malformed schedule values at the end of the list.
-            return (24 * 60) + 1
+        hostname = self.scheduler_hostname.rstrip('/')
+        watch_url = hostname if hostname.startswith(('https://', 'http://')) else f'https://{hostname}'
+        embeds = []
+        for index, chunk in enumerate(chunks, start=1):
+            page = f' ({index}/{len(chunks)})' if len(chunks) > 1 else ''
+            embeds.append(self._make_embed(
+                title=f'Schedule — {day.isoformat()} UTC{page}',
+                description=chunk,
+                footer='Planned schedule only; stream availability is not guaranteed.',
+                fields=[{'name': 'Watch', 'value': watch_url, 'inline': False}],
+            ))
+        return embeds
+
+    async def _send_daily_schedule(self, channel, now):
+        """Send schedule pages directly, outside the visitor deletion queue."""
+        for embed in self._schedule_embeds(now):
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    async def _announce_daily_schedule(self):
+        if self.live_channel_id == 0 or not self.bot.is_ready():
+            return
+        if self._daily_announcement_lock.locked():
+            return
+        async with self._daily_announcement_lock:
+            now = datetime.now(timezone.utc)
+            day = now.date()
+            date_key = day.isoformat()
+            try:
+                if self.stream_manager.schedule_day != date_key:
+                    return
+                if self.stream_manager.daily_announcement_date() == date_key:
+                    return
+                channel = self.bot.get_channel(self.live_channel_id)
+                if channel is None:
+                    return
+                await self._send_daily_schedule(channel, now)
+                self.stream_manager.mark_daily_announced(date_key)
+            except Exception:
+                self.logger.exception('Daily schedule delivery failed; retrying on the next query')
 
     def _schedule_async(self, coro, error_msg: str) -> bool:
         """Schedule a coroutine on the bot event loop (thread-safe).
@@ -234,16 +283,20 @@ class DiscordBotManager:
 
         @self.bot.event
         async def on_ready():
-            self.scheduler.start()
+            if not self.scheduler.running:
+                self.scheduler.start()
 
-            # Schedule a database update
-            self.scheduler.add_job(
-                func=self.query_database,
-                trigger='interval',
-                seconds=15,
-                id='query_database'
-            )
-            self.scheduler.get_job('query_database').modify(next_run_time=datetime.now())
+            # Reconnects reuse the interval job and request an immediate retry.
+            job = self.scheduler.get_job('query_database')
+            if job is None:
+                job = self.scheduler.add_job(
+                    func=self.query_database,
+                    trigger='interval',
+                    seconds=15,
+                    id='query_database',
+                    max_instances=1,
+                )
+            job.modify(next_run_time=datetime.now(timezone.utc))
 
             if not self._startup_greeting_sent and self.live_channel_id != 0:
                 live_channel = self.bot.get_channel(self.live_channel_id)
@@ -492,54 +545,9 @@ class DiscordBotManager:
             )
             await ctx.channel.send(embed=embed)
 
-        @self.bot.command(name='epg', help='Lists scheduled streams')
+        @self.bot.command(name='epg', help="Show today's planned schedule (UTC)")
         async def epg(ctx):
-            if not self.database:
-                embed = self._make_embed(
-                    title='📺 Schedule',
-                    description='No streams scheduled.',
-                    color=self.COLOR_NEUTRAL
-                )
-                await ctx.channel.send(embed=embed)
-                return
-
-            fields = []
-            live_streams = []
-            scheduled_streams = []
-
-            for value in self.database.values():
-                item_name = value['name']
-                item_start = value['start_at']
-                if item_start == 'now':
-                    live_streams.append(f'🔴 **{item_name}**')
-                elif item_start != 'never':
-                    scheduled_streams.append({
-                        'name': item_name,
-                        'start_at': item_start,
-                    })
-
-            scheduled_streams.sort(
-                key=lambda item: (
-                    self._schedule_sort_minutes(item['start_at']),
-                    item['name'].lower(),
-                )
-            )
-            scheduled_lines = [
-                f"⏰ `{self._format_schedule_time(item['start_at'])}` — {item['name']}"
-                for item in scheduled_streams
-            ]
-
-            if live_streams:
-                fields.append({'name': 'Live Now', 'value': '\n'.join(live_streams), 'inline': False})
-            if scheduled_lines:
-                fields.append({'name': 'Scheduled', 'value': '\n'.join(scheduled_lines), 'inline': False})
-
-            embed = self._make_embed(
-                title='📺 Schedule',
-                color=self.COLOR_SUCCESS if live_streams else self.COLOR_INFO,
-                fields=fields
-            )
-            await ctx.channel.send(embed=embed)
+            await self._send_daily_schedule(ctx.channel, datetime.now(timezone.utc))
 
         @self.bot.command(name='now', help='Displays whats playing right now')
         async def now(ctx):
@@ -788,9 +796,11 @@ class DiscordBotManager:
         """Query the database from stream_manager and announce live streams."""
         # Get database directly from stream_manager
         self.database = self.stream_manager.database.copy()
+        await self._announce_daily_schedule()
 
         if self.database == {}:
-            self.logger.error('Database is empty!')
+            if self.scheduler.get_job('announce_live_channel') is not None:
+                self.scheduler.remove_job('announce_live_channel')
             return
 
         # Search for streams and announce them
@@ -809,7 +819,7 @@ class DiscordBotManager:
                         trigger='interval',
                         minutes=self.live_channel_update,
                         id='announce_live_channel',
-                        args=(stream_name, stream_details)
+                        args=(key,)
                     )
                     self.scheduler.get_job('announce_live_channel').modify(next_run_time=datetime.now())
                     return
@@ -821,11 +831,17 @@ class DiscordBotManager:
         if self.scheduler.get_job('announce_live_channel') is not None:
             self.scheduler.remove_job('announce_live_channel')
 
-    async def announce_live_channel(self, stream_name, stream_details):
-        """Announce live stream to Discord channel."""
+    async def announce_live_channel(self, stream_id):
+        """Announce only an input that is still playable when the job runs."""
+        entry = self.stream_manager.database.get(stream_id)
+        if not entry or entry.get('start_at') != 'now':
+            return
+        stream_name = entry['name']
+        stream_details = entry.get('details', '')
         if self.live_channel_id != 0:
             live_channel = self.bot.get_channel(self.live_channel_id)
-            await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
+            if live_channel is not None:
+                await live_channel.send(f'{stream_name} is live! :satellite_orbital: {stream_details}')
         self.logger.info(f'{stream_name} is live! {stream_details}')
 
 

@@ -5,8 +5,11 @@ from collections.abc import Mapping
 import copy
 import json
 import time
+from datetime import datetime, timezone
 
 from quart import request
+
+from services.schedule import programmes_for_guide
 
 from web.helpers import get_client_address
 from web.state import HLSViewerSession, WebRouteState, hls_viewer_display_key, update_hls_viewer_display_state
@@ -15,6 +18,20 @@ from web.state import HLSViewerSession, WebRouteState, hls_viewer_display_key, u
 SSE_TO_HLS_GRACE_SECONDS = 45.0
 MAX_HLS_VIEWER_REPORT_SIZE = 1000
 HLS_VIEWER_DISPLAY_MIN_CONNECTED_SECONDS = 30.0
+
+
+def build_epg_payload(stream_manager, now: datetime) -> dict:
+    """Keep guide visibility separate from the catalogue used for live labels."""
+    programmes = programmes_for_guide(stream_manager.catalogue, stream_manager.database, now)
+    return {
+        'catalogue': {**stream_manager.database, **stream_manager.catalogue},
+        'programmes': [
+            {**programme, 'start': programme['start'].isoformat(), 'stop': programme['stop'].isoformat()}
+            for programme in programmes
+        ],
+        'start_day': now.astimezone(timezone.utc).date().isoformat(),
+        'days': 7,
+    }
 
 
 def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state: WebRouteState) -> None:
@@ -57,7 +74,7 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
 
         event = {
             'type': 'epg',
-            'data': json.dumps(stream_manager.database),
+            'data': json.dumps(build_epg_payload(stream_manager, datetime.now(timezone.utc))),
         }
         for queue in list(state.sse_clients):
             try:
@@ -163,7 +180,8 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
                 yield f"event: visitors\ndata: {json.dumps({'visitors': state.hls_viewer_count})}\n\n"
 
                 if stream_manager is not None:
-                    yield f'event: epg\ndata: {json.dumps(stream_manager.database)}\n\n'
+                    initial_epg = build_epg_payload(stream_manager, datetime.now(timezone.utc))
+                    yield f'event: epg\ndata: {json.dumps(initial_epg)}\n\n'
 
                 while True:
                     try:
@@ -205,13 +223,17 @@ def register_sse_routes(app, stream_manager, loggers, discord_bot_manager, state
                         await _broadcast_playhead()
 
         async def monitor_epg():
-            last_database = None
+            last_snapshot = None
             while True:
                 await asyncio.sleep(5)
                 if stream_manager is not None:
-                    current_db = copy.deepcopy(stream_manager.database)
-                    if current_db != last_database:
-                        last_database = current_db
+                    snapshot = (
+                        copy.deepcopy(stream_manager.catalogue),
+                        copy.deepcopy(stream_manager.database),
+                        datetime.now(timezone.utc).date(),
+                    )
+                    if snapshot != last_snapshot:
+                        last_snapshot = snapshot
                         await _broadcast_epg()
 
         app.add_background_task(monitor_playhead)

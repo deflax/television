@@ -1,7 +1,8 @@
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from quart import request
+from services.schedule import programmes_for_guide
 
 from web.helpers import get_client_address
 
@@ -35,7 +36,7 @@ def register_playlist_routes(app, stream_manager, loggers) -> None:
 
     @app.route('/epg.xml', methods=['GET'])
     async def epg_xml_route():
-        """Serve dynamically generated XMLTV EPG from the stream database."""
+        """Serve seven UTC dates from the catalogue, plus currently live entries."""
         client_ip = get_client_address(request)
         loggers.content.info(f'[{client_ip}] epg.xml')
 
@@ -53,52 +54,9 @@ def register_playlist_routes(app, stream_manager, loggers) -> None:
         ET.SubElement(channel, 'display-name').text = domain
         ET.SubElement(channel, 'icon', src=f'{scheme}://{host}/static/images/logo.png')
 
-        if stream_manager is not None and stream_manager.database:
+        if stream_manager is not None:
             now = datetime.now(timezone.utc)
-            live_programmes = []
-            scheduled_programmes = []
-
-            for _, entry in stream_manager.database.items():
-                start_at = entry.get('start_at', '')
-                name = entry.get('name', 'Unknown')
-                details = entry.get('details', '')
-
-                if start_at == 'never':
-                    continue
-
-                if start_at == 'now':
-                    live_programmes.append({
-                        'start': now,
-                        'stop': now + timedelta(hours=3),
-                        'title': name,
-                        'desc': details,
-                    })
-                else:
-                    time_str = str(start_at).strip()
-                    if len(time_str) <= 2:
-                        hour, minute = int(time_str), 0
-                    else:
-                        hour, minute = int(time_str[:-2]), int(time_str[-2:])
-                    prog_start = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    if prog_start < now - timedelta(hours=1):
-                        prog_start += timedelta(days=1)
-                    scheduled_programmes.append({
-                        'start': prog_start,
-                        'title': name,
-                        'desc': details,
-                    })
-
-            scheduled_programmes.sort(key=lambda prog: prog['start'])
-
-            for idx, prog in enumerate(scheduled_programmes):
-                if idx + 1 < len(scheduled_programmes):
-                    prog['stop'] = scheduled_programmes[idx + 1]['start']
-                elif len(scheduled_programmes) > 1:
-                    prog['stop'] = scheduled_programmes[0]['start'] + timedelta(days=1)
-                else:
-                    prog['stop'] = prog['start'] + timedelta(hours=24)
-
-            programmes = live_programmes + scheduled_programmes
+            programmes = programmes_for_guide(stream_manager.catalogue, stream_manager.database, now)
 
             for prog in programmes:
                 fmt = '%Y%m%d%H%M%S +0000'

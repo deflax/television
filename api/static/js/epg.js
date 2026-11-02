@@ -6,7 +6,7 @@ window.StreamApp = window.StreamApp || {};
 
 window.StreamApp.currentPlayheadId = null;
 window.StreamApp.currentPlayheadMetadata = {};
-window.StreamApp.currentEpgDatabase = {};
+window.StreamApp.currentEpgGuide = null;
 window.StreamApp.nowPlayingCopyTimeout = null;
 
 window.StreamApp.setNowPlayingText = function(nowName, text) {
@@ -83,20 +83,20 @@ window.StreamApp.initNowPlayingCopy = function() {
   });
 };
 
-window.StreamApp.renderEpg = function(database, playheadId, metadata = window.StreamApp.currentPlayheadMetadata) {
+window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.StreamApp.currentPlayheadMetadata) {
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const scheduleDiv = document.getElementById('epg-schedule');
   if (!scheduleDiv) return;
   window.StreamApp.currentPlayheadMetadata = metadata || {};
 
-  const channelCount = Object.keys(database).length;
+  const catalogue = guide.catalogue;
 
   // Update "Now Playing" from playhead
   if (nowPlaying && nowName) {
     window.StreamApp.initNowPlayingCopy();
-    if (playheadId && database[playheadId]) {
-      const channelName = database[playheadId].name;
+    if (playheadId && catalogue[playheadId]) {
+      const channelName = catalogue[playheadId].name;
       const streamTitle = window.StreamApp.currentPlayheadMetadata.stream_title;
       const trimmedStreamTitle = typeof streamTitle === 'string' ? streamTitle.trim() : '';
       const trackText = trimmedStreamTitle || channelName;
@@ -108,66 +108,58 @@ window.StreamApp.renderEpg = function(database, playheadId, metadata = window.St
     }
   }
 
-  // Hide schedule list when there is only a single channel
-  if (channelCount <= 1) {
-    scheduleDiv.innerHTML = '';
-    return;
-  }
-
-  // Separate scheduled vs live entries
-  const scheduled = [];
-  const live = [];
-  for (const [key, entry] of Object.entries(database)) {
-    const startAt = entry.start_at;
-    if (startAt !== 'now' && startAt !== 'never') {
-      scheduled.push({id: key, name: entry.name, startAt: startAt, details: entry.details || ''});
-    } else if (startAt === 'now') {
-      live.push({id: key, name: entry.name, details: entry.details || ''});
-    }
-  }
-
-  // Parse military time (e.g. '1745') or legacy hour (e.g. '14') and convert UTC to local
-  for (const s of scheduled) {
-    const raw = String(s.startAt).trim();
-    let utcH, utcM;
-    if (raw.length <= 2) {
-      utcH = parseInt(raw); utcM = 0;
+  // Dates and durations come from the server's shared UTC scheduling rules.
+  scheduleDiv.replaceChildren();
+  const today = new Date(`${guide.start_day}T00:00:00Z`);
+  const now = Date.now();
+  const headingFormat = new Intl.DateTimeFormat('en', {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+  });
+  for (let offset = 0; offset < guide.days; offset++) {
+    const day = new Date(today);
+    day.setUTCDate(day.getUTCDate() + offset);
+    const dayKey = day.toISOString().slice(0, 10);
+    const section = document.createElement('section');
+    const heading = document.createElement('h6');
+    heading.className = 'mt-3 mb-1';
+    heading.textContent = `${headingFormat.format(day)} (UTC)`;
+    section.appendChild(heading);
+    const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === dayKey);
+    if (programmes.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'text-secondary';
+      empty.textContent = 'No scheduled streams.';
+      section.appendChild(empty);
     } else {
-      utcH = parseInt(raw.slice(0, -2)); utcM = parseInt(raw.slice(-2));
-    }
-    const utcDate = new Date();
-    utcDate.setUTCHours(utcH, utcM, 0, 0);
-    s.localHour = utcDate.getHours();
-    s.localMinute = utcDate.getMinutes();
-    s.localTotal = s.localHour * 60 + s.localMinute;
-  }
-  scheduled.sort((a, b) => a.localTotal - b.localTotal);
-
-  let html = '';
-  if (scheduled.length === 0 && live.length === 0) {
-    html = '<p class="text-secondary">No scheduled streams.</p>';
-  } else {
-    if (scheduled.length > 0) {
-      html += '<ul class="list-unstyled mb-1">';
-      for (const s of scheduled) {
-        const isActive = playheadId === s.id;
-        const cls = isActive ? '' : 'text-secondary';
-        const style = isActive ? 'style="color: var(--epg-active-purple);"' : '';
-        const icon = isActive ? ' <i class="fa fa-volume-up"></i>' : '';
-        const detail = s.details ? ` <small class="text-muted">- ${s.details}</small>` : '';
-        const localStr = s.localHour.toString().padStart(2, '0') + ':' + s.localMinute.toString().padStart(2, '0');
-        html += `<li class="${cls}" ${style}><strong>${localStr}</strong> ${s.name}${icon}${detail}</li>`;
+      const list = document.createElement('ul');
+      list.className = 'list-unstyled mb-1';
+      for (const programme of programmes) {
+        const item = document.createElement('li');
+        const isActive = playheadId === programme.id
+          && now >= Date.parse(programme.start) && now < Date.parse(programme.stop);
+        item.className = isActive ? '' : (programme.live ? 'text-warning' : 'text-secondary');
+        if (isActive) item.style.color = 'var(--epg-active-purple)';
+        const label = document.createElement('strong');
+        label.textContent = programme.live ? 'LIVE' : `${programme.start.slice(11, 16)}–${
+          programme.stop.slice(0, 10) === dayKey ? programme.stop.slice(11, 16) : '24:00'
+        }`;
+        item.appendChild(label);
+        item.appendChild(document.createTextNode(` ${programme.title}`));
+        if (isActive) {
+          const icon = document.createElement('i');
+          icon.className = 'fa fa-volume-up ms-1';
+          item.appendChild(icon);
+        }
+        if (programme.desc) {
+          const details = document.createElement('small');
+          details.className = 'text-muted';
+          details.textContent = ` - ${programme.desc}`;
+          item.appendChild(details);
+        }
+        list.appendChild(item);
       }
-      html += '</ul>';
+      section.appendChild(list);
     }
-    if (live.length > 0) {
-      html += '<ul class="list-unstyled mb-0">';
-      for (const l of live) {
-        const detail = l.details ? ` <small class="text-muted">- ${l.details}</small>` : '';
-        html += `<li class="text-warning"><i class="fa fa-broadcast-tower"></i> ${l.name} <span class="badge bg-danger">LIVE</span>${detail}</li>`;
-      }
-      html += '</ul>';
-    }
+    scheduleDiv.appendChild(section);
   }
-  scheduleDiv.innerHTML = html;
 };

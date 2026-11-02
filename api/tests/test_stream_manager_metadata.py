@@ -38,7 +38,7 @@ def load_stream_manager_module():
     sys.modules['apscheduler.schedulers.background'] = background_module
 
     services_module = types.ModuleType('services')
-    services_module.__path__ = []
+    services_module.__path__ = [str(Path(__file__).resolve().parents[1] / 'services')]
 
     core_api_module = types.ModuleType('services.core_api')
 
