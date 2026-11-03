@@ -14,16 +14,18 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 class Element {
-  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.style = {}; this.text = ''; this.listeners = {}; }
+  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.style = {}; this.text = ''; this.listeners = {}; this.attributes = {}; }
   set textContent(value) { this.text = value; this.children = []; }
   get textContent() { return this.text + this.children.map(child => child.textContent).join(''); }
   appendChild(child) { this.children.push(child); return child; }
   replaceChildren() { this.text = ''; this.children = []; }
-  get options() { return this.children; }
+  get firstElementChild() { return this.children[0]; }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  getAttribute(name) { return this.attributes[name]; }
   addEventListener(type, listener) { this.listeners[type] = listener; }
 }
 const elements = Object.fromEntries(['epg-now-playing', 'epg-now-name', 'epg-schedule',
-  'epg-day-select', 'epg-day-controls', 'epg-day-programmes', 'visitor-number']
+  'epg-day-button', 'epg-day-menu', 'epg-day-controls', 'epg-day-programmes', 'visitor-number']
   .map(id => [id, new Element('div')]));
 const document = {
   getElementById: id => elements[id],
@@ -57,12 +59,17 @@ source.listeners.playhead({data: JSON.stringify({id: 'manual', metadata: {}})});
 source.listeners.epg({data: JSON.stringify(guide)});
 assert.equal(elements['epg-now-name'].textContent, 'Manual excluded-day stream');
 assert.equal(elements['epg-now-playing'].style.display, 'block');
-const select = elements['epg-day-select'];
+const toggle = elements['epg-day-button'];
+const menu = elements['epg-day-menu'];
 const programmes = elements['epg-day-programmes'];
-const chooseDay = day => { select.value = day; select.listeners.change(); };
-assert.equal(select.value, guide.start_day);
-assert.equal(select.options.length, 7);
-assert.equal(select.options[6].value, '2026-11-07');
+const buttons = () => menu.children.map(item => item.firstElementChild);
+const currentDay = () => buttons().find(button => button.getAttribute('aria-pressed') === 'true').dataset.day;
+const chooseDay = day => buttons().find(button => button.dataset.day === day).listeners.click();
+assert.equal(currentDay(), guide.start_day);
+assert.equal(buttons().length, 7);
+assert.deepEqual(buttons().map(button => button.textContent),
+  ['Today', 'Tomorrow', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+assert.equal(toggle.textContent, 'Today');
 assert.equal(elements['epg-day-controls'].hidden, false);
 assert.doesNotMatch(programmes.textContent, /Offline <show>/);
 chooseDay('2026-11-02');
@@ -72,11 +79,12 @@ assert.doesNotMatch(programmes.textContent, /Manual excluded-day stream/);
 assert.equal(programmes.children[0].children[0].children[1].textContent, ' Offline <show>');
 source.listeners.playhead({data: JSON.stringify({id: 'manual', metadata: {stream_title: 'Current track'}})});
 assert.equal(elements['epg-now-name'].textContent, 'Current track');
-assert.equal(select.value, '2026-11-02');
+assert.equal(currentDay(), '2026-11-02');
+assert.equal(toggle.textContent, 'Tomorrow');
 // Incoming schedule updates retain the chosen date and use fresh programme data.
 guide.programmes[0].title = 'Updated offline show';
 source.listeners.epg({data: JSON.stringify(guide)});
-assert.equal(select.value, '2026-11-02');
+assert.equal(currentDay(), '2026-11-02');
 assert.match(programmes.textContent, /Updated offline show/);
 chooseDay('2026-11-07');
 assert.doesNotMatch(programmes.textContent, /Updated offline show/);
@@ -84,14 +92,16 @@ assert.doesNotMatch(programmes.textContent, /Updated offline show/);
 chooseDay(guide.start_day);
 guide.start_day = '2026-11-02';
 source.listeners.epg({data: JSON.stringify(guide)});
-assert.equal(select.value, '2026-11-02');
+assert.equal(currentDay(), '2026-11-02');
+assert.equal(toggle.textContent, 'Today');
 assert.match(programmes.textContent, /Updated offline show/);
 // An explicitly selected date that leaves the guide resets to the new Today.
 chooseDay('2026-11-03');
 guide.start_day = '2026-11-04';
 source.listeners.epg({data: JSON.stringify(guide)});
-assert.equal(select.value, '2026-11-04');
-assert.equal(select.options[6].value, '2026-11-10');
+assert.equal(currentDay(), '2026-11-04');
+assert.equal(buttons()[6].dataset.day, '2026-11-10');
+assert.equal(toggle.textContent, 'Today');
 assert.doesNotMatch(programmes.textContent, /Updated offline show/);
 """
         result = subprocess.run(['node', '-e', script, str(scripts)], capture_output=True, text=True)

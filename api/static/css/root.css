@@ -95,7 +95,8 @@ a:hover {
 }
 
 .stream-dropdown-item:hover,
-.stream-dropdown-item:focus {
+.stream-dropdown-item:focus,
+.stream-dropdown-item[aria-pressed="true"] {
     color: #fff !important;
     background-color: var(--bs-secondary);
 }

@@ -43,9 +43,9 @@
               </div>
               <div class="d-flex flex-column flex-md-row justify-content-md-between align-items-start">
                 <div id="epg-schedule" class="order-2 order-md-1 flex-grow-1">
-                  <div id="epg-day-controls" class="mb-2" hidden>
-                    <label for="epg-day-select" class="visually-hidden">Schedule day</label>
-                    <select id="epg-day-select" class="form-select form-select-sm bg-dark text-secondary border-secondary w-auto mw-100"></select>
+                  <div id="epg-day-controls" class="dropdown d-inline-block mb-2" hidden>
+                    <button id="epg-day-button" class="btn btn-sm btn-outline-secondary sheep-surface dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Schedule day: Today (UTC)">Today</button>
+                    <ul id="epg-day-menu" class="dropdown-menu dropdown-menu-dark stream-links-menu sheep-surface border border-secondary py-1" aria-labelledby="epg-day-button"></ul>
                   </div>
                   <div id="epg-day-programmes" aria-live="polite">
                     <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>

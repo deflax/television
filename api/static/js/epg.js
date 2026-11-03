@@ -88,8 +88,9 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const programmeDiv = document.getElementById('epg-day-programmes');
-  const daySelect = document.getElementById('epg-day-select');
-  if (!programmeDiv || !daySelect) return;
+  const dayButton = document.getElementById('epg-day-button');
+  const dayMenu = document.getElementById('epg-day-menu');
+  if (!programmeDiv || !dayButton || !dayMenu) return;
   window.StreamApp.currentEpgGuide = guide;
   window.StreamApp.currentPlayheadId = playheadId;
   window.StreamApp.currentPlayheadMetadata = metadata || {};
@@ -112,41 +113,47 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     }
   }
 
-  // Keep the selector itself stable during SSE updates so keyboard focus survives.
+  // Keep menu buttons stable during SSE updates so open menus retain focus.
   const today = new Date(`${guide.start_day}T00:00:00Z`);
-  const dayFormat = new Intl.DateTimeFormat('en', {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
-  });
-  if (daySelect.dataset.startDay !== guide.start_day || daySelect.options.length !== guide.days) {
-    daySelect.replaceChildren();
+  const dayFormat = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'});
+  if (dayMenu.dataset.startDay !== guide.start_day || dayMenu.children.length !== guide.days) {
+    dayMenu.replaceChildren();
     for (let offset = 0; offset < guide.days; offset++) {
       const day = new Date(today);
       day.setUTCDate(day.getUTCDate() + offset);
-      const option = document.createElement('option');
-      option.value = day.toISOString().slice(0, 10);
-      const prefix = offset === 0 ? 'Today — ' : (offset === 1 ? 'Tomorrow — ' : '');
-      option.textContent = `${prefix}${dayFormat.format(day)} (UTC)`;
-      daySelect.appendChild(option);
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'dropdown-item stream-dropdown-item small py-1 px-2';
+      button.dataset.day = day.toISOString().slice(0, 10);
+      button.textContent = offset === 0 ? 'Today' : (offset === 1 ? 'Tomorrow' : dayFormat.format(day));
+      button.addEventListener('click', function() {
+        const app = window.StreamApp;
+        app.selectedEpgDay = button.dataset.day === app.currentEpgGuide.start_day ? null : button.dataset.day;
+        app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
+      });
+      item.appendChild(button);
+      dayMenu.appendChild(item);
     }
-    daySelect.dataset.startDay = guide.start_day;
+    dayMenu.dataset.startDay = guide.start_day;
   }
+  const buttons = Array.from(dayMenu.children, item => item.firstElementChild);
   const selectedDay = window.StreamApp.selectedEpgDay;
-  if (selectedDay && !Array.from(daySelect.options).some(option => option.value === selectedDay)) {
+  if (selectedDay && !buttons.some(button => button.dataset.day === selectedDay)) {
     window.StreamApp.selectedEpgDay = null;
   }
-  daySelect.value = window.StreamApp.selectedEpgDay || guide.start_day;
-  document.getElementById('epg-day-controls').hidden = false;
-  if (daySelect.dataset.ready !== 'true') {
-    daySelect.addEventListener('change', function() {
-      const app = window.StreamApp;
-      app.selectedEpgDay = daySelect.value === app.currentEpgGuide.start_day ? null : daySelect.value;
-      app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
-    });
-    daySelect.dataset.ready = 'true';
+  const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
+  for (const button of buttons) {
+    const selected = button.dataset.day === dayKey;
+    button.setAttribute('aria-pressed', String(selected));
+    if (selected) {
+      dayButton.textContent = button.textContent;
+      dayButton.setAttribute('aria-label', `Schedule day: ${button.textContent} (UTC)`);
+    }
   }
+  document.getElementById('epg-day-controls').hidden = false;
 
   programmeDiv.replaceChildren();
-  const dayKey = daySelect.value;
   const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === dayKey);
   if (programmes.length === 0) {
     const empty = document.createElement('p');
