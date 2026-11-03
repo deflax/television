@@ -353,7 +353,7 @@ Two compact arrow-only buttons (`<` and `>`) below the programme list move to th
 
 A date label beside the arrows shows “Today” or “Tomorrow” for the first two UTC dates and the full weekday name for later dates, followed by `YYYY-MM-DD (UTC)`. It updates when navigating or when the guide rolls forward.
 
-The arrow buttons keep their normal text, border, and background colors when hovered or pressed; keyboard focus remains visible.
+The arrow buttons use the standard gray background and white text on hover. Pressed colors remain the same as their normal colors, and keyboard focus remains visible.
 
 Live updates preserve the selected date and button focus while the button remains enabled. Returning to today follows the current UTC date; an explicitly selected date stays selected as the window rolls forward, or resets to today if it leaves the seven-day window.
 
