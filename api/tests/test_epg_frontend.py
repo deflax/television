@@ -23,7 +23,7 @@ class Element {
   setAttribute(name, value) { this.attributes[name] = value; }
 }
 const elements = Object.fromEntries(['epg-now-playing', 'epg-now-name', 'epg-schedule',
-  'epg-day-buttons', 'epg-day-controls', 'epg-day-programmes', 'visitor-number']
+  'epg-day-buttons', 'epg-day-controls', 'epg-day-date', 'epg-day-programmes', 'visitor-number']
   .map(id => [id, new Element('div')]));
 const document = {
   getElementById: id => elements[id],
@@ -60,7 +60,12 @@ assert.equal(elements['epg-now-playing'].style.display, 'block');
 const buttons = elements['epg-day-buttons'];
 const programmes = elements['epg-day-programmes'];
 const visiblePage = () => programmes.children.find(page => page.attributes['aria-hidden'] === 'false');
-const currentDay = () => visiblePage().dataset.day;
+const currentDay = () => {
+  const day = visiblePage().dataset.day;
+  assert.equal(elements['epg-day-date'].dateTime, day);
+  assert.match(elements['epg-day-date'].textContent, new RegExp(day));
+  return day;
+};
 const previous = () => buttons.children[0].listeners.click();
 const next = () => buttons.children[1].listeners.click();
 const chooseDay = day => {

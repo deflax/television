@@ -351,6 +351,10 @@ The browser guide and `/epg.xml` cover **today and the next six UTC dates**, usi
 
 Two compact arrow-only buttons (`<` and `>`) below the programme list move to the previous or next UTC date. The previous button is disabled on today, and the next button is disabled on the last date in the guide. Screen readers announce “Previous day” and “Next day”; use Tab to focus an enabled button and Enter or Space to activate it. The programme area reserves the natural height of the tallest day in the guide, including wrapped text, and adjusts automatically to screen width. Changing days therefore does not move the button row, and there is no internal list scrollbar. Only the selected day's programmes are visible or exposed to assistive technology.
 
+A date label beside the arrows shows the displayed schedule date as `YYYY-MM-DD (UTC)` and updates when navigating or when the guide rolls forward.
+
+The arrow buttons keep their normal text, border, and background colors when hovered or pressed; keyboard focus remains visible.
+
 Live updates preserve the selected date and button focus while the button remains enabled. Returning to today follows the current UTC date; an explicitly selected date stays selected as the window rolls forward, or resets to today if it leaves the seven-day window.
 
 XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.

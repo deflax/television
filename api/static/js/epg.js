@@ -90,6 +90,7 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const programmeDiv = document.getElementById('epg-day-programmes');
   const dayButtons = document.getElementById('epg-day-buttons');
   const dayControls = document.getElementById('epg-day-controls');
+  const dayDate = document.getElementById('epg-day-date');
   if (!programmeDiv || !dayButtons || !dayControls) return;
   window.StreamApp.currentEpgGuide = guide;
   window.StreamApp.currentPlayheadId = playheadId;
@@ -122,6 +123,10 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     offset = 0;
   }
   const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
+  if (dayDate) {
+    dayDate.dateTime = dayKey;
+    dayDate.textContent = `${dayKey} (UTC)`;
+  }
   if (dayButtons.children.length !== 2) {
     dayButtons.replaceChildren();
     for (const direction of [-1, 1]) {
