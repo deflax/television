@@ -88,12 +88,10 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const programmeDiv = document.getElementById('epg-day-programmes');
-  const previousButton = document.getElementById('epg-day-prev');
-  const nextButton = document.getElementById('epg-day-next');
-  const previousLabel = document.getElementById('epg-day-prev-label');
-  const nextLabel = document.getElementById('epg-day-next-label');
+  const daySlider = document.getElementById('epg-day-slider');
+  const dayLabel = document.getElementById('epg-day-label');
   const dayControls = document.getElementById('epg-day-controls');
-  if (!programmeDiv || !previousButton || !nextButton || !previousLabel || !nextLabel || !dayControls) return;
+  if (!programmeDiv || !daySlider || !dayLabel || !dayControls) return;
   window.StreamApp.currentEpgGuide = guide;
   window.StreamApp.currentPlayheadId = playheadId;
   window.StreamApp.currentPlayheadMetadata = metadata || {};
@@ -126,29 +124,23 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   }
   const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
   const day = new Date(`${dayKey}T00:00:00Z`);
-  for (const [button, label, step] of [[previousButton, previousLabel, -1], [nextButton, nextLabel, 1]]) {
-    const adjacentOffset = offset + step;
-    button.hidden = adjacentOffset < 0 || adjacentOffset >= guide.days;
-    const adjacent = new Date(day);
-    adjacent.setUTCDate(adjacent.getUTCDate() + step);
-    button.dataset.day = adjacent.toISOString().slice(0, 10);
-    const destination = adjacentOffset === 0 ? 'Today' :
-      new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(adjacent);
-    label.textContent = destination;
-    button.setAttribute('aria-label', `Schedule for ${destination} (UTC)`);
-    if (button.dataset.ready !== 'true') {
-      button.addEventListener('click', function() {
-        if (button.hidden) return;
-        const app = window.StreamApp;
-        app.selectedEpgDay = button.dataset.day === app.currentEpgGuide.start_day ? null : button.dataset.day;
-        app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
-        if (button.hidden) {
-          const otherButton = button === previousButton ? nextButton : previousButton;
-          if (!otherButton.hidden) otherButton.focus();
-        }
-      });
-      button.dataset.ready = 'true';
-    }
+  dayLabel.textContent = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'}).format(day);
+  daySlider.max = String(Math.max(0, guide.days - 1));
+  daySlider.value = String(offset);
+  daySlider.disabled = guide.days < 2;
+  daySlider.style.setProperty('--epg-slider-progress', `${guide.days > 1 ? offset * 100 / (guide.days - 1) : 0}%`);
+  const weekday = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(day);
+  daySlider.setAttribute('aria-valuetext', `${weekday} (UTC)`);
+  if (daySlider.dataset.ready !== 'true') {
+    daySlider.addEventListener('input', function() {
+      const app = window.StreamApp;
+      const selected = new Date(`${app.currentEpgGuide.start_day}T00:00:00Z`);
+      selected.setUTCDate(selected.getUTCDate() + Number(daySlider.value));
+      app.selectedEpgDay = daySlider.value === '0' ? null : selected.toISOString().slice(0, 10);
+      app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
+      programmeDiv.scrollTop = 0;
+    });
+    daySlider.dataset.ready = 'true';
   }
   dayControls.hidden = false;
 

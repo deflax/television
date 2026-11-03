@@ -349,9 +349,9 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
 
-Below the schedule, navigation buttons name their destination: Today or a weekday, without calendar dates or a separate current-day label. Today shows only a forward button labelled with the next day's weekday; middle days show the forward button on the left and the back button on the right; the last available day shows only a back button. Both buttons have a fixed 7.5rem width, the same compact height and outlined styling as Video/Audio, and Font Awesome chevron icons.
+A horizontal slider below the programme list selects one of the seven UTC dates. Its left-hand label shows the selected weekday as three letters (Mon, Tue, Wed, etc.), without a calendar date. The track is dark gray with purple fill and a purple handle. The programme area has a fixed 12rem height; longer days scroll inside it, so the slider stays in place while dragging. Selecting another day starts its list at the first programme. Arrow keys move by one day, Home selects today, and End selects the last date.
 
-Live updates preserve the selected day and button focus. If the clicked button disappears at a navigation boundary, focus moves to the remaining button. The Today view follows the UTC date, and a selection that leaves the seven-day window resets to Today.
+Live updates preserve the selected date and slider focus. The leftmost position follows the current UTC date; an explicitly selected date stays selected at its new slider position as the window rolls forward, or resets to today if it leaves the seven-day window.
 
 XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
 
