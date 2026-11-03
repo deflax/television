@@ -23,35 +23,12 @@
     </style>
 </head>
 
-<body>
+<body id="top">
 {% include 'nav.html' %}
 
 {% block content %}{% endblock %}
 
 {% include 'footer.html' %}
-
-<!-- Weather Modal (global) -->
-<div class="modal fade" id="weatherModal" tabindex="-1" aria-labelledby="weatherModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen">
-    <div class="modal-content bg-dark text-white">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title" id="weatherModalLabel">Weather</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body p-0">
-        <iframe
-          id="weatherIframe"
-          src=""
-          style="width: 100%; height: 100%; border: none;"
-          title="Weather map"
-          allowfullscreen
-          loading="lazy"
-          referrerpolicy="no-referrer">
-        </iframe>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Archive Modal (global) -->
 <div class="modal fade" id="archiveModal" tabindex="-1" aria-labelledby="archiveModalLabel" aria-hidden="true">
@@ -75,30 +52,6 @@
 <script>
 // Global modal initialization
 document.addEventListener('DOMContentLoaded', () => {
-  const WEATHER_SRC = 'https://earth.nullschool.net/#current/wind/surface/level/overlay=temp/orthographic=16.78,46.84,2310/loc=24.738,42.213';
-  
-  // Weather modal
-  const weatherLink = document.querySelector('a.nav-link[href="/weather"]');
-  if (weatherLink) {
-    weatherLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      const iframe = document.getElementById('weatherIframe');
-      if (!iframe.src || iframe.src === '' || iframe.src === window.location.href) {
-        iframe.src = WEATHER_SRC;
-      }
-      const modal = new bootstrap.Modal(document.getElementById('weatherModal'));
-      modal.show();
-    });
-  }
-
-  // Cleanup iframe when modal is closed
-  const weatherModal = document.getElementById('weatherModal');
-  if (weatherModal) {
-    weatherModal.addEventListener('hidden.bs.modal', () => {
-      document.getElementById('weatherIframe').src = '';
-    });
-  }
-
   // Archive modal
   function loadArchiveContent(modalBody) {
     fetch('/archive', { credentials: 'same-origin' })

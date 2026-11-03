@@ -262,7 +262,7 @@ The audio-only endpoint is not an ABR variant and does not change `ABR_VARIANTS`
 
 **Frontend Features:**
 - **Automatic error recovery** - HLS.js detects network/media errors and automatically recovers
-- **Global modals** - Weather is available on all pages; Archive is available only when enabled
+- **Navigation** - Weather opens Earth Nullschool in a new tab at the 3 hPa pressure level. Stream scrolls the current page to the top without reloading playback; the logo is not a link. Archive opens a fullscreen modal only when enabled.
 - **SSE real-time updates** - Live visitor count, EPG changes, playhead updates
 - **Responsive design** - Mobile-friendly Bootstrap 5 interface
 - **Playback controls** - The **Video / Audio** selector changes playback on this page and remembers the selected mode. Poster controls appear together in Audio mode. The **Stream links** menu matches its button's width; its **Video URL** and **Audio URL** items retain external-link icons and open in a new tab for external players.
@@ -415,7 +415,6 @@ rtmp://SERVERADDR/STREAM-UUID.stream/CHANGEME
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/` | GET | Public | Live stream player |
-| `/weather` | GET | Public | Weather visualization page |
 | `/archive` | GET/POST | Timecode | Video archive |
 | `/request-timecode` | POST | Public | Request archive access |
 | `/logout` | GET | Public | Clear session and logout |

@@ -268,11 +268,6 @@ video {
     overflow-y: auto;
 }
 
-#weatherModal .modal-body {
-    padding: 0;
-    overflow: hidden;
-}
-
 #archiveModal .modal-body .gallery {
     padding: 1rem;
 }

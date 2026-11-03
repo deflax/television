@@ -204,13 +204,6 @@ def register_frontend_routes(app, config, loggers, state: WebRouteState) -> None
             thumb_file=thumb_file,
         )
 
-    @app.route('/weather', methods=['GET'])
-    async def weather_route():
-        """Weather visualization page - public."""
-        client_ip = get_client_address(request)
-        loggers.content.info(f'[{client_ip}] weather /weather')
-        return await render_template('weather.html', now=datetime.now(timezone.utc))
-
     @app.route('/logout', methods=['GET'])
     async def logout_route():
         """Clear session and logout user."""
