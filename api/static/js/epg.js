@@ -125,7 +125,10 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
   if (dayDate) {
     dayDate.dateTime = dayKey;
-    dayDate.textContent = `${dayKey} (UTC)`;
+    const dayName = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow'
+      : new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'})
+        .format(new Date(`${dayKey}T00:00:00Z`));
+    dayDate.textContent = `${dayName}, ${dayKey} (UTC)`;
   }
   if (dayButtons.children.length !== 2) {
     dayButtons.replaceChildren();

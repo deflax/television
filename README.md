@@ -351,7 +351,7 @@ The browser guide and `/epg.xml` cover **today and the next six UTC dates**, usi
 
 Two compact arrow-only buttons (`<` and `>`) below the programme list move to the previous or next UTC date. The previous button is disabled on today, and the next button is disabled on the last date in the guide. Screen readers announce “Previous day” and “Next day”; use Tab to focus an enabled button and Enter or Space to activate it. The programme area reserves the natural height of the tallest day in the guide, including wrapped text, and adjusts automatically to screen width. Changing days therefore does not move the button row, and there is no internal list scrollbar. Only the selected day's programmes are visible or exposed to assistive technology.
 
-A date label beside the arrows shows the displayed schedule date as `YYYY-MM-DD (UTC)` and updates when navigating or when the guide rolls forward.
+A date label beside the arrows shows “Today” or “Tomorrow” for the first two UTC dates and the full weekday name for later dates, followed by `YYYY-MM-DD (UTC)`. It updates when navigating or when the guide rolls forward.
 
 The arrow buttons keep their normal text, border, and background colors when hovered or pressed; keyboard focus remains visible.
 
