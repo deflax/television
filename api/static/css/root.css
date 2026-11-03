@@ -78,6 +78,11 @@ a:hover {
     white-space: nowrap;
 }
 
+#epg-day-controls .btn {
+    width: 7.5rem;
+    white-space: nowrap;
+}
+
 .playback-mode .btn {
     --bs-btn-active-color: #fff;
     --bs-btn-active-bg: var(--epg-active-purple);
@@ -95,8 +100,7 @@ a:hover {
 }
 
 .stream-dropdown-item:hover,
-.stream-dropdown-item:focus,
-.stream-dropdown-item[aria-pressed="true"] {
+.stream-dropdown-item:focus {
     color: #fff !important;
     background-color: var(--bs-secondary);
 }

@@ -88,9 +88,12 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const programmeDiv = document.getElementById('epg-day-programmes');
-  const dayButton = document.getElementById('epg-day-button');
-  const dayMenu = document.getElementById('epg-day-menu');
-  if (!programmeDiv || !dayButton || !dayMenu) return;
+  const previousButton = document.getElementById('epg-day-prev');
+  const nextButton = document.getElementById('epg-day-next');
+  const previousLabel = document.getElementById('epg-day-prev-label');
+  const nextLabel = document.getElementById('epg-day-next-label');
+  const dayControls = document.getElementById('epg-day-controls');
+  if (!programmeDiv || !previousButton || !nextButton || !previousLabel || !nextLabel || !dayControls) return;
   window.StreamApp.currentEpgGuide = guide;
   window.StreamApp.currentPlayheadId = playheadId;
   window.StreamApp.currentPlayheadMetadata = metadata || {};
@@ -113,45 +116,41 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     }
   }
 
-  // Keep menu buttons stable during SSE updates so open menus retain focus.
   const today = new Date(`${guide.start_day}T00:00:00Z`);
-  const dayFormat = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'});
-  if (dayMenu.dataset.startDay !== guide.start_day || dayMenu.children.length !== guide.days) {
-    dayMenu.replaceChildren();
-    for (let offset = 0; offset < guide.days; offset++) {
-      const day = new Date(today);
-      day.setUTCDate(day.getUTCDate() + offset);
-      const item = document.createElement('li');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'dropdown-item stream-dropdown-item small py-1 px-2';
-      button.dataset.day = day.toISOString().slice(0, 10);
-      button.textContent = offset === 0 ? 'Today' : (offset === 1 ? 'Tomorrow' : dayFormat.format(day));
+  const selectedDay = window.StreamApp.selectedEpgDay || guide.start_day;
+  const selectedDate = new Date(`${selectedDay}T00:00:00Z`);
+  let offset = (selectedDate - today) / 86400000;
+  if (!Number.isInteger(offset) || offset < 0 || offset >= guide.days) {
+    window.StreamApp.selectedEpgDay = null;
+    offset = 0;
+  }
+  const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
+  const day = new Date(`${dayKey}T00:00:00Z`);
+  for (const [button, label, step] of [[previousButton, previousLabel, -1], [nextButton, nextLabel, 1]]) {
+    const adjacentOffset = offset + step;
+    button.hidden = adjacentOffset < 0 || adjacentOffset >= guide.days;
+    const adjacent = new Date(day);
+    adjacent.setUTCDate(adjacent.getUTCDate() + step);
+    button.dataset.day = adjacent.toISOString().slice(0, 10);
+    const destination = adjacentOffset === 0 ? 'Today' : (adjacentOffset === 1 ? 'Tomorrow' :
+      new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(adjacent));
+    label.textContent = destination;
+    button.setAttribute('aria-label', `Schedule for ${destination} (UTC)`);
+    if (button.dataset.ready !== 'true') {
       button.addEventListener('click', function() {
+        if (button.hidden) return;
         const app = window.StreamApp;
         app.selectedEpgDay = button.dataset.day === app.currentEpgGuide.start_day ? null : button.dataset.day;
         app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
+        if (button.hidden) {
+          const otherButton = button === previousButton ? nextButton : previousButton;
+          if (!otherButton.hidden) otherButton.focus();
+        }
       });
-      item.appendChild(button);
-      dayMenu.appendChild(item);
-    }
-    dayMenu.dataset.startDay = guide.start_day;
-  }
-  const buttons = Array.from(dayMenu.children, item => item.firstElementChild);
-  const selectedDay = window.StreamApp.selectedEpgDay;
-  if (selectedDay && !buttons.some(button => button.dataset.day === selectedDay)) {
-    window.StreamApp.selectedEpgDay = null;
-  }
-  const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
-  for (const button of buttons) {
-    const selected = button.dataset.day === dayKey;
-    button.setAttribute('aria-pressed', String(selected));
-    if (selected) {
-      dayButton.textContent = button.textContent;
-      dayButton.setAttribute('aria-label', `Schedule day: ${button.textContent} (UTC)`);
+      button.dataset.ready = 'true';
     }
   }
-  document.getElementById('epg-day-controls').hidden = false;
+  dayControls.hidden = false;
 
   programmeDiv.replaceChildren();
   const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === dayKey);

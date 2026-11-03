@@ -43,13 +43,15 @@
               </div>
               <div class="d-flex flex-column flex-md-row justify-content-md-between align-items-start">
                 <div id="epg-schedule" class="order-2 order-md-1 flex-grow-1">
-                  <div id="epg-day-controls" class="dropdown d-inline-block mb-2" hidden>
-                    <button id="epg-day-button" class="btn btn-sm btn-outline-secondary sheep-surface dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Schedule day: Today (UTC)">Today</button>
-                    <ul id="epg-day-menu" class="dropdown-menu dropdown-menu-dark stream-links-menu sheep-surface border border-secondary py-1" aria-labelledby="epg-day-button"></ul>
-                  </div>
                   <div id="epg-day-programmes" aria-live="polite">
                     <p class="text-secondary"><i class="fa fa-calendar" aria-hidden="true"></i> Loading schedule...</p>
                   </div>
+                  <nav id="epg-day-controls" class="mt-2" aria-label="Schedule day navigation" hidden>
+                    <div class="d-inline-flex align-items-center gap-2">
+                      <button id="epg-day-prev" class="btn btn-sm btn-outline-secondary sheep-surface" type="button" aria-controls="epg-day-programmes" hidden><i class="fa fa-chevron-left me-1" aria-hidden="true"></i><span id="epg-day-prev-label"></span></button>
+                      <button id="epg-day-next" class="btn btn-sm btn-outline-secondary sheep-surface" type="button" aria-controls="epg-day-programmes" hidden><span id="epg-day-next-label">Tomorrow</span><i class="fa fa-chevron-right ms-1" aria-hidden="true"></i></button>
+                    </div>
+                  </nav>
                 </div>
                 <div class="stream-controls order-1 order-md-2 d-flex flex-wrap align-items-center gap-2 mb-2 mb-md-0 ms-md-3">
                   <div id="audio-poster-controls" class="btn-group" role="group" aria-label="Audio poster" hidden>

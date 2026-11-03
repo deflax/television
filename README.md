@@ -347,7 +347,13 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 #### Weekly Guide and Daily Input Control
 
-The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default, with a day menu styled like the other outlined stream-control buttons. Its labels are Today, Tomorrow, and weekday names, without calendar dates. Live updates preserve the selected day and an open menu's keyboard focus; the Today view follows the UTC date, and a selection that leaves the seven-day window resets to Today. XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
+The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
+
+Below the schedule, navigation buttons name their destination: Today, Tomorrow, or a weekday, without calendar dates or a separate current-day label. Today shows only a forward Tomorrow button; middle days show both adjacent days; the last available day shows only a back button. Both buttons have a fixed 7.5rem width, the same compact height and outlined styling as Video/Audio, and Font Awesome chevron icons.
+
+Live updates preserve the selected day and button focus. If the clicked button disappears at a navigation boundary, focus moves to the remaining button. The Today view follows the UTC date, and a selection that leaves the seven-day window resets to Today.
+
+XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
 
 - **Without `days`:** timed programmes appear daily, but the API does not automatically start or stop the Restreamer input.
 - **With `days`:** the first successful discovery on each UTC date makes one input decision. On listed days the API sends `start` unless the input is already started (including reconnecting); on excluded days it sends `stop` unless already stopped. Consecutive allowed days do not restart an already-started input.
