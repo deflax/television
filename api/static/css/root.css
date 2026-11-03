@@ -121,6 +121,14 @@ video {
     scroll-margin-top: 60px;
 }
 
+#epg {
+    scroll-margin-top: 5rem;
+}
+
+#epg:target + #epg-content {
+    min-height: calc(100vh - 5rem);
+}
+
 @media only screen and (max-width: 620px)
 {
     .gallery {

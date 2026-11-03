@@ -347,6 +347,8 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 #### Weekly Guide and Daily Input Control
 
+The header logo is not a link. **Stream** returns to the top of the live page; **EPG**, between Stream and Weather, scrolls the Now Playing track to just below the fixed header, with the schedule beneath it. These jumps do not reload an already-open live page, and the links also work from other pages. The EPG view reserves enough height to align the track even when the schedule is short.
+
 The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
 
 Below the schedule, navigation buttons name their destination: Today or a weekday, without calendar dates or a separate current-day label. Today shows only a forward button labelled with the next day's weekday; middle days show the forward button on the left and the back button on the right; the last available day shows only a back button. Both buttons have a fixed 7.5rem width, the same compact height and outlined styling as Video/Audio, and Font Awesome chevron icons.
