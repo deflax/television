@@ -349,9 +349,9 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
 
-A horizontal slider below the programme list selects one of the seven UTC dates. Its left-hand label shows the selected weekday as three letters (Mon, Tue, Wed, etc.), without a calendar date. The track is dark gray with purple fill and a purple handle. The programme area has a fixed 12rem height; longer days scroll inside it, so the slider stays in place while dragging. Selecting another day starts its list at the first programme. Arrow keys move by one day, Home selects today, and End selects the last date.
+Seven compact weekday buttons below the programme list select the seven UTC dates, starting with today. Each button shows a three-letter weekday name, and the selected day is highlighted in purple. The programme area reserves the natural height of the tallest day in the guide, including wrapped text, and adjusts automatically to screen width. Changing days therefore does not move the button row, and there is no internal list scrollbar. Only the selected day's programmes are visible or exposed to assistive technology. Tab between buttons and use Enter or Space to select a day.
 
-Live updates preserve the selected date and slider focus. The leftmost position follows the current UTC date; an explicitly selected date stays selected at its new slider position as the window rolls forward, or resets to today if it leaves the seven-day window.
+Live updates preserve the selected date and button focus. The first button follows the current UTC date; an explicitly selected date stays selected at its new position as the window rolls forward, or resets to today if it leaves the seven-day window.
 
 XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
 

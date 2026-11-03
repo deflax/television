@@ -88,10 +88,9 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
   const nowPlaying = document.getElementById('epg-now-playing');
   const nowName = document.getElementById('epg-now-name');
   const programmeDiv = document.getElementById('epg-day-programmes');
-  const daySlider = document.getElementById('epg-day-slider');
-  const dayLabel = document.getElementById('epg-day-label');
+  const dayButtons = document.getElementById('epg-day-buttons');
   const dayControls = document.getElementById('epg-day-controls');
-  if (!programmeDiv || !daySlider || !dayLabel || !dayControls) return;
+  if (!programmeDiv || !dayButtons || !dayControls) return;
   window.StreamApp.currentEpgGuide = guide;
   window.StreamApp.currentPlayheadId = playheadId;
   window.StreamApp.currentPlayheadMetadata = metadata || {};
@@ -123,63 +122,82 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     offset = 0;
   }
   const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
-  const day = new Date(`${dayKey}T00:00:00Z`);
-  dayLabel.textContent = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'}).format(day);
-  daySlider.max = String(Math.max(0, guide.days - 1));
-  daySlider.value = String(offset);
-  daySlider.disabled = guide.days < 2;
-  daySlider.style.setProperty('--epg-slider-progress', `${guide.days > 1 ? offset * 100 / (guide.days - 1) : 0}%`);
-  const weekday = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(day);
-  daySlider.setAttribute('aria-valuetext', `${weekday} (UTC)`);
-  if (daySlider.dataset.ready !== 'true') {
-    daySlider.addEventListener('input', function() {
-      const app = window.StreamApp;
-      const selected = new Date(`${app.currentEpgGuide.start_day}T00:00:00Z`);
-      selected.setUTCDate(selected.getUTCDate() + Number(daySlider.value));
-      app.selectedEpgDay = daySlider.value === '0' ? null : selected.toISOString().slice(0, 10);
-      app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
-      programmeDiv.scrollTop = 0;
-    });
-    daySlider.dataset.ready = 'true';
+  if (dayButtons.children.length !== guide.days) {
+    dayButtons.replaceChildren();
+    for (let index = 0; index < guide.days; index++) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-controls', 'epg-day-programmes');
+      button.addEventListener('click', function() {
+        const app = window.StreamApp;
+        app.selectedEpgDay = button.dataset.day === app.currentEpgGuide.start_day ? null : button.dataset.day;
+        app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
+      });
+      dayButtons.appendChild(button);
+    }
   }
+  const shortWeekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});
+  const longWeekday = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'});
+  Array.from(dayButtons.children).forEach((button, index) => {
+    const day = new Date(today);
+    day.setUTCDate(day.getUTCDate() + index);
+    const selected = index === offset;
+    button.dataset.day = day.toISOString().slice(0, 10);
+    button.textContent = shortWeekday.format(day);
+    button.className = `btn btn-sm btn-outline-secondary sheep-surface${selected ? ' active' : ''}`;
+    button.setAttribute('aria-label', `Schedule for ${longWeekday.format(day)} (UTC)`);
+    button.setAttribute('aria-pressed', String(selected));
+  });
   dayControls.hidden = false;
 
+  // Shared grid cells reserve the tallest day's natural height, including wrapping.
   programmeDiv.replaceChildren();
-  const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === dayKey);
-  if (programmes.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'text-secondary mb-1';
-    empty.textContent = 'No scheduled streams.';
-    programmeDiv.appendChild(empty);
-    return;
-  }
   const now = Date.now();
-  const list = document.createElement('ul');
-  list.className = 'list-unstyled mb-1';
-  for (const programme of programmes) {
-    const item = document.createElement('li');
-    const isActive = playheadId === programme.id
-      && now >= Date.parse(programme.start) && now < Date.parse(programme.stop);
-    item.className = isActive ? '' : (programme.live ? 'text-warning' : 'text-secondary');
-    if (isActive) item.style.color = 'var(--epg-active-purple)';
-    const label = document.createElement('strong');
-    label.textContent = programme.live ? 'LIVE' : `${programme.start.slice(11, 16)}–${
-      programme.stop.slice(0, 10) === dayKey ? programme.stop.slice(11, 16) : '24:00'
-    }`;
-    item.appendChild(label);
-    item.appendChild(document.createTextNode(` ${programme.title}`));
-    if (isActive) {
-      const icon = document.createElement('i');
-      icon.className = 'fa fa-volume-up ms-1';
-      item.appendChild(icon);
+  for (let index = 0; index < guide.days; index++) {
+    const date = new Date(today);
+    date.setUTCDate(date.getUTCDate() + index);
+    const pageDay = date.toISOString().slice(0, 10);
+    const page = document.createElement('div');
+    page.className = 'epg-day-page';
+    page.dataset.day = pageDay;
+    page.inert = pageDay !== dayKey;
+    page.setAttribute('aria-hidden', String(pageDay !== dayKey));
+    const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === pageDay);
+    if (programmes.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'text-secondary mb-1';
+      empty.textContent = 'No scheduled streams.';
+      page.appendChild(empty);
+    } else {
+      const list = document.createElement('ul');
+      list.className = 'list-unstyled mb-1';
+      for (const programme of programmes) {
+        const item = document.createElement('li');
+        const isActive = playheadId === programme.id
+          && now >= Date.parse(programme.start) && now < Date.parse(programme.stop);
+        item.className = isActive ? '' : (programme.live ? 'text-warning' : 'text-secondary');
+        if (isActive) item.style.color = 'var(--epg-active-purple)';
+        const label = document.createElement('strong');
+        label.textContent = programme.live ? 'LIVE' : `${programme.start.slice(11, 16)}–${
+          programme.stop.slice(0, 10) === pageDay ? programme.stop.slice(11, 16) : '24:00'
+        }`;
+        item.appendChild(label);
+        item.appendChild(document.createTextNode(` ${programme.title}`));
+        if (isActive) {
+          const icon = document.createElement('i');
+          icon.className = 'fa fa-volume-up ms-1';
+          item.appendChild(icon);
+        }
+        if (programme.desc) {
+          const details = document.createElement('small');
+          details.className = 'text-muted';
+          details.textContent = ` - ${programme.desc}`;
+          item.appendChild(details);
+        }
+        list.appendChild(item);
+      }
+      page.appendChild(list);
     }
-    if (programme.desc) {
-      const details = document.createElement('small');
-      details.className = 'text-muted';
-      details.textContent = ` - ${programme.desc}`;
-      item.appendChild(details);
-    }
-    list.appendChild(item);
+    programmeDiv.appendChild(page);
   }
-  programmeDiv.appendChild(list);
 };
