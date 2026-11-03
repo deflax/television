@@ -59,25 +59,31 @@ assert.equal(elements['epg-now-name'].textContent, 'Manual excluded-day stream')
 assert.equal(elements['epg-now-playing'].style.display, 'block');
 const buttons = elements['epg-day-buttons'];
 const programmes = elements['epg-day-programmes'];
-const selectedButton = () => buttons.children.find(button => button.attributes['aria-pressed'] === 'true');
 const visiblePage = () => programmes.children.find(page => page.attributes['aria-hidden'] === 'false');
-const currentDay = () => selectedButton().dataset.day;
-const chooseDay = day => buttons.children.find(button => button.dataset.day === day).listeners.click();
+const currentDay = () => visiblePage().dataset.day;
+const previous = () => buttons.children[0].listeners.click();
+const next = () => buttons.children[1].listeners.click();
+const chooseDay = day => {
+  while (currentDay() !== day) {
+    const before = currentDay();
+    (before < day ? next : previous)();
+    assert.notEqual(currentDay(), before, 'Navigation must reach the requested day');
+  }
+};
 assert.equal(currentDay(), guide.start_day);
-assert.deepEqual(buttons.children.map(button => button.textContent),
-  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
-assert.equal(selectedButton().textContent, 'Sun');
+assert.equal(buttons.children[0].disabled, true);
+previous();
+assert.equal(currentDay(), guide.start_day);
 assert.equal(elements['epg-day-controls'].hidden, false);
 assert.doesNotMatch(visiblePage().textContent, /Offline <show>/);
 assert.equal(programmes.children.filter(page => !page.inert).length, 1);
 assert.equal(visiblePage().inert, false);
-chooseDay('2026-11-02');
-assert.equal(selectedButton().textContent, 'Mon');
+next();
+assert.equal(currentDay(), '2026-11-02');
+assert.equal(buttons.children[0].disabled, false);
 assert.match(visiblePage().textContent, /12:00–24:00 Offline <show>/);
 assert.match(visiblePage().textContent, /Episode & details/);
 assert.doesNotMatch(visiblePage().textContent, /Manual excluded-day stream/);
-assert.equal(visiblePage().children[0].children[0].children[1].textContent, ' Offline <show>');
-assert.equal(buttons.children.filter(button => button.attributes['aria-pressed'] === 'true').length, 1);
 assert.equal(programmes.children.filter(page => !page.inert).length, 1);
 source.listeners.playhead({data: JSON.stringify({id: 'manual', metadata: {stream_title: 'Current track'}})});
 assert.equal(elements['epg-now-name'].textContent, 'Current track');
@@ -87,36 +93,41 @@ guide.programmes[0].title = 'Updated offline show';
 source.listeners.epg({data: JSON.stringify(guide)});
 assert.equal(currentDay(), '2026-11-02');
 assert.match(visiblePage().textContent, /Updated offline show/);
-chooseDay('2026-11-03');
-assert.equal(selectedButton().textContent, 'Tue');
+next();
+assert.equal(currentDay(), '2026-11-03');
 assert.doesNotMatch(visiblePage().textContent, /Updated offline show/);
 chooseDay('2026-11-07');
-assert.equal(selectedButton(), buttons.children[6]);
-assert.equal(selectedButton().textContent, 'Sat');
+assert.equal(buttons.children[1].disabled, true);
+next();
+assert.equal(currentDay(), '2026-11-07');
+previous();
+assert.equal(currentDay(), '2026-11-06');
+assert.equal(buttons.children[1].disabled, false);
 // Returning to Today follows the UTC date when the guide rolls over.
 chooseDay(guide.start_day);
 guide.start_day = '2026-11-02';
 source.listeners.epg({data: JSON.stringify(guide)});
 assert.equal(currentDay(), '2026-11-02');
-assert.equal(selectedButton(), buttons.children[0]);
-assert.equal(selectedButton().textContent, 'Mon');
+assert.equal(buttons.children[0].disabled, true);
 assert.match(visiblePage().textContent, /Updated offline show/);
 // An explicitly selected date that leaves the guide resets to the new Today.
 chooseDay('2026-11-03');
 guide.start_day = '2026-11-04';
 source.listeners.epg({data: JSON.stringify(guide)});
 assert.equal(currentDay(), '2026-11-04');
-assert.equal(selectedButton(), buttons.children[0]);
-assert.equal(selectedButton().textContent, 'Wed');
+assert.equal(buttons.children[0].disabled, true);
 assert.doesNotMatch(visiblePage().textContent, /Updated offline show/);
 // Dates still within the rolling window retain their selection at a new position.
 chooseDay('2026-11-06');
-assert.equal(selectedButton(), buttons.children[2]);
 guide.start_day = '2026-11-05';
 source.listeners.epg({data: JSON.stringify(guide)});
 assert.equal(currentDay(), '2026-11-06');
-assert.equal(selectedButton(), buttons.children[1]);
-assert.equal(selectedButton().textContent, 'Fri');
+previous();
+assert.equal(currentDay(), '2026-11-05');
+guide.days = 1;
+source.listeners.epg({data: JSON.stringify(guide)});
+assert.equal(buttons.children[0].disabled, true);
+assert.equal(buttons.children[1].disabled, true);
 """
         result = subprocess.run(['node', '-e', script, str(scripts)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

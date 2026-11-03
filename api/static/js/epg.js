@@ -122,32 +122,29 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     offset = 0;
   }
   const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
-  if (dayButtons.children.length !== guide.days) {
+  if (dayButtons.children.length !== 2) {
     dayButtons.replaceChildren();
-    for (let index = 0; index < guide.days; index++) {
+    for (const direction of [-1, 1]) {
       const button = document.createElement('button');
       button.type = 'button';
+      button.textContent = direction < 0 ? '<' : '>';
+      button.className = 'btn btn-sm btn-outline-secondary sheep-surface';
+      button.setAttribute('aria-label', direction < 0 ? 'Previous day' : 'Next day');
       button.setAttribute('aria-controls', 'epg-day-programmes');
       button.addEventListener('click', function() {
+        if (button.disabled) return;
         const app = window.StreamApp;
-        app.selectedEpgDay = button.dataset.day === app.currentEpgGuide.start_day ? null : button.dataset.day;
+        const date = new Date(`${app.selectedEpgDay || app.currentEpgGuide.start_day}T00:00:00Z`);
+        date.setUTCDate(date.getUTCDate() + direction);
+        const day = date.toISOString().slice(0, 10);
+        app.selectedEpgDay = day === app.currentEpgGuide.start_day ? null : day;
         app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
       });
       dayButtons.appendChild(button);
     }
   }
-  const shortWeekday = new Intl.DateTimeFormat('en', {weekday: 'short', timeZone: 'UTC'});
-  const longWeekday = new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'});
-  Array.from(dayButtons.children).forEach((button, index) => {
-    const day = new Date(today);
-    day.setUTCDate(day.getUTCDate() + index);
-    const selected = index === offset;
-    button.dataset.day = day.toISOString().slice(0, 10);
-    button.textContent = shortWeekday.format(day);
-    button.className = `btn btn-sm btn-outline-secondary sheep-surface${selected ? ' active' : ''}`;
-    button.setAttribute('aria-label', `Schedule for ${longWeekday.format(day)} (UTC)`);
-    button.setAttribute('aria-pressed', String(selected));
-  });
+  dayButtons.children[0].disabled = offset === 0;
+  dayButtons.children[1].disabled = offset === guide.days - 1;
   dayControls.hidden = false;
 
   // Shared grid cells reserve the tallest day's natural height, including wrapping.
