@@ -349,7 +349,7 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
 
-Below the schedule, navigation buttons name their destination: Today, Tomorrow, or a weekday, without calendar dates or a separate current-day label. Today shows only a forward Tomorrow button; middle days show both adjacent days; the last available day shows only a back button. Both buttons have a fixed 7.5rem width, the same compact height and outlined styling as Video/Audio, and Font Awesome chevron icons.
+Below the schedule, navigation buttons name their destination: Today or a weekday, without calendar dates or a separate current-day label. Today shows only a forward button labelled with the next day's weekday; middle days show the forward button on the left and the back button on the right; the last available day shows only a back button. Both buttons have a fixed 7.5rem width, the same compact height and outlined styling as Video/Audio, and Font Awesome chevron icons.
 
 Live updates preserve the selected day and button focus. If the clicked button disappears at a navigation boundary, focus moves to the remaining button. The Today view follows the UTC date, and a selection that leaves the seven-day window resets to Today.
 

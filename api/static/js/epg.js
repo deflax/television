@@ -132,8 +132,8 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     const adjacent = new Date(day);
     adjacent.setUTCDate(adjacent.getUTCDate() + step);
     button.dataset.day = adjacent.toISOString().slice(0, 10);
-    const destination = adjacentOffset === 0 ? 'Today' : (adjacentOffset === 1 ? 'Tomorrow' :
-      new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(adjacent));
+    const destination = adjacentOffset === 0 ? 'Today' :
+      new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'}).format(adjacent);
     label.textContent = destination;
     button.setAttribute('aria-label', `Schedule for ${destination} (UTC)`);
     if (button.dataset.ready !== 'true') {
