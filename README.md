@@ -347,7 +347,7 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 #### Weekly Guide and Daily Input Control
 
-The browser guide and `/epg.xml` show **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
+The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default, with a compact day selector for the rest of the week. Live updates preserve the selected day; the Today view follows the UTC date, and a selection that leaves the seven-day window resets to Today. XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
 
 - **Without `days`:** timed programmes appear daily, but the API does not automatically start or stop the Restreamer input.
 - **With `days`:** the first successful discovery on each UTC date makes one input decision. On listed days the API sends `start` unless the input is already started (including reconnecting); on excluded days it sends `stop` unless already stopped. Consecutive allowed days do not restart an already-started input.
