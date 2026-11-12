@@ -114,21 +114,47 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     }
   }
 
-  const today = new Date(`${guide.start_day}T00:00:00Z`);
-  const selectedDay = window.StreamApp.selectedEpgDay || guide.start_day;
-  const selectedDate = new Date(`${selectedDay}T00:00:00Z`);
-  let offset = (selectedDate - today) / 86400000;
-  if (!Number.isInteger(offset) || offset < 0 || offset >= guide.days) {
-    window.StreamApp.selectedEpgDay = null;
-    offset = 0;
+  const now = Date.now();
+  const localDay = date => `${date.getFullYear()}-${
+    String(date.getMonth() + 1).padStart(2, '0')
+  }-${String(date.getDate()).padStart(2, '0')}`;
+  const todayKey = localDay(new Date(now));
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = localDay(tomorrow);
+  const start = new Date(`${guide.start_day}T00:00:00Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + guide.days);
+  const lastDay = localDay(new Date(end.getTime() - 1));
+  const date = new Date(start);
+  date.setHours(0, 0, 0, 0);
+  const days = [];
+  while (localDay(date) <= lastDay) {
+    days.push(localDay(date));
+    date.setDate(date.getDate() + 1);
   }
-  const dayKey = window.StreamApp.selectedEpgDay || guide.start_day;
+  const defaultDay = days.includes(todayKey) ? todayKey : days[0];
+  if (!days.includes(window.StreamApp.selectedEpgDay)) {
+    window.StreamApp.selectedEpgDay = null;
+  }
+  const dayKey = window.StreamApp.selectedEpgDay || defaultDay;
+  const offset = days.indexOf(dayKey);
+  const timeFormat = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const programmesByDay = new Map(days.map(day => [day, []]));
+  for (const programme of guide.programmes) {
+    const start = new Date(programme.start);
+    const stop = new Date(programme.stop);
+    programmesByDay.get(localDay(start))?.push({programme, start, stop});
+  }
   if (dayDate) {
     dayDate.dateTime = dayKey;
-    const dayName = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow'
-      : new Intl.DateTimeFormat('en', {weekday: 'long', timeZone: 'UTC'})
-        .format(new Date(`${dayKey}T00:00:00Z`));
-    dayDate.textContent = `${dayName}, ${dayKey} (UTC)`;
+    const dayName = dayKey === todayKey ? 'Today' : dayKey === tomorrowKey ? 'Tomorrow'
+      : new Intl.DateTimeFormat('en', {weekday: 'long'})
+        .format(new Date(`${dayKey}T12:00:00`));
+    const zone = timeFormat.resolvedOptions().timeZone;
+    dayDate.textContent = `${dayName}, ${dayKey} (${zone})`;
   }
   if (dayButtons.children.length !== 2) {
     dayButtons.replaceChildren();
@@ -142,32 +168,28 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
       button.addEventListener('click', function() {
         if (button.disabled) return;
         const app = window.StreamApp;
-        const date = new Date(`${app.selectedEpgDay || app.currentEpgGuide.start_day}T00:00:00Z`);
-        date.setUTCDate(date.getUTCDate() + direction);
-        const day = date.toISOString().slice(0, 10);
-        app.selectedEpgDay = day === app.currentEpgGuide.start_day ? null : day;
+        const day = button.dataset.day;
+        app.selectedEpgDay = day === localDay(new Date(Date.now())) ? null : day;
         app.renderEpg(app.currentEpgGuide, app.currentPlayheadId, app.currentPlayheadMetadata);
       });
       dayButtons.appendChild(button);
     }
   }
   dayButtons.children[0].disabled = offset === 0;
-  dayButtons.children[1].disabled = offset === guide.days - 1;
+  dayButtons.children[1].disabled = offset === days.length - 1;
+  dayButtons.children[0].dataset.day = days[offset - 1];
+  dayButtons.children[1].dataset.day = days[offset + 1];
   dayControls.hidden = false;
 
   // Shared grid cells reserve the tallest day's natural height, including wrapping.
   programmeDiv.replaceChildren();
-  const now = Date.now();
-  for (let index = 0; index < guide.days; index++) {
-    const date = new Date(today);
-    date.setUTCDate(date.getUTCDate() + index);
-    const pageDay = date.toISOString().slice(0, 10);
+  for (const pageDay of days) {
     const page = document.createElement('div');
     page.className = 'epg-day-page';
     page.dataset.day = pageDay;
     page.inert = pageDay !== dayKey;
     page.setAttribute('aria-hidden', String(pageDay !== dayKey));
-    const programmes = guide.programmes.filter(programme => programme.start.slice(0, 10) === pageDay);
+    const programmes = programmesByDay.get(pageDay);
     if (programmes.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'text-secondary mb-1';
@@ -176,16 +198,18 @@ window.StreamApp.renderEpg = function(guide, playheadId, metadata = window.Strea
     } else {
       const list = document.createElement('ul');
       list.className = 'list-unstyled mb-1';
-      for (const programme of programmes) {
+      for (const {programme, start, stop} of programmes) {
         const item = document.createElement('li');
         const isActive = playheadId === programme.id
-          && now >= Date.parse(programme.start) && now < Date.parse(programme.stop);
+          && now >= start.getTime() && now < stop.getTime();
         item.className = isActive ? '' : (programme.live ? 'text-warning' : 'text-secondary');
         if (isActive) item.style.color = 'var(--epg-active-purple)';
         const label = document.createElement('strong');
-        label.textContent = programme.live ? 'LIVE' : `${programme.start.slice(11, 16)}–${
-          programme.stop.slice(0, 10) === pageDay ? programme.stop.slice(11, 16) : '24:00'
-        }`;
+        const stopDay = localDay(stop);
+        const midnight = stopDay !== pageDay && stop.getHours() === 0 && stop.getMinutes() === 0;
+        const stopText = midnight ? '24:00'
+          : `${timeFormat.format(stop)}${stopDay !== pageDay ? ` (${stopDay})` : ''}`;
+        label.textContent = programme.live ? 'LIVE' : `${timeFormat.format(start)}–${stopText}`;
         item.appendChild(label);
         item.appendChild(document.createTextNode(` ${programme.title}`));
         if (isActive) {

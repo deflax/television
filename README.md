@@ -347,17 +347,17 @@ An empty archive leaves the producer unhealthy until media is added, while `vod-
 
 #### Weekly Guide and Daily Input Control
 
-The browser guide and `/epg.xml` cover **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser shows only today's programmes by default.
+The browser guide and `/epg.xml` use **today and the next six UTC dates**, using channel metadata even when an input is stopped or offline. The browser converts programme times and groups their start dates using the browser's local timezone, including daylight-saving changes. It shows local today's programmes by default. The UTC window can span eight local dates; the first and last may contain only part of a day.
 
-Two compact arrow-only buttons (`<` and `>`) below the programme list move to the previous or next UTC date. The previous button is disabled on today, and the next button is disabled on the last date in the guide. Screen readers announce “Previous day” and “Next day”; use Tab to focus an enabled button and Enter or Space to activate it. The programme area reserves the natural height of the tallest day in the guide, including wrapped text, and adjusts automatically to screen width. Changing days therefore does not move the button row, and there is no internal list scrollbar. Only the selected day's programmes are visible or exposed to assistive technology.
+Two compact arrow-only buttons (`<` and `>`) below the programme list move to the previous or next local date. The previous button is disabled on the first available local date, and the next button is disabled on the last date in the guide. Screen readers announce “Previous day” and “Next day”; use Tab to focus an enabled button and Enter or Space to activate it. The programme area reserves the natural height of the tallest day in the guide, including wrapped text, and adjusts automatically to screen width. Changing days therefore does not move the button row, and there is no internal list scrollbar. Only the selected day's programmes are visible or exposed to assistive technology.
 
-A date label beside the arrows shows “Today” or “Tomorrow” for the first two UTC dates and the full weekday name for later dates, followed by `YYYY-MM-DD (UTC)`. It updates when navigating or when the guide rolls forward.
+A date label beside the arrows shows “Today” or “Tomorrow” for those local dates and the full weekday name otherwise, followed by `YYYY-MM-DD` and the browser's timezone. It updates when navigating or when the guide rolls forward. Times use a 24-hour clock; an overnight programme's end time includes its local end date, while a midnight end is shown as `24:00`.
 
 The arrow buttons use the standard gray background and white text on hover. Pressed colors remain the same as their normal colors, and keyboard focus remains visible.
 
-Live updates preserve the selected date and button focus while the button remains enabled. Returning to today follows the current UTC date; an explicitly selected date stays selected as the window rolls forward, or resets to today if it leaves the seven-day window.
+Live updates preserve the selected date and button focus while the button remains enabled. Returning to today follows the current local date; an explicitly selected date stays selected as the window rolls forward, or resets to local today if it leaves the available window.
 
-XMLTV still includes the full seven days. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
+XMLTV remains unchanged: the full seven UTC days with explicit `+0000` offsets, for clients to convert to their own timezone. Programme entries end at the next strictly later programme start or midnight UTC, whichever comes first. Simultaneous starts share the same end boundary. The guide is a plan, not a guarantee that a source is online.
 
 - **Without `days`:** timed programmes appear daily, but the API does not automatically start or stop the Restreamer input.
 - **With `days`:** the first successful discovery on each UTC date makes one input decision. On listed days the API sends `start` unless the input is already started (including reconnecting); on excluded days it sends `stop` unless already stopped. Consecutive allowed days do not restart an already-started input.
